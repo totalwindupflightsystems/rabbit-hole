@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 
@@ -85,10 +86,16 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string) *Se
 }
 
 // Start begins listening on the configured address. Non-blocking.
+// When addr includes ":0", the OS assigns a free port and Addr() reflects it.
 func (s *Server) Start(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.srv.Addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", s.srv.Addr, err)
+	}
+	s.srv.Addr = ln.Addr().String() // capture actual bound address
 	s.logger.Info("starting expression server", "addr", s.srv.Addr)
 	go func() {
-		if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("server error", "err", err)
 		}
 	}()

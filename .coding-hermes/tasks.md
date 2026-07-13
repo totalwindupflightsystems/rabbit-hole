@@ -109,9 +109,9 @@
 | P5-04 | `internal/express/search.go` — handleSearch with FTS5 query, filtering, pagination | S04 §2.3 | ✅ Done (1324a42) |
 | P5-05 | `internal/express/chat.go` — handleChat: NL → search → NL answer | S04 §2.2 | ✅ Done (1324a42) |
 | P5-06 | `internal/express/websocket.go` — handleWebSocket: upgrade, subscribe, flow push, ping/pong | S04 §2.4 | ✅ Done (1324a42) |
-| P5-07 | `internal/express/server_test.go` — all handlers, middleware, chat flow, WebSocket test | S04 §8 | pending |
+| P5-07 | `internal/express/server_test.go` — all handlers, middleware, chat flow, WebSocket test | S04 §8 | ✅ Done |
 
-**Gate:** `curl localhost:9734/health` returns 200. Chat endpoint works. WebSocket streams flows.
+**Gate:** ✅ `curl localhost:9734/health` returns 200. Chat endpoint works. WebSocket streams flows. All 22 express tests pass.
 
 ---
 
