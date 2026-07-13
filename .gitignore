@@ -25,6 +25,5 @@ Thumbs.db
 .vfs/
 
 # GitReins state (MCP-managed, never committed)
-.gitreins/config.yaml
 .gitreins/tasks.yaml
 .gitreins/*.bak
