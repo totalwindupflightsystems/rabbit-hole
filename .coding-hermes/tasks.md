@@ -119,17 +119,17 @@
 
 | ID | Task | Spec Ref | Status |
 |---|---|---|
-| P6-01 | `cmd/rabbit-hole/main.go` — root command, subcommand wiring | S06 §1 | pending |
-| P6-02 | `cmd/rabbit-hole/attach.go` — attach subcommand | S06 §1.1 | pending |
-| P6-03 | `cmd/rabbit-hole/serve.go` — serve subcommand (full daemon startup) | S06 §1.4 | pending |
-| P6-04 | `cmd/rabbit-hole/chat.go` — chat subcommand | S06 §1.5 | pending |
-| P6-05 | `cmd/rabbit-hole/search.go` — search subcommand | S06 §1.6 | pending |
-| P6-06 | `cmd/rabbit-hole/status.go` — status subcommand | S06 §1.8 | pending |
-| P6-07 | `cmd/rabbit-hole/detach.go` — detach subcommand | S06 §1.2 | pending |
-| P6-08 | `cmd/rabbit-hole/compact.go` — compact subcommand | S06 §1.7 | pending |
-| P6-09 | `cmd/rabbit-hole/version.go` — version subcommand | S06 §1.9 | pending |
+| P6-01 | `cmd/rabbit-hole/main.go` — root command, subcommand wiring | ✅ Done (cobra, 9 subcommands + list) |
+| P6-02 | `cmd/rabbit-hole/attach.go` — attach subcommand | ✅ Done |
+| P6-03 | `cmd/rabbit-hole/serve.go` — serve subcommand (full daemon startup) | ✅ Done |
+| P6-04 | `cmd/rabbit-hole/chat.go` — chat subcommand | ✅ Done |
+| P6-05 | `cmd/rabbit-hole/search.go` — search subcommand | ✅ Done |
+| P6-06 | `cmd/rabbit-hole/status.go` — status subcommand | ✅ Done |
+| P6-07 | `cmd/rabbit-hole/detach.go` — detach subcommand | ✅ Done |
+| P6-08 | `cmd/rabbit-hole/compact.go` — compact subcommand | ✅ Done |
+| P6-09 | `cmd/rabbit-hole/version.go` — version subcommand | ✅ Done |
 
-**Gate:** All commands work. `rabbit-hole serve` → `rabbit-hole chat "hello"` → response.
+**Gate:** All commands work. `rabbit-hole serve` → `rabbit-hole chat "hello"` → response. ✅ 109/109 tests pass. Build+vet green. Binary weighs 1.2MB.
 
 ---
 
@@ -172,6 +172,6 @@
 | P3 | eBPF attaches to process | P4–P7 |
 | P4 | Pattern matching works | P5–P7 |
 | P5 | HTTP server running | P6–P7 |
-| P6 | All CLI commands work | P7 |
+| P6 | All CLI commands work | ✅ | P7 |
 | P7 | Full E2E agent session | P8 |
 | P8 | v1.0.0 released | Launch |
