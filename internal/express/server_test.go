@@ -114,7 +114,10 @@ func decodeResp(t *testing.T, resp *http.Response, v interface{}) {
 func TestHealthEndpoint(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()
-	resp, _ := http.Get(getURL(srv, "/health"))
+	resp, err := http.Get(getURL(srv, "/health"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("got %d", resp.StatusCode)
@@ -124,7 +127,10 @@ func TestHealthEndpoint(t *testing.T) {
 func TestHealthEndpoint_CORSHeaders(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()
-	resp, _ := http.Get(getURL(srv, "/health"))
+	resp, err := http.Get(getURL(srv, "/health"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.Header.Get("Access-Control-Allow-Origin") != "*" {
 		t.Error("missing CORS")
@@ -138,7 +144,10 @@ func TestHealthEndpoint_OPTIONS(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()
 	req, _ := http.NewRequest("OPTIONS", getURL(srv, "/health"), nil)
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 204 {
 		t.Errorf("got %d", resp.StatusCode)
@@ -236,7 +245,10 @@ func TestSearch_InvalidJSON(t *testing.T) {
 	defer cl()
 	req, _ := http.NewRequest("POST", getURL(srv, "/api/v1/search"), bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 400 {
 		t.Errorf("got %d", resp.StatusCode)
@@ -275,7 +287,10 @@ func TestChat_InvalidJSON(t *testing.T) {
 	defer cl()
 	req, _ := http.NewRequest("POST", getURL(srv, "/api/v1/chat"), bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 400 {
 		t.Errorf("got %d", resp.StatusCode)
@@ -295,7 +310,10 @@ func TestChat_NoResults(t *testing.T) {
 func TestMiddleware_RequestID(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()
-	resp, _ := http.Get(getURL(srv, "/health"))
+	resp, err := http.Get(getURL(srv, "/health"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.Header.Get("X-Request-ID") == "" {
 		t.Error("missing X-Request-ID")
@@ -307,7 +325,10 @@ func TestMiddleware_PanicRecovery(t *testing.T) {
 	mux.HandleFunc("GET /panic", func(w http.ResponseWriter, r *http.Request) { panic("test") })
 	ts := httptest.NewServer(withMiddleware(mux, nil))
 	defer ts.Close()
-	resp, _ := http.Get(ts.URL + "/panic")
+	resp, err := http.Get(ts.URL + "/panic")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 500 {
 		t.Errorf("got %d", resp.StatusCode)
@@ -319,7 +340,10 @@ func TestMiddleware_RequestID_Propagation(t *testing.T) {
 	defer cl()
 	req, _ := http.NewRequest("GET", getURL(srv, "/health"), nil)
 	req.Header.Set("X-Request-ID", "my-custom-id")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.Header.Get("X-Request-ID") != "my-custom-id" {
 		t.Errorf("got %q", resp.Header.Get("X-Request-ID"))
@@ -329,12 +353,15 @@ func TestMiddleware_RequestID_Propagation(t *testing.T) {
 func TestServerLifecycle(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()
-	resp, _ := http.Get(getURL(srv, "/health"))
+	resp, err := http.Get(getURL(srv, "/health"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp.Body.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	srv.Shutdown(ctx)
-	_, err := http.Get(getURL(srv, "/health"))
+	_, err = http.Get(getURL(srv, "/health"))
 	if err == nil {
 		t.Error("expected error after shutdown")
 	}
