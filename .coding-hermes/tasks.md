@@ -89,13 +89,13 @@
 | ID | Task | Spec Ref | Status |
 |---|---|---|
 | P4-01 | `internal/classify/patterns.go` — PatternCatalog with file_read, file_write, edit, network, exec, git, test, build, search + failure patterns | S03 §2.2 | ✅ Done (d0ff00f) |
-| P4-02 | `internal/classify/gemma.go` — GemmaModel, Load, Unload, ClassifyBatch | S03 §2.3 | pending |
-| P4-03 | `internal/classify/engine.go` — ClassificationEngine, groupTracesByTime, Classify pipeline | S03 §2.1 | pending |
-| P4-04 | `internal/classify/classifier.go` — Classifier interface impl, ClassifyStream, Health, ModelInfo | S03 §1 | pending |
-| P4-05 | `internal/classify/classifier_test.go` — pattern matching, grouping, prompt building, parse | S03 §8 | pending |
-| P4-06 | `internal/classify/gemma_test.go` — model load (skip if no model), batch classify with recorded traces | S03 §8 | pending |
+| P4-02 | `internal/classify/gemma.go` — GemmaModel, Load, Unload, ClassifyBatch | S03 §2.3 | ✅ Done (6e53b0d) |
+| P4-03 | `internal/classify/engine.go` — ClassificationEngine, groupTracesByTime, Classify pipeline | S03 §2.1 | ✅ Done (6e53b0d) |
+| P4-04 | `internal/classify/classifier.go` — Classifier interface impl, ClassifyStream, Health, ModelInfo | S03 §1 | ✅ Done (6e53b0d) |
+| P4-05 | `internal/classify/classifier_test.go` — pattern matching, grouping, prompt building, parse | S03 §8 | ✅ Done (6e53b0d) |
+| P4-06 | `internal/classify/gemma_test.go` — model load (skip if no model), batch classify with recorded traces | S03 §8 | ✅ Done (6e53b0d) |
 
-**Gate:** Pattern matching works on recorded traces. Model optional — graceful degradation when unavailable.
+**Gate:** Pattern matching works on recorded traces. Model optional — graceful degradation when unavailable. ✅ 39 tests (19 patterns + 9 classifier + 11 gemma). Build+vet+test green. Phase 4 complete.
 
 ---
 
