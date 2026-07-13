@@ -2,7 +2,7 @@
 
 Rabbit-Hole — go down the rabbit hole into your agent's decisions. A legibility layer between agents and humans.
 
-**Org:** get-rabbit-hole (GitHub: totalwindupflightsystems/rabbit-hole)
+**Org:** rabbit-hole/rabbit-hole ([gitlab.readydedis.com/rabbit-hole/rabbit-hole](https://gitlab.readydedis.com/rabbit-hole/rabbit-hole))
 
 ## Architecture
 

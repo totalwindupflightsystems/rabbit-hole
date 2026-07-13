@@ -358,7 +358,7 @@ case "$ARCH" in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-BINARY_URL="https://github.com/get-rabbit-hole/rabbit-hole/releases/download/v${VERSION}/rabbit-hole_${VERSION}_linux_${GOARCH}.tar.gz"
+BINARY_URL="https://gitlab.readydedis.com/rabbit-hole/rabbit-hole/-/releases/v${VERSION}/downloads/rabbit-hole_${VERSION}_linux_${GOARCH}.tar.gz"
 
 curl -sSL "$BINARY_URL" | tar xz -C "$INSTALL_DIR" rabbit-hole
 chmod +x "$INSTALL_DIR/rabbit-hole"
