@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
-		"testing"
-		"time"
 
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
@@ -20,8 +20,18 @@ import (
 // to be ready, and returns it with a cleanup function.
 func newTestServer(t *testing.T) (*Server, func()) {
 	t.Helper()
+
+	// Listen on a random port first so we know the address.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close() // release — server will re-bind
+
 	store := newTestStore(t)
-	srv := NewServer(store, nil, "127.0.0.1:0")
+
+	srv := NewServer(store, nil, addr)
 	if err := srv.Start(context.Background()); err != nil {
 		store.Close()
 		t.Fatalf("Start: %v", err)
@@ -30,7 +40,7 @@ func newTestServer(t *testing.T) (*Server, func()) {
 	// Wait for server to accept connections.
 	retries := 20
 	for i := 0; i < retries; i++ {
-		resp, err := http.Get("http://" + srv.Addr() + "/health")
+		resp, err := http.Get("http://" + addr + "/health")
 		if err == nil {
 			resp.Body.Close()
 			cleanup := func() {
@@ -43,7 +53,7 @@ func newTestServer(t *testing.T) (*Server, func()) {
 	}
 	store.Close()
 	srv.Shutdown(context.Background())
-	t.Fatalf("server did not become ready at %s after %d retries", srv.Addr(), retries)
+	t.Fatalf("server did not become ready at %s after %d retries", addr, retries)
 	return nil, nil
 }
 
