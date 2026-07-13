@@ -103,13 +103,13 @@
 
 | ID | Task | Spec Ref | Status |
 |---|---|---|
-| P5-01 | `internal/express/server.go` — Server, NewServer, Start, Shutdown, route registration | S04 §2.1 | pending |
-| P5-02 | `internal/express/middleware.go` — request ID, CORS, logging, panic recovery | S04 §2.5 | pending |
-| P5-03 | `internal/express/handlers.go` — health, list sessions, get session, get flow, get context window | S04 §3 | pending |
-| P5-04 | `internal/express/search.go` — handleSearch with FTS5 query, filtering, pagination | S04 §2.3 | pending |
-| P5-05 | `internal/express/chat.go` — handleChat: NL → search → NL answer | S04 §2.2 | pending |
-| P5-06 | `internal/express/websocket.go` — handleWebSocket: upgrade, subscribe, flow push, ping/pong | S04 §2.4 | pending |
-| P5-07 | `internal/express/server_test.go` — all handlers, middleware, chat flow | S04 §8 | pending |
+| P5-01 | `internal/express/server.go` — Server, NewServer, Start, Shutdown, route registration | S04 §2.1 | ✅ Done (1324a42) |
+| P5-02 | `internal/express/middleware.go` — request ID, CORS, logging, panic recovery | S04 §2.5 | ✅ Done (1324a42) |
+| P5-03 | `internal/express/handlers.go` — health, list sessions, get session, get flow, get context window | S04 §3 | ✅ Done (1324a42) |
+| P5-04 | `internal/express/search.go` — handleSearch with FTS5 query, filtering, pagination | S04 §2.3 | ✅ Done (1324a42) |
+| P5-05 | `internal/express/chat.go` — handleChat: NL → search → NL answer | S04 §2.2 | ✅ Done (1324a42) |
+| P5-06 | `internal/express/websocket.go` — handleWebSocket: upgrade, subscribe, flow push, ping/pong | S04 §2.4 | ✅ Done (1324a42) |
+| P5-07 | `internal/express/server_test.go` — all handlers, middleware, chat flow, WebSocket test | S04 §8 | pending |
 
 **Gate:** `curl localhost:9734/health` returns 200. Chat endpoint works. WebSocket streams flows.
 

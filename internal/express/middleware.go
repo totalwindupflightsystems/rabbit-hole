@@ -10,6 +10,9 @@ import (
 
 // withMiddleware wraps an http.Handler with request ID, CORS, logging, and panic recovery.
 func withMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
