@@ -63,6 +63,7 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 					defer model.Unload()
 				}
 				cls = classify.NewClassifier(classify.NewClassificationEngine(model, store, logger))
+			}
 
 			// 4. Pipeline: collector → classifier → store
 			go runPipeline(cobraCmd.Context(), coll, cls, store, logger)
