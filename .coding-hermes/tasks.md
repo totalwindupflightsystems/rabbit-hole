@@ -35,10 +35,10 @@
 
 | ID | Task | Spec Ref | Status |
 |---|---|---|
-| P1-01 | `pkg/types/trace.go` — Trace, TraceCategory, Frame types | S01 §3.1, S02 §1 | pending |
-| P1-02 | `pkg/types/flow.go` — Flow, FlowPhase, FlowOutcome types | S01 §3.2 | pending |
-| P1-03 | `pkg/types/session.go` — Session, SessionStatus, SessionMetadata types | S01 §3.4 | pending |
-| P1-04 | `pkg/types/context_window.go` — ContextWindow type | S01 §3.3 | pending |
+| P1-01 | `pkg/types/trace.go` — Trace, TraceCategory, Frame types | S01 §3.1, S02 §1 | ✅ Done (7da0d78) |
+| P1-02 | `pkg/types/flow.go` — Flow, FlowPhase, FlowOutcome types | S01 §3.2 | ✅ Done (7da0d78) |
+| P1-03 | `pkg/types/session.go` — Session, SessionStatus, SessionMetadata types | S01 §3.4 | ✅ Done (7da0d78) |
+| P1-04 | `pkg/types/context_window.go` — ContextWindow type | S01 §3.3 | ✅ Done (7da0d78) |
 | P1-05 | `pkg/types/api.go` — SearchRequest, ChatRequest, ChatResponse, etc. | S01 §4.3, S04 §2 | pending |
 | P1-06 | `pkg/types/errors.go` — typed errors (all layers) | S02 §3, S03 §3, S04 §4, S05 §4 | pending |
 | P1-07 | `internal/config/config.go` — env var parsing, validation, defaults | S01 §7, S06 §4 | pending |
