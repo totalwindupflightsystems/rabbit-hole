@@ -15,8 +15,14 @@ import (
 // PatternCatalog matches sequences of raw traces against known
 // semantic patterns. This is the fast path — no model inference needed.
 // High-confidence matches (≥0.85) bypass the Gemma classifier entirely.
+//
+// Patterns are evaluated in a fixed priority order. Specific patterns
+// (e.g. test_run, git_operation) are checked before generic ones
+// (e.g. process_exec, failed_syscall) to prevent the generic pattern
+// from swallowing traces that match a more specific intent.
 type PatternCatalog struct {
 	patterns map[string]Pattern
+	order    []string // ordered list of pattern names for stable evaluation
 }
 
 // Pattern defines a named trace-matching rule.
@@ -30,6 +36,9 @@ type Pattern struct {
 }
 
 // NewPatternCatalog creates a catalog with all built-in patterns.
+// Patterns are added in priority order — Match() evaluates them
+// sequentially, so more specific patterns (git_operation, test_run)
+// must be registered before generic fallbacks (process_exec).
 func NewPatternCatalog() *PatternCatalog {
 	pc := &PatternCatalog{patterns: make(map[string]Pattern)}
 
@@ -46,15 +55,18 @@ func NewPatternCatalog() *PatternCatalog {
 			}
 			first := traces[0]
 			last := traces[len(traces)-1]
-			allReads := true
+			hasRead := false
+			allMiddleAreReads := true
 			for _, t := range traces[1 : len(traces)-1] {
-				if t.Syscall != "read" {
-					allReads = false
+				if t.Syscall == "read" {
+					hasRead = true
+				} else {
+					allMiddleAreReads = false
 					break
 				}
 			}
-			return first.Syscall == "openat" && allReads && last.Syscall == "close" &&
-				first.ReturnValue >= 0 // openat succeeded
+			return first.Syscall == "openat" && hasRead && allMiddleAreReads &&
+				last.Syscall == "close" && first.ReturnValue >= 0
 		},
 	}
 
@@ -131,24 +143,8 @@ func NewPatternCatalog() *PatternCatalog {
 		},
 	}
 
-	// Process exec pattern
-	pc.patterns["process_exec"] = Pattern{
-		Name:       "process_exec",
-		Intent:     "exec_command",
-		Phase:      types.FlowPhaseAction,
-		Outcome:    types.FlowOutcomeSuccess,
-		Confidence: 0.90,
-		MatchFunc: func(traces []types.Trace) bool {
-			for _, t := range traces {
-				if t.Syscall == "execve" {
-					return true
-				}
-			}
-			return false
-		},
-	}
-
 	// Failed syscall pattern — any trace with return value < 0
+	// Must come before process_exec so failed execs get the right outcome.
 	pc.patterns["failed_syscall"] = Pattern{
 		Name:       "failed_syscall",
 		Intent:     "unknown",
@@ -166,6 +162,7 @@ func NewPatternCatalog() *PatternCatalog {
 	}
 
 	// Git operation pattern: execve with git in args
+	// Must come BEFORE the generic process_exec to get specific classification.
 	pc.patterns["git_operation"] = Pattern{
 		Name:       "git_operation",
 		Intent:     "git_operation",
@@ -198,13 +195,19 @@ func NewPatternCatalog() *PatternCatalog {
 				if t.Syscall == "execve" {
 					for _, arg := range t.Args {
 						l := strings.ToLower(arg)
-						if strings.Contains(l, "go test") ||
+						if l == "pytest" || l == "jest" || l == "vitest" ||
 							strings.Contains(l, "pytest") ||
-							strings.Contains(l, "cargo test") ||
-							strings.Contains(l, "npm test") ||
 							strings.Contains(l, "jest") {
 							return true
 						}
+					}
+					// Check joined args for multi-word commands
+					joined := strings.ToLower(strings.Join(t.Args, " "))
+					if strings.Contains(joined, "go test") ||
+						strings.Contains(joined, "cargo test") ||
+						strings.Contains(joined, "npm test") ||
+						strings.Contains(joined, "npm run test") {
+						return true
 					}
 				}
 			}
@@ -224,15 +227,22 @@ func NewPatternCatalog() *PatternCatalog {
 				if t.Syscall == "execve" {
 					for _, arg := range t.Args {
 						l := strings.ToLower(arg)
-						if strings.Contains(l, "go build") ||
-							strings.Contains(l, "cargo build") ||
-							strings.Contains(l, "make") ||
-							strings.Contains(l, "cmake") ||
+						if l == "make" || l == "cmake" || l == "gcc" ||
+							l == "g++" || l == "clang" || l == "ld" ||
 							strings.Contains(l, "gcc") ||
 							strings.Contains(l, "g++") ||
 							strings.Contains(l, "clang") {
 							return true
 						}
+					}
+					// Check joined args for multi-word commands
+					joined := strings.ToLower(strings.Join(t.Args, " "))
+					if strings.Contains(joined, "go build") ||
+						strings.Contains(joined, "cargo build") ||
+						strings.Contains(joined, "npm run build") ||
+						strings.Contains(joined, "pnpm build") ||
+						strings.Contains(joined, "make ") {
+						return true
 					}
 				}
 			}
@@ -262,13 +272,44 @@ func NewPatternCatalog() *PatternCatalog {
 		},
 	}
 
+	// Process exec pattern — generic fallback for any execve not caught above.
+	// Must come AFTER all specific exec patterns (git, test, build, search).
+	pc.patterns["process_exec"] = Pattern{
+		Name:       "process_exec",
+		Intent:     "exec_command",
+		Phase:      types.FlowPhaseAction,
+		Outcome:    types.FlowOutcomeSuccess,
+		Confidence: 0.90,
+		MatchFunc: func(traces []types.Trace) bool {
+			for _, t := range traces {
+				if t.Syscall == "execve" {
+					return true
+				}
+			}
+			return false
+		},
+	}
+
+	// Build the ordered list for stable, priority-aware matching.
+	// Specific patterns first, generic fallbacks last.
+	pc.order = []string{
+		"file_read", "file_write", "file_edit",
+		"network_connect",
+		"git_operation", "test_run", "build_command", "search_code",
+		"process_exec",
+		"failed_syscall",
+	}
+
 	return pc
 }
 
 // Match attempts to classify a trace group using pattern matching.
 // Returns (flow, true) if a pattern matched, or (zero-value Flow, false).
+// Patterns are evaluated in insertion order (pc.order), so specific
+// patterns registered before generic fallbacks get priority.
 func (pc *PatternCatalog) Match(traces []types.Trace) (types.Flow, bool) {
-	for _, p := range pc.patterns {
+	for _, name := range pc.order {
+		p := pc.patterns[name]
 		if p.MatchFunc(traces) {
 			flow := types.Flow{
 				ID:         uuid.Must(uuid.NewV7()).String(),
