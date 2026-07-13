@@ -88,7 +88,7 @@
 
 | ID | Task | Spec Ref | Status |
 |---|---|---|
-| P4-01 | `internal/classify/patterns.go` — PatternCatalog with file_read, file_write, network_connect, etc. | S03 §2.2 | ✅ Done (c4fe4ad) |
+| P4-01 | `internal/classify/patterns.go` — PatternCatalog with file_read, file_write, edit, network, exec, git, test, build, search + failure patterns | S03 §2.2 | ✅ Done (d0ff00f) |
 | P4-02 | `internal/classify/gemma.go` — GemmaModel, Load, Unload, ClassifyBatch | S03 §2.3 | pending |
 | P4-03 | `internal/classify/engine.go` — ClassificationEngine, groupTracesByTime, Classify pipeline | S03 §2.1 | pending |
 | P4-04 | `internal/classify/classifier.go` — Classifier interface impl, ClassifyStream, Health, ModelInfo | S03 §1 | pending |
