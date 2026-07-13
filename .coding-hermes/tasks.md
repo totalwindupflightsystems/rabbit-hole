@@ -51,19 +51,19 @@
 ## PHASE 2: Storage
 
 | ID | Task | Spec Ref | Status |
-|---|---|---|
-| P2-01 | `internal/storage/sqlite.go` — SQLiteStore, NewSQLiteStore, Close | S05 §3.1 | pending |
-| P2-02 | `internal/storage/migrations/001_initial.up.sql` — full DDL | S05 §2 | pending |
-| P2-03 | `internal/storage/migrate.go` — migration runner | S05 §8 | pending |
-| P2-04 | StoreTraces — batch insert | S05 §3 | pending |
-| P2-05 | StoreFlows + FTS5 triggers — batch insert with FTS5 sync | S05 §3.2 | pending |
-| P2-06 | GetFlow, QueryFlows, SearchFlows (FTS5 + LIKE fallback) | S05 §3.3 | pending |
-| P2-07 | Session CRUD: StoreSession, GetSession, ListSessions, UpdateSession | S05 §3 | pending |
-| P2-08 | ContextWindow CRUD: StoreContextWindow, GetContextWindow | S05 §3 | pending |
-| P2-09 | Compact, Stats, Health | S05 §3.4 | pending |
-| P2-10 | `internal/storage/storage_test.go` — all CRUD, FTS5, compaction, concurrent | S05 §9 | pending |
+|---|---|---|---|
+| P2-01 | `internal/storage/sqlite.go` — SQLiteStore, NewSQLiteStore, Close | S05 §3.1 | ✅ Done |
+| P2-02 | `internal/storage/migrations/001_initial.up.sql` — full DDL | S05 §2 | ✅ Done |
+| P2-03 | `internal/storage/migrate.go` — migration runner (folded into sqlite.go) | S05 §8 | ✅ Done |
+| P2-04 | StoreTraces — batch insert | S05 §3 | ✅ Done |
+| P2-05 | StoreFlows + FTS5 triggers — batch insert with FTS5 sync | S05 §3.2 | ✅ Done |
+| P2-06 | GetFlow, QueryFlows, SearchFlows (FTS5 + LIKE fallback) | S05 §3.3 | ✅ Done |
+| P2-07 | Session CRUD: StoreSession, GetSession, ListSessions, UpdateSession | S05 §3 | ✅ Done |
+| P2-08 | ContextWindow CRUD: StoreContextWindow, GetContextWindow | S05 §3 | ✅ Done |
+| P2-09 | Compact, Stats, Health | S05 §3.4 | ✅ Done |
+| P2-10 | `internal/storage/storage_test.go` — all CRUD, FTS5, compaction, concurrent | S05 §9 | ✅ Done |
 
-**Gate:** All storage operations tested. `go test ./internal/storage/... -count=1` passes.
+**Gate:** All storage operations tested. `go test ./internal/storage/... -count=1` passes. ✅ 14 tests, 0 failures.
 
 ---
 
