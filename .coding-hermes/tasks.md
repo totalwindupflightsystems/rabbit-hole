@@ -71,13 +71,13 @@
 
 | ID | Task | Spec Ref | Status |
 |---|---|---|
-| P3-01 | `internal/collector/ebpf.go` — eBPF program loading (collector.bpf.c via bpf2go) | S02 §2.1, §7 | pending |
-| P3-02 | `internal/collector/buffer.go` — ring buffer with Pop, Push, PopBatch, Stats | S02 §2.2 | pending |
-| P3-03 | `internal/collector/collector.go` — Collector interface impl, NewEBPFCollector | S02 §1 | pending |
+| P3-01 | `internal/collector/ebpf.go` — eBPF program loading (collector.bpf.c via bpf2go) | S02 §2.1, §7 | ✅ Done (39b07c6) |
+| P3-02 | `internal/collector/buffer.go` — ring buffer with Pop, Push, PopBatch, Stats | S02 §2.2 | ✅ Done (39b07c6) |
+| P3-03 | `internal/collector/collector.go` — Collector interface impl, NewEBPFCollector | S02 §1 | ✅ Done (39b07c6) |
 | P3-04 | `internal/collector/attach.go` — Attach (PID filter, TLS probes) | S02 §2.3 | pending |
 | P3-05 | `internal/collector/detach.go` — Detach (cleanup, status update) | S02 §2.3 | pending |
 | P3-06 | `internal/collector/health.go` — Health, List | S02 §1 | pending |
-| P3-07 | `internal/collector/collector_test.go` — ring buffer, session lifecycle, PID filter | S02 §8 | pending |
+| P3-07 | `internal/collector/collector_test.go` — ring buffer, session lifecycle, PID filter | S02 §8 | 🔄 Partial (24 tests, 39b07c6) |
 | P3-08 | `internal/collector/integration_test.go` — attach to real process, verify traces | S02 §8 | pending |
 
 **Gate:** Attach to `sleep 5` → traces captured. Tests pass. Ring buffer overflow handled.
