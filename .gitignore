@@ -21,6 +21,9 @@ Thumbs.db
 # Coding Hermes
 .coding-hermes/
 
+# Hilo
+.vfs/
+
 # GitReins state (MCP-managed, never committed)
 .gitreins/config.yaml
 .gitreins/tasks.yaml
