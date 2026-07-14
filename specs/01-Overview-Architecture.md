@@ -13,8 +13,10 @@ Rabbit-Hole is a **single Go binary** that attaches to agent processes and makes
 │  "What did helios do at 3am?"               │
 │  Natural language → context windows          │
 ├─────────────────────────────────────────────┤
-│              CLASSIFY (Gemma)                │
+│         CLASSIFY (Pluggable Backend)         │
 │  Raw syscalls → semantic flows               │
+│  ┌─ LOCAL: Gemma on-device                   │
+│  └─ REMOTE: gRPC to central classifier       │
 │  "read auth.go → decided to patch → wrote"  │
 ├─────────────────────────────────────────────┤
 │              COLLECT (eBPF)                  │
@@ -36,9 +38,19 @@ graph TD
     subgraph "Rabbit-Hole"
         C[eBPF Collector<br/>syscalls, TLS, files]
         D[Trace Buffer<br/>ring buffer, in-memory]
-        E[Classification Engine<br/>local Gemma model]
+        E[Classification Engine<br/>pattern match + backend dispatch]
         F[Trace Store<br/>SQLite with vectors]
         G[Expression Server<br/>HTTP + WebSocket]
+
+        subgraph "Classification Backends"
+            L[Local Gemma<br/>on-device inference]
+            R[Remote Classifier<br/>gRPC to central service]
+        end
+
+        E -->|unmatched groups| L
+        E -->|or| R
+        L -->|semantic flows| F
+        R -->|semantic flows| F
     end
 
     subgraph "Consumers"

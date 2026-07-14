@@ -1,17 +1,146 @@
 # S03 — Classification Layer
 
-> **Raw syscalls → semantic understanding.** A local Gemma model classifies intent, phase, outcome, and confidence. Runs on-device. No cloud, no API keys, no privacy leak. Nobody else does this.
+> **Raw syscalls → semantic understanding.** Pluggable classification backends: local Gemma for edge/air-gapped, remote gRPC for fleet/centralized. Nobody else does this.
 
 ## 1. Interfaces
 
 ```go
 // classifier.go
 
-type Classifier interface {
-    Classify(ctx context.Context, sessionID string, traces []Trace) ([]Flow, error)
-    ClassifyStream(ctx context.Context, sessionID string, traces <-chan Trace) (<-chan Flow, error)
+// ClassificationBackend is the pluggable model that turns trace groups into flows.
+// Two implementations: LocalBackend (Gemma on-device) and RemoteBackend (gRPC to central).
+type ClassificationBackend interface {
+    Classify(ctx context.Context, groups [][]Trace) ([]Flow, error)
     Health(ctx context.Context) error
-    ModelInfo(ctx context.Context) (ModelInfo, error)
+    Info(ctx context.Context) (ModelInfo, error)
+    Close() error
+}
+
+type ModelInfo struct {
+    Name       string // "gemma-3-4b" or "remote:v2"
+    Version    string
+    Kind       string // "local" or "remote"
+    Ready      bool
+    LoadedAt   *time.Time // nil for remote
+    MemoryMB   int64      // 0 for remote
+    DeviceType string     // "cpu", "cuda", "npu", "remote"
+    Endpoint   string     // gRPC address (remote only)
+    Latency    time.Duration // last ping round-trip
+}
+```
+
+## 2. Backend Implementations
+
+### 2.1 LocalBackend — Gemma on-device
+
+```go
+// local.go
+
+type LocalBackend struct {
+    modelPath string
+    modelName string
+    loaded    atomic.Bool
+    loadedAt  time.Time
+    mu        sync.RWMutex
+    ctx       unsafe.Pointer // llama_context*
+    params    unsafe.Pointer // llama_model_params*
+    totalInferences atomic.Int64
+    totalTokens     atomic.Int64
+}
+
+func NewLocalBackend(modelPath, modelName string) *LocalBackend {
+    return &LocalBackend{modelPath: modelPath, modelName: modelName}
+}
+
+func (b *LocalBackend) Classify(ctx context.Context, groups [][]Trace) ([]Flow, error) { ... }
+func (b *LocalBackend) Health(ctx context.Context) error { ... }
+func (b *LocalBackend) Info(ctx context.Context) (ModelInfo, error) { ... }
+func (b *LocalBackend) Close() error { ... }
+```
+
+### 2.2 RemoteBackend — gRPC to Central Classifier
+
+```go
+// remote.go
+
+type RemoteBackend struct {
+    endpoint string
+    conn     *grpc.ClientConn
+    client   pb.ClassifierClient
+    token    string // auth token for central service
+    mu       sync.RWMutex
+    lastPing time.Duration
+}
+
+func NewRemoteBackend(endpoint, token string) (*RemoteBackend, error) {
+    conn, err := grpc.Dial(endpoint,
+        grpc.WithTransportCredentials(insecure.NewCredentials()), // or TLS
+        grpc.WithBlock(),
+        grpc.WithTimeout(5*time.Second),
+    )
+    if err != nil {
+        return nil, fmt.Errorf("connect to classifier at %s: %w", endpoint, err)
+    }
+    return &RemoteBackend{
+        endpoint: endpoint,
+        conn:     conn,
+        client:   pb.NewClassifierClient(conn),
+        token:    token,
+    }, nil
+}
+
+func (b *RemoteBackend) Classify(ctx context.Context, groups [][]Trace) ([]Flow, error) {
+    req := &pb.ClassifyRequest{Groups: marshalGroups(groups)}
+    resp, err := b.client.Classify(ctx, req)
+    if err != nil {
+        return nil, fmt.Errorf("remote classify: %w", err)
+    }
+    return unmarshalFlows(resp.Flows), nil
+}
+
+func (b *RemoteBackend) Health(ctx context.Context) error {
+    start := time.Now()
+    _, err := b.client.Ping(ctx, &pb.PingRequest{})
+    b.lastPing = time.Since(start)
+    return err
+}
+
+func (b *RemoteBackend) Info(ctx context.Context) (ModelInfo, error) {
+    resp, err := b.client.Info(ctx, &pb.InfoRequest{})
+    if err != nil {
+        return ModelInfo{}, err
+    }
+    return ModelInfo{
+        Name: resp.Name, Version: resp.Version,
+        Kind: "remote", Ready: true, Endpoint: b.endpoint,
+        Latency: b.lastPing,
+    }, nil
+}
+```
+
+### 2.3 Classification Engine (unchanged from original — dispatches to backend)
+
+```go
+// engine.go
+
+type ClassificationEngine struct {
+    backend     ClassificationBackend // ← pluggable
+    store       Storage
+    patterns    *PatternCatalog
+    batchSize   int
+    batchTimeout time.Duration
+    logger      *slog.Logger
+}
+
+func NewClassificationEngine(backend ClassificationBackend, store Storage, logger *slog.Logger) *ClassificationEngine {
+    return &ClassificationEngine{
+        backend:      backend,
+        store:        store,
+        patterns:     NewPatternCatalog(),
+        batchSize:    100,
+        batchTimeout: 500 * time.Millisecond,
+        logger:       logger,
+    }
 }
 ```
 
@@ -64,22 +193,24 @@ func (e *ClassificationEngine) Classify(ctx context.Context, sessionID string, t
         }
     }
 
-    // Phase 3: Run Gemma for complex/unmatched groups
-    if len(unmatched) > 0 && e.model.IsLoaded() {
-        classified, err := e.model.ClassifyBatch(ctx, unmatched)
-        if err != nil {
-            // Model error → store unmatched as unknown confidence
-            e.logger.Warn("classification model error, storing with confidence=0", "err", err)
+    // Phase 3: Dispatch unmatched groups to the classification backend
+    if len(unmatched) > 0 {
+        if err := e.backend.Health(ctx); err == nil {
+            classified, err := e.backend.Classify(ctx, unmatched)
+            if err != nil {
+                e.logger.Warn("backend classify error, storing with confidence=0", "err", err)
+                for _, group := range unmatched {
+                    matched = append(matched, e.makeUnknownFlow(sessionID, group))
+                }
+            } else {
+                matched = append(matched, classified...)
+            }
+        } else {
+            // Backend unhealthy — store as unknown
+            e.logger.Warn("classification backend unhealthy — storing with confidence=0")
             for _, group := range unmatched {
                 matched = append(matched, e.makeUnknownFlow(sessionID, group))
             }
-        } else {
-            matched = append(matched, classified...)
-        }
-    } else if len(unmatched) > 0 {
-        // No model available — store as unknown
-        for _, group := range unmatched {
-            matched = append(matched, e.makeUnknownFlow(sessionID, group))
         }
     }
 

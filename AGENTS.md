@@ -9,11 +9,11 @@ Rabbit-Hole — go down the rabbit hole into your agent's decisions. A legibilit
 Three layers, one binary:
 
 ```
-COLLECT (eBPF/strace) → CLASSIFY (local Gemma) → EXPRESS (chat interface)
+COLLECT (eBPF/strace) → CLASSIFY (pluggable: local Gemma or remote gRPC) → EXPRESS (chat)
 ```
 
 - **Collect:** Kernel-level telemetry. Zero SDK. Works with closed-source agents.
-- **Classify:** Local Gemma model turns raw syscalls → semantic flows. Nobody else does this.
+- **Classify:** Pluggable backends — local Gemma (edge/air-gapped) or remote gRPC (fleet/centralized). Pattern matching catches 80% fast. Nobody else does this.
 - **Express:** Chat interface. "What did helios do at 3am?" Context window retrieval.
 
 ## Competitive Gap
