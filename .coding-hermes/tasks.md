@@ -138,7 +138,7 @@
 | ID | Task | Spec Ref | Status |
 |---|---|---|
 | P7-01 | `internal/attach/attach.go` — orchestration: collector → classifier → storage pipeline | ✅ Done |
-| P7-02 | E2E test: serve → attach to test-agent → verify flows in search → detach | — | pending |
+| P7-02 | E2E test: serve → attach to test-agent → verify flows in search → detach | ✅ Done (e693d5b) |
 | P7-03 | E2E test: chat query returns correct flows | — | pending |
 | P7-04 | E2E test: WebSocket receives real-time flows | — | pending |
 | P7-05 | Stress test: 100K traces → classification → search → all within latency bounds | — | pending |
