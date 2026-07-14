@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Rabbit-Hole — Go down the rabbit hole into your agent's decisions. Agent legibility platform: collect (eBPF) → classify (local Gemma) → express (chat). One binary, self-hosted first.">
+<title>Rabbit-Hole — Agent Legibility Platform</title>
+<style>
+  :root {
+    --bg: #08080f;
+    --surface: #12121d;
+    --surface-2: #1a1a2e;
+    --border: #252542;
+    --text: #dfdff0;
+    --text-muted: #8888b0;
+    --muted-deep: #5a5a80;
+    --accent: #e879a8;
+    --accent-glow: #f5a0c0;
+    --green: #3dd68c;
+    --amber: #f5b84d;
+    --cyan: #3cc8e8;
+    --purple: #a855f7;
+    --red: #f97066;
+    --gradient: linear-gradient(135deg, #e879a8 0%, #a855f7 50%, #3cc8e8 100%);
+    --gradient-subtle: linear-gradient(135deg, rgba(232,121,168,0.06) 0%, rgba(168,85,247,0.04) 100%);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; font-size: 16px; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.65; -webkit-font-smoothing: antialiased;
+  }
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,8,15,0.92); backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem; display: flex; align-items: center; gap: 1.25rem;
+    height: 54px; overflow-x: auto;
+  }
+  .nav-logo { font-weight: 700; font-size: 1.05rem; color: var(--text); white-space: nowrap; letter-spacing: -0.3px; }
+  .nav-logo span { background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .nav-links { display: flex; gap: 0.5rem; align-items: center; }
+  .nav-links a { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; transition: all 0.15s; white-space: nowrap; }
+  .nav-links a:hover { color: var(--text); background: var(--surface-2); }
+  .nav-badge { margin-left: auto; font-size: 0.7rem; font-weight: 600; padding: 4px 12px; border-radius: 99px; background: rgba(232,121,168,0.12); color: var(--accent-glow); border: 1px solid rgba(232,121,168,0.25); white-space: nowrap; font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+  .hero { padding: 5rem 1.5rem 4rem; text-align: center; background: var(--gradient-subtle); border-bottom: 1px solid var(--border); position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; top: -40%; left: -20%; width: 140%; height: 180%; background: radial-gradient(ellipse at 50% 0%, rgba(232,121,168,0.06) 0%, transparent 70%); pointer-events: none; }
+  .hero-badge { display: inline-block; font-size: 0.8rem; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--accent-glow); margin-bottom: 1rem; padding: 5px 16px; border-radius: 99px; background: rgba(232,121,168,0.08); border: 1px solid rgba(232,121,168,0.2); }
+  .hero h1 { font-size: clamp(2rem, 6vw, 4rem); font-weight: 800; line-height: 1.05; letter-spacing: -1.5px; color: var(--text); max-width: 900px; margin: 0 auto 0.75rem; position: relative; }
+  .hero h1 .grad { background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .hero p.sub { font-size: 1.15rem; color: var(--text-muted); max-width: 720px; margin: 0 auto 2rem; line-height: 1.6; position: relative; }
+  .hero-links { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; position: relative; }
+  .hero-links a { display: inline-block; padding: 10px 20px; border-radius: 8px; font-size: 0.84rem; font-weight: 500; text-decoration: none; }
+  .hero-links a.primary { background: var(--accent); color: #fff; transition: background 0.2s; }
+  .hero-links a.primary:hover { background: var(--accent-glow); }
+  .hero-links a.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); transition: all 0.15s; }
+  .hero-links a.ghost:hover { border-color: var(--accent); color: var(--text); }
+  .stat-strip { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border); margin: 2.5rem 0; }
+  .stat-item { background: var(--surface); padding: 1.5rem 1.25rem; text-align: center; }
+  .stat-item .n { font-size: 2.2rem; font-weight: 800; line-height: 1.1; font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-item .l { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 1px; }
+  @media (min-width: 600px) { .stat-strip { grid-template-columns: repeat(4, 1fr); } }
+  .sec { padding: 3rem 0; }
+  .sec-h { margin-bottom: 1.75rem; }
+  .sec-h h2 { font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.5px; color: var(--text); }
+  .sec-h h2 span { background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .sec-h p { color: var(--text-muted); margin-top: 0.35rem; font-size: 0.95rem; }
+  .card-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+  @media (min-width: 600px) { .card-grid.cols-2 { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 750px) { .card-grid.cols-3 { grid-template-columns: repeat(3, 1fr); } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; transition: border-color 0.2s; }
+  .card:hover { border-color: rgba(232,121,168,0.35); }
+  .card h4 { font-size: 1.05rem; font-weight: 650; color: var(--text); margin-bottom: 0.5rem; }
+  .card h4 .icon { margin-right: 0.4rem; }
+  .card p { font-size: 0.88rem; color: var(--text-muted); line-height: 1.55; }
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1rem 0; }
+  .tbl { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .tbl th { background: var(--surface-2); color: var(--accent-glow); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+  .tbl td { padding: 0.7rem 1rem; font-size: 0.86rem; border-bottom: 1px solid rgba(37,37,66,0.5); color: var(--text-muted); }
+  .tbl td:first-child { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text); }
+  .tbl tr:last-child td { border-bottom: none; }
+  .arch { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; }
+  .arch-layer { display: flex; align-items: stretch; margin-bottom: 0.5rem; }
+  .arch-layer:last-child { margin-bottom: 0; }
+  .arch-lbl { min-width: 130px; background: rgba(232,121,168,0.06); border: 1px solid var(--border); border-right: none; border-radius: 6px 0 0 6px; padding: 0.65rem 0.8rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted-deep); display: flex; align-items: center; }
+  .arch-chips { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0 6px 6px 0; padding: 0.45rem 0.6rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+  .chip { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 0.72rem; font-weight: 500; }
+  .chip-e { background: rgba(60,200,232,0.1); color: var(--cyan); border: 1px solid rgba(60,200,232,0.25); }
+  .chip-c { background: rgba(168,85,247,0.1); color: var(--purple); border: 1px solid rgba(168,85,247,0.25); }
+  .chip-x { background: rgba(61,214,140,0.1); color: var(--green); border: 1px solid rgba(61,214,140,0.25); }
+  .comp-grid { display: grid; grid-template-columns: 1fr; gap: 0.8rem; }
+  @media (min-width: 600px) { .comp-grid { grid-template-columns: repeat(2, 1fr); } }
+  .comp-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.25rem; }
+  .comp-card .name { font-weight: 650; color: var(--text); font-size: 0.95rem; }
+  .comp-card .type { font-size: 0.78rem; color: var(--muted-deep); margin: 0.15rem 0; }
+  .comp-card .gap { font-size: 0.82rem; color: var(--red); margin-top: 0.4rem; }
+  .comp-card .gap::before { content: '✗ '; }
+  .gap-card { background: rgba(61,214,140,0.04); border: 2px solid var(--green); border-radius: 10px; padding: 1.5rem; margin: 1rem 0; }
+  .gap-card h4 { color: var(--green); font-size: 1rem; margin-bottom: 0.5rem; }
+  .gap-card p { color: var(--text-muted); font-size: 0.88rem; }
+  .callout { background: rgba(232,121,168,0.04); border: 1px dashed rgba(232,121,168,0.25); border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; font-size: 0.88rem; color: var(--text-muted); }
+  .callout strong { color: var(--accent-glow); }
+  .footer { text-align: center; padding: 3rem 1.5rem; margin-top: 1rem; border-top: 1px solid var(--border); background: var(--gradient-subtle); }
+  .footer h3 { font-size: 1.4rem; font-weight: 700; color: var(--text); }
+  .footer code.inline { display: inline-block; margin-top: 0.75rem; padding: 10px 18px; background: var(--surface); color: var(--accent-glow); border: 1px solid var(--border); border-radius: 8px; font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; font-size: 0.84rem; }
+  .footer a { color: var(--accent); text-decoration: none; font-size: 0.9rem; display: inline-block; margin-top: 0.5rem; }
+  .b { display: inline-block; font-size: 0.7rem; padding: 3px 10px; border-radius: 99px; font-weight: 600; font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; }
+  .b-done { background: rgba(61,214,140,0.1); color: var(--green); border: 1px solid rgba(61,214,140,0.2); }
+  .b-wip { background: rgba(245,184,77,0.1); color: var(--amber); border: 1px solid rgba(245,184,77,0.2); }
+  .b-pend { background: rgba(136,136,176,0.08); color: var(--muted-deep); border: 1px solid rgba(136,136,176,0.15); }
+  .phase { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 0.8rem; }
+  .phase-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .phase-head .title { font-weight: 650; font-size: 1rem; color: var(--text); }
+  .phase p { font-size: 0.85rem; color: var(--text-muted); }
+  .phase .bar-wrap { height: 5px; background: rgba(136,136,176,0.12); border-radius: 3px; margin-top: 0.6rem; }
+  .phase .bar { height: 100%; background: var(--gradient); border-radius: 3px; }
+  .flow { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; overflow-x: auto; }
+  .flow pre { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-muted); line-height: 1.6; background: transparent; white-space: pre; }
+  .repo { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.15rem; }
+  .repo .nm { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; font-size: 0.82rem; font-weight: 600; color: var(--accent-glow); }
+  .repo .purp { font-size: 0.76rem; color: var(--text-muted); margin: 0.2rem 0; }
+  .repo .lang { font-size: 0.68rem; color: var(--muted-deep); text-transform: uppercase; letter-spacing: 0.8px; }
+  .feat-list { list-style: none; columns: 2; column-gap: 1.5rem; }
+  @media (max-width: 600px) { .feat-list { columns: 1; } }
+  .feat-list li { font-size: 0.86rem; color: var(--text-muted); padding: 0.25rem 0; break-inside: avoid; }
+  .feat-list li::before { content: '▸ '; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="nav-logo">🐇 <span>Rabbit-Hole</span></span>
+  <span class="nav-links">
+    <a href="#what">What</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#layers">Layers</a>
+    <a href="#competitors">Competition</a>
+    <a href="#roadmap">Roadmap</a>
+  </span>
+  <span class="nav-badge">PRD v1.0</span>
+</nav>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="hero">
+  <div class="hero-badge">Product Requirements Document</div>
+  <h1><span class="grad">Rabbit-Hole</span></h1>
+  <p class="sub">
+    <strong>Go down the rabbit hole into your agent's decisions.</strong><br>
+    A legibility layer between agents and humans. Attach eBPF to any agent process,
+    classify raw syscalls into semantic understanding with a local Gemma model,
+    and ask natural language questions about what happened — with exact context
+    windows at every decision point.
+  </p>
+  <div class="hero-links">
+    <a class="primary" href="https://gitlab.readydedis.com/rabbit-hole/rabbit-hole" target="_blank">gitlab.readydedis.com/rabbit-hole →</a>
+    <a class="ghost" href="#architecture">How It Works →</a>
+  </div>
+</section>
+
+<!-- ═══════════════ STAT STRIP ═══════════════ -->
+<div class="wrap">
+  <div class="stat-strip">
+    <div class="stat-item"><div class="n">3</div><div class="l">Architecture Layers</div></div>
+    <div class="stat-item"><div class="n">0</div><div class="l">SDK Required</div></div>
+    <div class="stat-item"><div class="n">1</div><div class="l">Binary</div></div>
+    <div class="stat-item"><div class="n">100%</div><div class="l">Self-Hosted</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════ WHAT IS RABBIT-HOLE ═══════════════ -->
+<section class="sec" id="what">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>What <span>Rabbit-Hole</span> Is</h2>
+      <p>Rabbit-Hole is not a monitoring dashboard. It's a legibility layer — it makes AI agent decision-making transparent, searchable, and auditable by both humans and other agents.</p>
+    </div>
+    <div class="card-grid cols-3">
+      <div class="card">
+        <h4><span class="icon">🔬</span> Kernel-Level Truth</h4>
+        <p>Attaches via eBPF directly to the agent process. Every syscall, network request, file operation, and LLM API call is captured at the kernel level. The agent cannot lie about what it did — the kernel saw everything.</p>
+      </div>
+      <div class="card">
+        <h4><span class="icon">🧠</span> Local Classification</h4>
+        <p>A local Gemma model turns raw syscall traces into semantic understanding: "read auth.go (247 lines, 2ms), decided to patch middleware.go, wrote 12 lines." Runs on-device. No cloud, no API keys, no privacy leak.</p>
+      </div>
+      <div class="card">
+        <h4><span class="icon">💬</span> Chat Interface</h4>
+        <p>Ask natural language questions: "What did helios do at 3am?" "Show me the context window when it decided to patch middleware.go." "Is dexdat getting slower?" Humans and agents both query Rabbit-Hole.</p>
+      </div>
+      <div class="card">
+        <h4><span class="icon">🔄</span> Agent-Supervises-Agent</h4>
+        <p>Supervisor agents query Rabbit-Hole's REST API to debug worker agents. Fleet operators automate compliance and anomaly detection. The ultimate use case: agents debugging agents.</p>
+      </div>
+      <div class="card">
+        <h4><span class="icon">📦</span> One Binary, Zero SDK</h4>
+        <p>Works with closed-source CLI agents. No SDK to install, no library to link. Attach by PID. The kernel doesn't care if the binary is open-source or proprietary.</p>
+      </div>
+      <div class="card">
+        <h4><span class="icon">🏠</span> Self-Hosted First</h4>
+        <p>Single Go binary with embedded SQLite. No external dependencies beyond a Linux kernel ≥ 5.8. Data never leaves the machine. Install in 60 seconds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ARCHITECTURE ═══════════════ -->
+<section class="sec" id="architecture">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>Three-Layer <span>Architecture</span></h2>
+      <p>Each layer transforms the output of the layer below it. The agent can't skip layers or lie — the kernel is the single source of truth.</p>
+    </div>
+
+    <div class="arch" style="margin-bottom: 1.5rem;">
+      <div class="arch-layer">
+        <div class="arch-lbl">🗣️ EXPRESS</div>
+        <div class="arch-chips">
+          <span class="chip chip-x">Chat Interface</span>
+          <span class="chip chip-x">REST API</span>
+          <span class="chip chip-x">WebSocket</span>
+          <span class="chip chip-x">Dashboards</span>
+          <span class="chip chip-x">Alerts</span>
+          <span class="chip chip-x">Context Replay</span>
+        </div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-lbl">🧠 CLASSIFY</div>
+        <div class="arch-chips">
+          <span class="chip chip-c">Local Gemma</span>
+          <span class="chip chip-c">Pattern Matching</span>
+          <span class="chip chip-c">Intent Detection</span>
+          <span class="chip chip-c">Phase Classification</span>
+          <span class="chip chip-c">Confidence Scoring</span>
+        </div>
+      </div>
+      <div class="arch-layer">
+        <div class="arch-lbl">🔍 COLLECT</div>
+        <div class="arch-chips">
+          <span class="chip chip-e">eBPF / strace</span>
+          <span class="chip chip-e">Syscall Tracing</span>
+          <span class="chip chip-e">TLS Interception</span>
+          <span class="chip chip-e">File Operations</span>
+          <span class="chip chip-e">Network Monitoring</span>
+          <span class="chip chip-e">Resource Sampling</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <pre>
+Agent Process          Kernel (eBPF)          Rabbit-Hole                  You
+    │                       │                      │                         │
+    ├─ openat("auth.go") ──►│                      │                         │
+    │                       ├─ trace ─────────────►│                         │
+    ├─ read(247 lines) ────►│                      │                         │
+    │                       ├─ trace ─────────────►│                         │
+    ├─ write("middleware")─►│                      │                         │
+    │                       ├─ trace ─────────────►│                         │
+    │                       │                      ├─ Classify ──► Flow:     │
+    │                       │                      │  "Read auth.go (247     │
+    │                       │                      │   lines), patched mid-  │
+    │                       │                      │   dleware.go (12 lines)"│
+    │                       │                      │                         │
+    │                       │                      │◄─ "What happened?" ─────┤
+    │                       │                      ├─ Chat response ────────►│
+    │                       │                      │  with context windows   │
+      </pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ LAYERS IN DEPTH ═══════════════ -->
+<section class="sec" id="layers">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>Each Layer, <span>In Detail</span></h2>
+      <p>The three layers are independent, replaceable, and communicate through well-defined interfaces.</p>
+    </div>
+
+    <div class="card-grid cols-2" style="margin-bottom: 1rem;">
+      <div class="card">
+        <h4><span class="icon">🔍</span> COLLECT — Kernel Telemetry</h4>
+        <p>eBPF programs attach to tracepoints and uprobes on the agent process. Raw syscall events stream into a ring buffer. Zero SDK — works with closed-source binaries. The kernel captures: every <code>openat</code>, <code>read</code>, <code>write</code>, <code>connect</code>, <code>execve</code>; TLS-encrypted LLM API calls (via uprobes on libssl); file operations with filenames and byte counts; CPU/memory per process; optional context windows at decision points.</p>
+      </div>
+      <div class="card">
+        <h4><span class="icon">🧠</span> CLASSIFY — Semantic Understanding</h4>
+        <p>Two-pass classification. First pass: fast pattern matching catches 80% of operations (file reads, writes, network connects) with 95%+ confidence. Second pass: local Gemma 3 4B model classifies complex patterns the matcher can't resolve. Output: intent (read_file, write_file, api_call, exec_command...), phase (observation, deliberation, action, verification), outcome (success, failure, timeout), confidence (0.0–1.0), human-readable description. Runs entirely on-device. No cloud dependency.</p>
+      </div>
+    </div>
+
+    <div class="card-grid cols-2">
+      <div class="card">
+        <h4><span class="icon">💬</span> EXPRESS — Natural Language Query</h4>
+        <p>Chat is the primary interface. Natural language questions are translated to structured searches, executed against the flow store, and synthesized into natural language answers with context. Plus: structured REST API for agent-to-agent queries, WebSocket for real-time flow streaming, search across all sessions with FTS5 full-text search, context window retrieval — see exactly what the agent saw at each decision point.</p>
+      </div>
+      <div class="card">
+        <h4><span class="icon">🗄️</span> STORAGE — SQLite with FTS5</h4>
+        <p>Single SQLite database in WAL mode. Full-text search via FTS5. Automatic retention policies (default 30 days). JSON columns for flexible metadata. Schema versioned with migrations. Zero external dependencies — the database file is portable.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ COMPETITIVE LANDSCAPE ═══════════════ -->
+<section class="sec" id="competitors">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>Competitive <span>Landscape</span></h2>
+      <p>Existing tools address pieces of the problem. Nobody does the full stack — especially the classification layer and chat interface.</p>
+    </div>
+
+    <div class="comp-grid">
+      <div class="comp-card">
+        <div class="name">AgentSight</div>
+        <div class="type">Academic research — eBPF + TLS interception</div>
+        <div class="gap">Does Layer 1 (collect). No classification pass. No chat interface. No context window retrieval. Academic prototype, not a product.</div>
+      </div>
+      <div class="comp-card">
+        <div class="name">AgentOps / LangSmith</div>
+        <div class="type">Commercial — Python SDK, 400+ framework integrations</div>
+        <div class="gap">SDK-dependent. Cannot work with closed-source agents. Dashboards, not chat. No system-level telemetry. Commercial with per-trace pricing.</div>
+      </div>
+      <div class="comp-card">
+        <div class="name">Arize Phoenix</div>
+        <div class="type">Open Source — OpenTelemetry, span replay</div>
+        <div class="gap">SDK-dependent. Span-level, not syscall-level. No classification pass. Span replay requires instrumentation. No chat interface.</div>
+      </div>
+      <div class="comp-card">
+        <div class="name">groundcover</div>
+        <div class="type">Commercial — eBPF for Kubernetes</div>
+        <div class="gap">Kubernetes-only. Enterprise pricing. Designed for infrastructure monitoring, not agent debugging. No classification or chat layer.</div>
+      </div>
+    </div>
+
+    <div class="gap-card">
+      <h4>🪤 The Rabbit-Hole Gap</h4>
+      <p>
+        <strong>Nobody does the classification layer</strong> — turning raw syscall traces into semantic understanding.<br>
+        <strong>Nobody uses chat as the primary interface</strong> for agent debugging.<br>
+        <strong>Nobody does context window retrieval</strong> at decision points.<br>
+        <strong>Nobody designed for agent-supervising-agent</strong> — where one AI queries another's trace history.<br>
+        <strong>Nobody ships as a single self-hosted binary</strong> with zero SDK requirements.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ KILLER FEATURES ═══════════════ -->
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>Killer <span>Features</span></h2>
+      <p>What makes Rabbit-Hole different from everything else.</p>
+    </div>
+    <ul class="feat-list">
+      <li>Chat interface — ask natural language questions, get answers with evidence</li>
+      <li>Context window retrieval — see exactly what the agent saw at decision time</li>
+      <li>Agent-supervises-agent — REST API for fleet automation</li>
+      <li>Local classification — no cloud dependency, no API keys</li>
+      <li>Self-hosted first — one binary, one SQLite file</li>
+      <li>Zero SDK — works with closed-source agents</li>
+      <li>Kernel-level truth — eBPF captures what the agent actually did</li>
+      <li>Pattern matching + ML — fast 80% path, smart 20% path</li>
+      <li>Real-time WebSocket streaming — watch agent decisions live</li>
+      <li>Full-text search — find any operation across all sessions</li>
+      <li>Automatic retention — configurable data lifecycle</li>
+      <li>Graceful degradation — pattern matching works even without the model</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════ REPO ═══════════════ -->
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>Repository <span>&amp; Stack</span></h2>
+    </div>
+    <div class="repo">
+      <div class="nm">rabbit-hole/rabbit-hole</div>
+      <div class="purp">Monorepo — Go 1.22+, SQLite (WAL + FTS5), eBPF (cilium/ebpf), Gemma via llama.cpp, net/http + gorilla/websocket</div>
+      <div class="lang">Go · eBPF C · SQL · Shell</div>
+    </div>
+    <div class="callout" style="margin-top: 1rem;">
+      <strong>Tech stack:</strong> Go backend · eBPF via Cilium · llama.cpp for Gemma inference · SQLite with WAL mode · Cobra CLI · gorilla/websocket · no JavaScript framework (chat UI is optional Phase 2)
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ROADMAP ═══════════════ -->
+<section class="sec" id="roadmap">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2>Development <span>Roadmap</span></h2>
+      <p>8 phases. Specs complete. Building now.</p>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="title">Phase -1 — Specs</span>
+        <span class="b b-done">DONE</span>
+      </div>
+      <p>6 axiom-level specs (~65 pages): Overview, Collection, Classification, Expression, Storage, CLI. Exact Go interfaces, full DDL, error catalogs, Mermaid diagrams.</p>
+      <div class="bar-wrap"><div class="bar" style="width: 100%"></div></div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="title">Phase 0 — Scaffold</span>
+        <span class="b b-wip">ACTIVE</span>
+      </div>
+      <p>go.mod, Makefile, CI, directory structure. Coding foreman running on 30m ticks.</p>
+      <div class="bar-wrap"><div class="bar" style="width: 60%"></div></div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="title">Phases 1–3 — Core</span>
+        <span class="b b-pend">QUEUED</span>
+      </div>
+      <p>Types + Config → Storage (SQLite, FTS5, migrations) → Collection (eBPF, ring buffer, TLS). Foundation layers.</p>
+      <div class="bar-wrap"><div class="bar" style="width: 0%"></div></div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="title">Phases 4–6 — Intelligence</span>
+        <span class="b b-pend">QUEUED</span>
+      </div>
+      <p>Classification (Gemma, pattern catalog) → Expression (HTTP, chat, WebSocket) → CLI (9 commands, systemd).</p>
+      <div class="bar-wrap"><div class="bar" style="width: 0%"></div></div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="title">Phases 7–8 — Ship</span>
+        <span class="b b-pend">QUEUED</span>
+      </div>
+      <p>Integration + E2E testing → Release (binary, Docker, docs, v1.0.0 tag).</p>
+      <div class="bar-wrap"><div class="bar" style="width: 0%"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ QUICKSTART ═══════════════ -->
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-h">
+      <h2><span>Quickstart</span> (Target)</h2>
+      <p>The goal: external dev goes from zero to working harness in under 5 minutes.</p>
+    </div>
+    <div class="flow">
+      <pre>
+# 1. Install
+curl -sSL https://gitlab.readydedis.com/rabbit-hole/rabbit-hole/-/releases/latest/downloads/install.sh | bash
+
+# 2. Start daemon
+rabbit-hole serve
+
+# 3. Attach to your agent
+rabbit-hole attach --pid $(pgrep hermes)
+
+# 4. Ask questions
+rabbit-hole chat "What did my agent do in the last hour?"
+
+# 5. Or from a supervisor agent
+curl -s localhost:9734/api/v1/chat -d '{"message":"Show me all failures since midnight"}'</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<div class="footer">
+  <h3>🐇 Go down the rabbit hole.</h3>
+  <code class="inline">rabbit-hole attach --pid &lt;PID&gt;</code>
+  <br>
+  <a href="https://gitlab.readydedis.com/rabbit-hole/rabbit-hole" target="_blank">gitlab.readydedis.com/rabbit-hole/rabbit-hole</a>
+</div>
+
+</body>
+</html>
