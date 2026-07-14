@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/totalwindupflightsystems/rabbit-hole/internal/attach"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/classify"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/express"
@@ -66,7 +67,8 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 			}
 
 			// 4. Pipeline: collector → classifier → store
-			go runPipeline(cobraCmd.Context(), coll, cls, store, logger)
+			pipeline := attach.NewPipeline(coll, cls, store, logger)
+			go pipeline.Run(cobraCmd.Context())
 
 			// 5. Expression server
 			server := express.NewServer(store, logger, cfg.ListenAddr)
