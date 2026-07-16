@@ -26,6 +26,7 @@ Thumbs.db
 
 # GitReins state (MCP-managed, never committed)
 .gitreins/tasks.yaml
+.gitreins/history/
 .gitreins/*.bak
 
 # Root binary (compiled output)
