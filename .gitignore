@@ -30,4 +30,4 @@ Thumbs.db
 .gitreins/*.bak
 
 # Root binary (compiled output)
-rabbit-hole
+/rabbit-hole

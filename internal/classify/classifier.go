@@ -11,11 +11,15 @@ import (
 // This is a local type within the classify package; it will be promoted
 // to pkg/types when the model layer stabilises.
 type ModelInfo struct {
-	Name       string    // human-readable model name
-	Version    string    // model version or "stub"
-	LoadedAt   time.Time // when the model was loaded
-	MemoryMB   int64     // resident memory in MB
-	DeviceType string    // "cpu", "gpu", "npu"
+	Name       string        // human-readable model name
+	Version    string        // model version or "stub"
+	LoadedAt   time.Time     // when the model was loaded
+	MemoryMB   int64         // resident memory in MB
+	DeviceType string        // "cpu", "gpu", "npu"
+	Kind       string        // "local" or "remote"
+	Ready      bool          // true if operational
+	Endpoint   string        // remote endpoint, if applicable
+	Latency    time.Duration // last observed latency (health ping)
 }
 
 // Classifier is the public interface for the classification layer

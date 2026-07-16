@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -20,6 +21,7 @@ func newServeCmd() *cobra.Command {
 	var (
 		addr         string
 		noClassifier bool
+		remote       string
 	)
 
 	cmd := &cobra.Command{
@@ -57,13 +59,26 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 			// 3. Classifier
 			var cls classify.Classifier
 			if !noClassifier {
-				model := classify.NewGemmaModel(cfg.ModelPath, cfg.ModelName)
-				if err := model.Load(cobraCmd.Context()); err != nil {
-					logger.Warn("failed to load classification model — pattern matching only", "err", err)
+				var backend classify.ClassificationBackend
+				if remote != "" {
+					endpoint, token, err := parseRemoteFlag(remote)
+					if err != nil {
+						return fmt.Errorf("remote: %w", err)
+					}
+					backend, err = classify.NewRemoteBackend(endpoint, token)
+					if err != nil {
+						return fmt.Errorf("remote backend: %w", err)
+					}
 				} else {
-					defer model.Unload()
+					model := classify.NewGemmaModel(cfg.ModelPath, cfg.ModelName)
+					if err := model.Load(cobraCmd.Context()); err != nil {
+						logger.Warn("failed to load classification model — pattern matching only", "err", err)
+					} else {
+						defer model.Unload()
+					}
+					backend = classify.NewLocalBackend(model)
 				}
-				cls = classify.NewClassifier(classify.NewClassificationEngine(classify.NewLocalBackend(model), store, logger))
+				cls = classify.NewClassifier(classify.NewClassificationEngine(backend, store, logger))
 			}
 
 			// 4. Pipeline: collector → classifier → store
@@ -91,6 +106,24 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 
 	cmd.Flags().StringVar(&addr, "addr", "", "Listen address (default: 127.0.0.1:9734)")
 	cmd.Flags().BoolVar(&noClassifier, "no-classifier", false, "Disable classification (pattern matching only)")
+	cmd.Flags().StringVar(&remote, "remote", "", "Remote classifier endpoint[::token] (e.g. localhost:50051 or host:443@token)")
 
 	return cmd
+}
+
+// parseRemoteFlag parses the --remote value of the form "endpoint" or
+// "endpoint@token". The token is optional.
+func parseRemoteFlag(s string) (endpoint, token string, err error) {
+	if s == "" {
+		return "", "", fmt.Errorf("remote endpoint cannot be empty")
+	}
+	parts := strings.SplitN(s, "@", 2)
+	endpoint = parts[0]
+	if len(parts) == 2 {
+		token = parts[1]
+	}
+	if endpoint == "" {
+		return "", "", fmt.Errorf("remote endpoint cannot be empty")
+	}
+	return endpoint, token, nil
 }

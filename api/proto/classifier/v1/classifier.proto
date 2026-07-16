@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package classifier.v1;
+
+option go_package = "github.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1;classifierpb";
+
+// Classifier is a remote classification service for Rabbit-Hole trace groups.
+service Classifier {
+  // Classify turns trace groups into semantic flows.
+  rpc Classify(ClassifyRequest) returns (ClassifyResponse);
+
+  // Ping is a lightweight health check.
+  rpc Ping(PingRequest) returns (PingResponse);
+
+  // Info returns model and runtime metadata.
+  rpc Info(InfoRequest) returns (InfoResponse);
+}
+
+message ClassifyRequest {
+  repeated TraceGroup groups = 1;
+}
+
+message TraceGroup {
+  repeated Trace traces = 1;
+}
+
+message Trace {
+  int32 pid = 1;
+  string syscall = 2;
+  string args = 3;
+  int64 return_value = 4;
+  int64 timestamp_ns = 5;
+}
+
+message ClassifyResponse {
+  repeated Flow flows = 1;
+}
+
+message Flow {
+  string id = 1;
+  string intent = 2;
+  string phase = 3;
+  string description = 4;
+  string outcome = 5;
+  double confidence = 6;
+  repeated string trace_ids = 7;
+  int64 start_time = 8;
+  int64 end_time = 9;
+  int64 duration_ns = 10;
+}
+
+message PingRequest {}
+
+message PingResponse {}
+
+message InfoRequest {}
+
+message InfoResponse {
+  string name = 1;
+  string version = 2;
+  string kind = 3;
+  bool ready = 4;
+  int64 memory_mb = 5;
+  string device_type = 6;
+}
