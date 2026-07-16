@@ -15,13 +15,13 @@
   - Current code has hardcoded `*GemmaModel` field — no backend abstraction
   - Need: interface definition, LocalBackend wrapper, move GemmaModel behind it
 
-## [ ] S03-GAP-002 — Remote gRPC classifier backend
+## [x] S03-GAP-002 — Remote gRPC classifier backend (774e63b)
   - Spec S03 describes remote gRPC backend for centralized fleet deployment
-  - Not implemented at all
+  - Implemented: RemoteBackend struct, pb package, proto definition, --remote flag
 
-## [ ] S03-GAP-003 — ModelInfo struct completeness
+## [x] S03-GAP-003 — ModelInfo struct completeness (774e63b)
   - Spec defines 9 fields (Name, Version, Kind, Ready, LoadedAt, MemoryMB, DeviceType, Endpoint, Latency)
-  - Code has 5: missing Kind, Ready, Endpoint, Latency
+  - Added missing Kind, Ready, Endpoint, Latency fields
 
 ## [ ] S05-GAP-001 — Expose Storage interface as exported Go type
   - All 14 methods exist on SQLiteStore
