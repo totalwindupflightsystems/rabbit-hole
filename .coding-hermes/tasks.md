@@ -10,7 +10,7 @@
 ### ✓ S06: CLI (9 cobra subcommands) — fully implemented
 ### ⬜ Gaps queued below
 
-## [ ] S03-GAP-001 — ClassificationBackend pluggable interface
+## [x] S03-GAP-001 — ClassificationBackend pluggable interface (6dc605e)
   - Spec S03 defines ClassificationBackend interface (Classify/Health/Info/Close)
   - Current code has hardcoded `*GemmaModel` field — no backend abstraction
   - Need: interface definition, LocalBackend wrapper, move GemmaModel behind it
