@@ -27,3 +27,6 @@ Thumbs.db
 # GitReins state (MCP-managed, never committed)
 .gitreins/tasks.yaml
 .gitreins/*.bak
+
+# Root binary (compiled output)
+rabbit-hole

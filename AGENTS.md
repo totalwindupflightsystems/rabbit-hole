@@ -29,7 +29,7 @@ COLLECT (eBPF/strace) → CLASSIFY (pluggable: local Gemma or remote gRPC) → E
 
 ## Development
 
-- **Language:** Go 1.22+
+- **Language:** Go 1.26+
 - **Build:** `make build` (Go binary)
 - **Test:** `go test ./... -count=1 -short`
 - **Lint:** `go vet ./...`
