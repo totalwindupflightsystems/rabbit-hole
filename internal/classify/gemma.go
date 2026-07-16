@@ -207,6 +207,21 @@ func (g *GemmaModel) ModelInfo() ModelInfo {
 	return info
 }
 
+// Health reports whether the model is operational for classification.
+// It returns nil when the model is loaded, or an error otherwise.
+func (g *GemmaModel) Health(_ context.Context) error {
+	if !g.IsLoaded() {
+		return types.ErrModelNotLoaded{}
+	}
+	return nil
+}
+
+// Close unloads the model and releases resources.
+func (g *GemmaModel) Close() error {
+	g.Unload()
+	return nil
+}
+
 // updateAvgLatency updates the running average latency using the model
 // mutex for consistency between the count increment and the average
 // computation.

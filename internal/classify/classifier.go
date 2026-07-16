@@ -132,15 +132,15 @@ func (c *classifierImpl) Health(_ context.Context) error {
 	return nil
 }
 
-// ModelInfo returns metadata about the loaded model. If no model is
+// ModelInfo returns metadata about the loaded model. If no backend is
 // configured, returns a stub ModelInfo with Name="none".
-func (c *classifierImpl) ModelInfo(_ context.Context) (ModelInfo, error) {
-	if c.engine == nil || c.engine.model == nil {
+func (c *classifierImpl) ModelInfo(ctx context.Context) (ModelInfo, error) {
+	if c.engine == nil || c.engine.backend == nil {
 		return ModelInfo{
 			Name:       "none",
 			Version:    "n/a",
 			DeviceType: "n/a",
 		}, nil
 	}
-	return c.engine.model.ModelInfo(), nil
+	return c.engine.backend.Info(ctx)
 }

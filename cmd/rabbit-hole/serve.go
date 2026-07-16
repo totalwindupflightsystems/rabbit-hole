@@ -63,7 +63,7 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 				} else {
 					defer model.Unload()
 				}
-				cls = classify.NewClassifier(classify.NewClassificationEngine(model, store, logger))
+				cls = classify.NewClassifier(classify.NewClassificationEngine(classify.NewLocalBackend(model), store, logger))
 			}
 
 			// 4. Pipeline: collector → classifier → store

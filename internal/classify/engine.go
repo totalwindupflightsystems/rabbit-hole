@@ -18,10 +18,10 @@ type Storage interface {
 }
 
 // ClassificationEngine orchestrates the two-tier classification
-// pipeline: fast deterministic pattern matching followed by model
+// pipeline: fast deterministic pattern matching followed by backend
 // inference for unmatched groups.
 type ClassificationEngine struct {
-	model        *GemmaModel
+	backend      ClassificationBackend
 	store        Storage
 	patterns     *PatternCatalog
 	batchSize    int
@@ -30,13 +30,13 @@ type ClassificationEngine struct {
 }
 
 // NewClassificationEngine creates an engine with sensible defaults
-// from the config layer. The model may be nil for pattern-only mode.
-func NewClassificationEngine(model *GemmaModel, store Storage, logger *slog.Logger) *ClassificationEngine {
+// from the config layer. The backend may be nil for pattern-only mode.
+func NewClassificationEngine(backend ClassificationBackend, store Storage, logger *slog.Logger) *ClassificationEngine {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &ClassificationEngine{
-		model:        model,
+		backend:      backend,
 		store:        store,
 		patterns:     NewPatternCatalog(),
 		batchSize:    100,
@@ -75,25 +75,36 @@ func (e *ClassificationEngine) Classify(ctx context.Context, sessionID string, t
 		}
 	}
 
-	// Attempt model classification for unmatched groups.
-	if len(unmatched) > 0 && e.model != nil && e.model.IsLoaded() {
-		modelFlows, err := e.model.ClassifyBatch(ctx, unmatched)
-		if err != nil {
-			e.logger.Warn("model classification failed, falling back to unknown flows",
+	// Attempt backend classification for unmatched groups.
+	if len(unmatched) > 0 && e.backend != nil {
+		// Check backend health before attempting classification.
+		if err := e.backend.Health(ctx); err == nil {
+			backendFlows, err := e.backend.Classify(ctx, unmatched)
+			if err != nil {
+				e.logger.Warn("backend classification failed, falling back to unknown flows",
+					"error", err, "groups", len(unmatched))
+				// Fall back to unknown flows on backend error.
+				for _, group := range unmatched {
+					flow := makeUnknownFlow(sessionID, group)
+					flows = append(flows, flow)
+				}
+			} else {
+				for i := range backendFlows {
+					backendFlows[i].SessionID = sessionID
+				}
+				flows = append(flows, backendFlows...)
+			}
+		} else {
+			// Backend unhealthy — produce unknown flows.
+			e.logger.Warn("classification backend unhealthy, falling back to unknown flows",
 				"error", err, "groups", len(unmatched))
-			// Fall back to unknown flows on model error.
 			for _, group := range unmatched {
 				flow := makeUnknownFlow(sessionID, group)
 				flows = append(flows, flow)
 			}
-		} else {
-			for i := range modelFlows {
-				modelFlows[i].SessionID = sessionID
-			}
-			flows = append(flows, modelFlows...)
 		}
 	} else if len(unmatched) > 0 {
-		// No model available — produce unknown flows directly.
+		// No backend available — produce unknown flows directly.
 		for _, group := range unmatched {
 			flow := makeUnknownFlow(sessionID, group)
 			flows = append(flows, flow)
@@ -179,15 +190,15 @@ func makeUnknownFlow(sessionID string, traces []types.Trace) types.Flow {
 
 // String returns a debug representation of the engine state.
 func (e *ClassificationEngine) String() string {
-	modelStatus := "none"
-	if e.model != nil {
-		if e.model.IsLoaded() {
-			modelStatus = "loaded"
+	backendStatus := "none"
+	if e.backend != nil {
+		if err := e.backend.Health(context.Background()); err == nil {
+			backendStatus = "healthy"
 		} else {
-			modelStatus = "unloaded"
+			backendStatus = "unhealthy"
 		}
 	}
-	return fmt.Sprintf("ClassificationEngine(model=%s, batchSize=%d)", modelStatus, e.batchSize)
+	return fmt.Sprintf("ClassificationEngine(backend=%s, batchSize=%d)", backendStatus, e.batchSize)
 }
 
 // _ ensures strings import is used (for String method if extended later).
