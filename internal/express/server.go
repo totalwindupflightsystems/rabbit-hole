@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
@@ -31,6 +32,9 @@ type Server struct {
 
 	// ChatModel translates NL to search queries and back.
 	chatModel ChatModel
+
+	// startTime records when the server was created, used for uptime.
+	startTime time.Time
 }
 
 // ChatModel translates natural language to search queries and back.
@@ -53,6 +57,7 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string) *Se
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 		chatModel: &stubChatModel{}, // keyword-based NL, no external LLM dep
+		startTime: time.Now(),
 	}
 
 	s.mux = http.NewServeMux()
