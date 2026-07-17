@@ -30,7 +30,7 @@
 
 ## [x] CI-001 — Update Go version in CI workflow from 1.22 to 1.26
 ## [x] DOC-002 — Update AGENTS.md Go version from 1.22+ to 1.26
-## [ ] DOC-001 — Create README.md with build/run instructions
+## [x] DOC-001 — Create README.md with build/run instructions (e6320e7)
 
 ## [x] CI — Check CI pipeline health, fix failing jobs
 ## [x] DOC — Verify documentation matches current code
