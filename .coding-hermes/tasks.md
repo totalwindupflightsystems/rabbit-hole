@@ -23,9 +23,10 @@
   - Spec defines 9 fields (Name, Version, Kind, Ready, LoadedAt, MemoryMB, DeviceType, Endpoint, Latency)
   - Added missing Kind, Ready, Endpoint, Latency fields
 
-## [ ] S05-GAP-001 — Expose Storage interface as exported Go type
+## [x] S05-GAP-001 — Expose Storage interface as exported Go type (ec7ee7b)
   - All 14 methods exist on SQLiteStore
   - Storage interface only defined in classify/engine.go with just StoreFlows
+  - ✅ Created internal/storage/storage.go with full Storage interface + compile-time check
 
 ## [x] CI-001 — Update Go version in CI workflow from 1.22 to 1.26
 ## [x] DOC-002 — Update AGENTS.md Go version from 1.22+ to 1.26
