@@ -34,3 +34,13 @@
 
 ## [x] CI — Check CI pipeline health, fix failing jobs
 ## [x] DOC — Verify documentation matches current code
+
+## [ ] INFRA — Update Go toolchain from 1.26.0 to ≥1.26.5
+  - GO-2026-5856: crypto/tls ECH privacy leak (fixed in go1.26.5)
+  - GO-2026-5039: net/textproto arbitrary input in errors (fixed in go1.26.4)
+  - GO-2026-5037: crypto/x509 inefficient hostname parsing (fixed in go1.26.4)
+  - All are standard library fixes — requires system Go update
+
+## [ ] GAP — Track real server uptime in /health endpoint
+  - internal/express/handlers.go:18: hardcoded "0s" with TODO
+  - Should track Server.startTime and compute uptime from time.Since()
