@@ -35,6 +35,11 @@
 ## [x] CI — Check CI pipeline health, fix failing jobs
 ## [x] DOC — Verify documentation matches current code
 
+## [ ] CI — Missing .gitlab-ci.yml, no CI pipeline configured
+  - Repo is on gitlab.readydedis.com but has no CI pipeline
+  - Discovery sweep 2026-07-18: build/vet/test all pass, health endpoint verified, no pipeline exists
+  - Need: .gitlab-ci.yml with Go build, vet, test, govulncheck, and artifact upload
+
 ## [ ] INFRA — Update Go toolchain from 1.26.0 to ≥1.26.5 ⚠️ BLOCKED — requires sudo
   - GO-2026-5856: crypto/tls ECH privacy leak (fixed in go1.26.5)
   - GO-2026-5039: net/textproto arbitrary input in errors (fixed in go1.26.4)
