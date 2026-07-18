@@ -1,0 +1,53 @@
+# Rabbit-Hole — GitLab CI Pipeline
+# Agent legibility platform. Go 1.26+.
+
+image: golang:1.26
+
+stages:
+  - build
+  - vet
+  - test
+  - vulncheck
+
+variables:
+  GOFLAGS: "-ldflags=-s -w"
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go-build"
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go-mod"
+
+cache:
+  paths:
+    - .cache/go-build/
+    - .cache/go-mod/
+
+before_script:
+  - mkdir -p .cache/go-build .cache/go-mod
+  - go version
+  - go env
+
+build:
+  stage: build
+  script:
+    - go build $GOFLAGS -o bin/rabbit-hole ./cmd/rabbit-hole/
+    - file bin/rabbit-hole
+  artifacts:
+    paths:
+      - bin/rabbit-hole
+    expire_in: 1 day
+
+vet:
+  stage: vet
+  script:
+    - go vet ./...
+
+test:
+  stage: test
+  script:
+    - go test ./... -count=1 -short -race
+  coverage: '/^coverage: (\d+\.\d+)% of statements/'
+
+vulncheck:
+  stage: vulncheck
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./...
+  allow_failure: true
