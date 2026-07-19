@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,6 +46,13 @@ type ChatModel interface {
 }
 
 // NewServer creates a new expression server wired to the given store.
+//
+// The ChatModel is selected at construction time:
+//
+//   - If RABBITHOLE_CHAT_ENABLED=false, the stub (keyword) model is used.
+//   - If the OpenAI-compatible chat env vars are all set (RABBITHOLE_CHAT_MODEL_ENDPOINT,
+//     RABBITHOLE_CHAT_MODEL_NAME, RABBITHOLE_CHAT_MODEL_API_KEY), the RealChatModel is used.
+//   - Otherwise, the server logs a warning and falls back to the stub.
 func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string) *Server {
 	if logger == nil {
 		logger = slog.Default()
@@ -56,7 +65,7 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string) *Se
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
-		chatModel: &stubChatModel{}, // keyword-based NL, no external LLM dep
+		chatModel: selectChatModel(logger),
 		startTime: time.Now(),
 	}
 
@@ -152,4 +161,45 @@ func formatFallbackAnswer(flows []types.Flow) string {
 		summary += fmt.Sprintf("\n  %s %s — %s", outcome, f.Intent, f.Description)
 	}
 	return summary
+}
+
+// ---------- ChatModel selection ----------
+
+// selectChatModel picks the chat backend to use at server startup.
+//
+// Selection rules (in order):
+//
+//  1. If RABBITHOLE_CHAT_ENABLED is set to "false" (case-insensitive),
+//     return the stub.
+//  2. If RABBITHOLE_CHAT_MODEL_ENDPOINT, RABBITHOLE_CHAT_MODEL_NAME, and
+//     RABBITHOLE_CHAT_MODEL_API_KEY are all set, try to construct a
+//     RealChatModel. On success, return it.
+//  3. Otherwise (or on config error), log a warning and return the stub.
+//
+// This guarantees the server is always usable even if the LLM endpoint
+// is unreachable — the chat handler will fall back to the structured
+// result when the model call fails.
+func selectChatModel(logger *slog.Logger) ChatModel {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("RABBITHOLE_CHAT_ENABLED"))); v == "false" || v == "0" || v == "no" {
+		logger.Info("chat model disabled by RABBITHOLE_CHAT_ENABLED; using stub")
+		return &stubChatModel{}
+	}
+
+	cfg, err := ChatConfigFromEnv()
+	if err != nil {
+		logger.Warn("real chat model not configured; falling back to stub",
+			"err", err,
+			"hint", "set RABBITHOLE_CHAT_MODEL_ENDPOINT, RABBITHOLE_CHAT_MODEL_NAME, RABBITHOLE_CHAT_MODEL_API_KEY")
+		return &stubChatModel{}
+	}
+	cfg.Logger = logger
+
+	logger.Info("real chat model enabled",
+		"endpoint", cfg.Endpoint, "model", cfg.Model)
+
+	return NewRealChatModel(cfg, nil)
 }
