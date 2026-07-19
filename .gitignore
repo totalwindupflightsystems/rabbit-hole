@@ -29,5 +29,11 @@ Thumbs.db
 .gitreins/history/
 .gitreins/*.bak
 
+# eBPF vmlinux header (generated from kernel BTF, system-specific)
+internal/collector/bpf/vmlinux.h
+
+# eBPF compiled object files (bpf2go output, architecture-specific)
+*.o
+
 # Root binary (compiled output)
 /rabbit-hole

@@ -79,15 +79,15 @@ func (c *eBPFCollector) Attach(ctx context.Context, pid int32, opts CollectOptio
 	}
 
 	// Add PID to eBPF filter map (best-effort — skipped if eBPF not loaded)
-	if c.objs.FilterMap != nil {
+	if c.objs.PidFilter != nil {
 		key := uint32(0)
-		if err := c.objs.FilterMap.Put(&key, &pid); err != nil {
+		if err := c.objs.PidFilter.Put(&key, &pid); err != nil {
 			return nil, fmt.Errorf("ebpf: add PID to filter: %w", err)
 		}
 
 		tpLinks, err := c.attachSyscallProbes()
 		if err != nil {
-			c.objs.FilterMap.Delete(&key)
+			c.objs.PidFilter.Delete(&key)
 			return nil, fmt.Errorf("ebpf: attach syscall probes: %w", err)
 		}
 		c.links = append(c.links, tpLinks...)
@@ -122,9 +122,9 @@ func (c *eBPFCollector) Detach(ctx context.Context, sessionID string) error {
 		return types.ErrSessionNotFound{SessionID: sessionID}
 	}
 
-	if c.objs.FilterMap != nil {
+	if c.objs.PidFilter != nil {
 		key := uint32(0)
-		if err := c.objs.FilterMap.Delete(&key); err != nil {
+		if err := c.objs.PidFilter.Delete(&key); err != nil {
 			c.logger.Warn("ebpf: failed to clear PID filter", "err", err)
 		}
 	}
@@ -238,20 +238,20 @@ func (c *eBPFCollector) attachTLSProbes(pid int32) ([]link.Link, error) {
 	var links []link.Link
 	opts := &link.UprobeOptions{PID: int(pid)}
 
-	readU, err := sslExe.Uprobe("SSL_read", c.objs.UprobeSSLRead, opts)
+	readU, err := sslExe.Uprobe("SSL_read", c.objs.UprobeSslRead, opts)
 	if err != nil {
 		return nil, fmt.Errorf("uprobe SSL_read: %w", err)
 	}
 	links = append(links, readU)
 
-	writeU, err := sslExe.Uprobe("SSL_write", c.objs.UprobeSSLWrite, opts)
+	writeU, err := sslExe.Uprobe("SSL_write", c.objs.UprobeSslWrite, opts)
 	if err != nil {
 		readU.Close()
 		return nil, fmt.Errorf("uprobe SSL_write: %w", err)
 	}
 	links = append(links, writeU)
 
-	readUR, err := sslExe.Uretprobe("SSL_read", c.objs.UretprobeSSLRead, opts)
+	readUR, err := sslExe.Uretprobe("SSL_read", c.objs.UretprobeSslRead, opts)
 	if err != nil {
 		for _, l := range links {
 			l.Close()
@@ -260,7 +260,7 @@ func (c *eBPFCollector) attachTLSProbes(pid int32) ([]link.Link, error) {
 	}
 	links = append(links, readUR)
 
-	writeUR, err := sslExe.Uretprobe("SSL_write", c.objs.UretprobeSSLWrite, opts)
+	writeUR, err := sslExe.Uretprobe("SSL_write", c.objs.UretprobeSslWrite, opts)
 	if err != nil {
 		for _, l := range links {
 			l.Close()

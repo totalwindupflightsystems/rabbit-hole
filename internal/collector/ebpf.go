@@ -4,16 +4,15 @@
 // Run `go generate ./internal/collector/` after installing clang and kernel headers.
 package collector
 
-//go:generate bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" -target amd64 bpf collector.bpf.c -- -I/usr/include/x86_64-linux-gnu
+//go:generate sh -c "bpftool btf dump file /sys/kernel/btf/vmlinux format c > bpf/vmlinux.h"
+//go:generate bpf2go -cc clang -cflags "-O2 -g -Wall -Werror -Wno-missing-declarations" -target amd64 bpf bpf/collector.bpf.c -- -I/usr/include/x86_64-linux-gnu
 
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log/slog"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -23,69 +22,6 @@ import (
 
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
-
-// bpfObjects mirrors the eBPF maps and programs defined in collector.bpf.c.
-// The struct tags (ebpf:"...") must match the SECTION names in the C source.
-// bpf2go uses this struct to validate loaded programs against their expected names.
-type bpfObjects struct {
-	TraceEnterSyscall *ebpf.Program `ebpf:"trace_enter_syscall"`
-	TraceExitSyscall  *ebpf.Program `ebpf:"trace_exit_syscall"`
-
-	TraceConnect *ebpf.Program `ebpf:"trace_connect"`
-	TraceSendMsg *ebpf.Program `ebpf:"trace_sendmsg"`
-	TraceRecvMsg *ebpf.Program `ebpf:"trace_recvmsg"`
-
-	TraceOpenAt *ebpf.Program `ebpf:"trace_openat"`
-	TraceRead   *ebpf.Program `ebpf:"trace_read"`
-	TraceWrite  *ebpf.Program `ebpf:"trace_write"`
-	TraceClose  *ebpf.Program `ebpf:"trace_close"`
-
-	TraceExec *ebpf.Program `ebpf:"trace_exec"`
-	TraceExit *ebpf.Program `ebpf:"trace_exit"`
-	TraceFork *ebpf.Program `ebpf:"trace_fork"`
-
-	Events    *ebpf.Map `ebpf:"events"`
-	FilterMap *ebpf.Map `ebpf:"pid_filter"`
-
-	UprobeSSLRead     *ebpf.Program `ebpf:"uprobe_ssl_read"`
-	UprobeSSLWrite    *ebpf.Program `ebpf:"uprobe_ssl_write"`
-	UretprobeSSLRead  *ebpf.Program `ebpf:"uretprobe_ssl_read"`
-	UretprobeSSLWrite *ebpf.Program `ebpf:"uretprobe_ssl_write"`
-}
-
-// Close releases all eBPF resources held by this object collection.
-func (o *bpfObjects) Close() error {
-	var errs []error
-	closeIf := func(c io.Closer) {
-		if c != nil {
-			if err := c.Close(); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-	closeIf(o.TraceEnterSyscall)
-	closeIf(o.TraceExitSyscall)
-	closeIf(o.TraceConnect)
-	closeIf(o.TraceSendMsg)
-	closeIf(o.TraceRecvMsg)
-	closeIf(o.TraceOpenAt)
-	closeIf(o.TraceRead)
-	closeIf(o.TraceWrite)
-	closeIf(o.TraceClose)
-	closeIf(o.TraceExec)
-	closeIf(o.TraceExit)
-	closeIf(o.TraceFork)
-	closeIf(o.UprobeSSLRead)
-	closeIf(o.UprobeSSLWrite)
-	closeIf(o.UretprobeSSLRead)
-	closeIf(o.UretprobeSSLWrite)
-	closeIf(o.Events)
-	closeIf(o.FilterMap)
-	if len(errs) > 0 {
-		return fmt.Errorf("close bpfObjects: %v", errs)
-	}
-	return nil
-}
 
 // eBPFCollector attaches eBPF programs to a target agent process and captures
 // kernel-level telemetry (syscalls, file ops, network calls) via the perf
@@ -177,7 +113,7 @@ func (c *eBPFCollector) loadEBPF() error {
 		objs.Close()
 		return fmt.Errorf("events map not found in bpf objects")
 	}
-	if objs.FilterMap == nil {
+	if objs.PidFilter == nil {
 		objs.Close()
 		return fmt.Errorf("pid_filter map not found in bpf objects")
 	}
@@ -430,9 +366,4 @@ func syscallName(nr uint64) string {
 	}
 }
 
-// loadBpfObjects is a stub replaced by bpf2go code generation.
-var loadBpfObjects = func(objs *bpfObjects, opts *ebpf.CollectionOptions) error {
-	return fmt.Errorf("ebpf: bpf2go code generation not run — run 'go generate ./internal/collector/' with clang and kernel headers installed")
-}
 
-var _ = unsafe.Sizeof(0)
