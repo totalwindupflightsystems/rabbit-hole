@@ -37,7 +37,7 @@
 || COV-001 | Unit tests for cmd/rabbit-hole/ — all 9 cobra subcommands | 60%+ | 66.7% | ✅ 5698d91 |
 || COV-002 | Unit tests for pkg/types/ — error types, serialization | 80%+ | 100% | ✅ complete |
 || COV-003 | Unit tests for api/proto/classifier/v1/ — generated proto types | 80%+ | 83.7% | ✅ e2a7d73 |
-|| COV-004 | Unit tests for internal/collector/ebpf.go — parseTraceEvent, readEvents, loadBpfObjects | 60%+ | 38.8% | pending |
+|| COV-004 | Unit tests for internal/collector/ebpf.go — parseTraceEvent, readEvents, loadBpfObjects | 60%+ | **64.8%** | ✅ <commit> |
 || COV-005 | Unit tests for storage QueryFlows paths — all filter combinations | 80%+ | 68.8% | pending |
 || COV-006 | Unit tests for searchFlowsLike, searchFlowsRecent — FTS5 fallback paths | 90%+ | 0% (sub-functions) | pending |
 || COV-007 | Unit tests for internal/attach/e2e_test.go — full pipeline wiring | 60%+ | 69.4% | ✅ complete |
