@@ -52,3 +52,9 @@
   - internal/express/handlers.go:18: hardcoded "0s" with TODO
   - ✅ Added startTime field to Server struct, time.Since() in health handler
   - Commit: e7ab85e
+
+## [ ] INFRA — Install govulncheck for local dependency vulnerability scanning
+  - Discovery sweep 2026-07-19: govulncheck: command not found
+  - gitlab-ci.yml has vulncheck stage, but local scanning is unavailable
+  - Install: go install golang.org/x/vuln/cmd/govulncheck@latest
+  - Verify: govulncheck ./...
