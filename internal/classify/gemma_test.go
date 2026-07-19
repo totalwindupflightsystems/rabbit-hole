@@ -13,7 +13,7 @@ import (
 // --- TestGemmaModelLoad ---
 
 func TestGemmaModelLoad(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	if m.IsLoaded() {
 		t.Fatal("expected model to not be loaded initially")
@@ -31,7 +31,7 @@ func TestGemmaModelLoad(t *testing.T) {
 // --- TestGemmaModelUnload ---
 
 func TestGemmaModelUnload(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	if err := m.Load(t.Context()); err != nil {
 		t.Fatalf("Load failed: %v", err)
@@ -47,7 +47,7 @@ func TestGemmaModelUnload(t *testing.T) {
 // --- TestGemmaModelClassifyNotLoaded ---
 
 func TestGemmaModelClassifyNotLoaded(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	groups := [][]types.Trace{
 		makeTimedTraces(traceItem{"read", types.TraceCategorySyscall, 0, nil}),
@@ -67,7 +67,7 @@ func TestGemmaModelClassifyNotLoaded(t *testing.T) {
 // --- TestGemmaModelBuildPrompt ---
 
 func TestGemmaModelBuildPrompt(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	groups := [][]types.Trace{
 		makeTimedTraces(
@@ -103,7 +103,7 @@ func TestGemmaModelBuildPrompt(t *testing.T) {
 // --- TestGemmaModelParseOutput ---
 
 func TestGemmaModelParseOutput(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	groups := [][]types.Trace{
 		makeTimedTraces(
@@ -147,7 +147,7 @@ func TestGemmaModelParseOutput(t *testing.T) {
 // --- TestGemmaModelParseInvalidJSON ---
 
 func TestGemmaModelParseInvalidJSON(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	groups := [][]types.Trace{
 		makeTimedTraces(traceItem{"read", types.TraceCategorySyscall, 0, nil}),
@@ -167,7 +167,7 @@ func TestGemmaModelParseInvalidJSON(t *testing.T) {
 // --- TestGemmaModelParseCountMismatch ---
 
 func TestGemmaModelParseCountMismatch(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	groups := [][]types.Trace{
 		makeTimedTraces(traceItem{"read", types.TraceCategorySyscall, 0, nil}),
@@ -186,7 +186,7 @@ func TestGemmaModelParseCountMismatch(t *testing.T) {
 // --- TestGemmaModelClassifyBatchStub ---
 
 func TestGemmaModelClassifyBatchStub(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 	if err := m.Load(t.Context()); err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestGemmaModelClassifyBatchStub(t *testing.T) {
 // --- TestGemmaModelConcurrent ---
 
 func TestGemmaModelConcurrent(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	var wg sync.WaitGroup
 	const goroutines = 50
@@ -249,7 +249,7 @@ func TestGemmaModelConcurrent(t *testing.T) {
 // --- TestGemmaModelModelInfo ---
 
 func TestGemmaModelModelInfo(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 
 	info := m.ModelInfo()
 	if info.Name != "gemma-3-4b" {
@@ -258,11 +258,29 @@ func TestGemmaModelModelInfo(t *testing.T) {
 	if info.DeviceType != "cpu" {
 		t.Errorf("expected device cpu, got %s", info.DeviceType)
 	}
+	if info.Version != "1.0.0-dev" {
+		t.Errorf("expected version 1.0.0-dev, got %s", info.Version)
+	}
+	if info.Kind != "local" {
+		t.Errorf("expected kind local, got %s", info.Kind)
+	}
+	if info.Ready {
+		t.Error("expected Ready=false when not loaded")
+	}
+	if !info.LoadedAt.IsZero() {
+		t.Error("expected zero LoadedAt when not loaded")
+	}
 
 	_ = m.Load(t.Context())
 	info = m.ModelInfo()
 	if !m.IsLoaded() {
 		t.Fatal("expected model to be loaded")
+	}
+	if !info.Ready {
+		t.Error("expected Ready=true after load")
+	}
+	if info.LoadedAt.IsZero() {
+		t.Error("expected non-zero LoadedAt after load")
 	}
 }
 
@@ -308,7 +326,7 @@ func TestGemmaModelParseValidJSONFromModel(t *testing.T) {
 		t.Fatalf("marshal failed: %v", err)
 	}
 
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b")
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
 	groups := [][]types.Trace{
 		makeTimedTraces(traceItem{"execve", types.TraceCategorySyscall, 0, nil}),
 	}

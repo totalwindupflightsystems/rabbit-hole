@@ -25,6 +25,8 @@ import (
 type GemmaModel struct {
 	modelPath  string
 	modelName  string
+	version    string
+	loadedAt   time.Time
 	loaded     atomic.Bool
 	mu         sync.RWMutex
 	metrics    gemmaMetrics
@@ -37,11 +39,15 @@ type gemmaMetrics struct {
 }
 
 // NewGemmaModel creates a new model wrapper. The model is not loaded
-// until Load() is called.
-func NewGemmaModel(modelPath, modelName string) *GemmaModel {
+// until Load() is called. version is stored for ModelInfo reporting.
+func NewGemmaModel(modelPath, modelName, version string) *GemmaModel {
+	if version == "" {
+		version = "1.0.0-dev"
+	}
 	return &GemmaModel{
 		modelPath: modelPath,
 		modelName: modelName,
+		version:   version,
 	}
 }
 
@@ -51,6 +57,7 @@ func NewGemmaModel(modelPath, modelName string) *GemmaModel {
 func (g *GemmaModel) Load(_ context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.loadedAt = time.Now()
 	g.loaded.Store(true)
 	return nil
 }
@@ -196,12 +203,16 @@ func (g *GemmaModel) ModelInfo() ModelInfo {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
+	loaded := g.IsLoaded()
 	info := ModelInfo{
 		Name:       g.modelName,
-		Version:    "stub",
+		Version:    g.version,
 		DeviceType: "cpu",
+		Kind:       "local",
+		Ready:      loaded,
 	}
-	if g.IsLoaded() {
+	if loaded {
+		info.LoadedAt = g.loadedAt
 		info.MemoryMB = 0 // stub uses no resident memory
 	}
 	return info

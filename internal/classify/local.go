@@ -38,7 +38,7 @@ func (b *LocalBackend) Health(ctx context.Context) error {
 // Info returns metadata about the backend and its model.
 func (b *LocalBackend) Info(ctx context.Context) (ModelInfo, error) {
 	if b.model == nil {
-		return ModelInfo{Name: "none", Version: "n/a", DeviceType: "n/a"}, nil
+		return ModelInfo{Name: "none", Version: "n/a", DeviceType: "cpu", Kind: "local", Ready: false}, nil
 	}
 	return b.model.ModelInfo(), nil
 }

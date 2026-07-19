@@ -70,7 +70,7 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 						return fmt.Errorf("remote backend: %w", err)
 					}
 				} else {
-					model := classify.NewGemmaModel(cfg.ModelPath, cfg.ModelName)
+					model := classify.NewGemmaModel(cfg.ModelPath, cfg.ModelName, "")
 					if err := model.Load(cobraCmd.Context()); err != nil {
 						logger.Warn("failed to load classification model — pattern matching only", "err", err)
 					} else {

@@ -223,7 +223,7 @@ func TestClassifierModelInfo(t *testing.T) {
 	}
 
 	// With a model configured (not loaded).
-	model := NewGemmaModel("/fake/path", "gemma-3-4b")
+	model := NewGemmaModel("/fake/path", "gemma-3-4b", "")
 	engine2 := NewClassificationEngine(NewLocalBackend(model), nil, nil)
 	c2 := NewClassifier(engine2)
 

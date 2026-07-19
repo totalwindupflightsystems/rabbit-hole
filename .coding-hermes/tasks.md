@@ -21,11 +21,11 @@
 
 | ID | Task | Files | Status |
 |---|---|---|---|
-| STUB-001 | Replace stubChatModel with real LLM-backed NL query translation | internal/express/server.go | pending |
+| STUB-001 | Replace stubChatModel with real LLM-backed NL query translation | internal/express/server.go | ✅ d753e49 |
 | STUB-002 | Wire Gemma model loading — Load() currently no-ops, inference returns confidence=0 | internal/classify/gemma.go | pending |
 | STUB-003 | Generate real protobuf Go code from classifier.proto — replace hand-written stubs | internal/classify/pb/classifier.go, api/proto/classifier/v1/classifier.proto | pending |
 | STUB-004 | Generate real eBPF Go bindings from collector.bpf.c via bpf2go — replace loadBpfObjects stub | internal/collector/ebpf.go | pending |
-| STUB-005 | Replace stub ModelInfo ("none"/"stub") with real model metadata | internal/classify/classifier.go | pending |
+| STUB-005 | Replace stub ModelInfo ("none"/"stub") with real model metadata | internal/classify/classifier.go | ✅ complete |
 
 **Gate:** All "not implemented" / "stub" / "no-op" code paths eliminated. `grep -r "stub\|not implemented\|placeholder" --include='*.go' .` returns zero results.
 
