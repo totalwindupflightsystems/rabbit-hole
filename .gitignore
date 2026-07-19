@@ -4,6 +4,9 @@ bin/
 *.test
 *.out
 
+# But track compiled eBPF objects (needed for //go:embed on fresh clones)
+!internal/collector/bpf_x86_bpfel.o
+
 # Data
 .rabbit-hole/
 data/
