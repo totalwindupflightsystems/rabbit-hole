@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/classify/pb"
+	classifierpb "github.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1"
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
@@ -18,7 +18,7 @@ import (
 type RemoteBackend struct {
 	endpoint string
 	conn     *grpc.ClientConn
-	client   pb.ClassifierClient
+	client   classifierpb.ClassifierClient
 	token    string
 	mu       sync.RWMutex
 	lastPing time.Duration
@@ -40,7 +40,7 @@ func NewRemoteBackend(endpoint, token string) (*RemoteBackend, error) {
 	return &RemoteBackend{
 		endpoint: endpoint,
 		conn:     conn,
-		client:   pb.NewClassifierClient(conn),
+		client:   classifierpb.NewClassifierClient(conn),
 		token:    token,
 	}, nil
 }
@@ -63,7 +63,7 @@ func (b *RemoteBackend) Classify(ctx context.Context, groups [][]types.Trace) ([
 // Health pings the remote classifier and tracks the last observed latency.
 func (b *RemoteBackend) Health(ctx context.Context) error {
 	start := time.Now()
-	if _, err := b.client.Ping(ctx, &pb.PingRequest{}); err != nil {
+	if _, err := b.client.Ping(ctx, &classifierpb.PingRequest{}); err != nil {
 		return err
 	}
 	b.mu.Lock()
@@ -74,7 +74,7 @@ func (b *RemoteBackend) Health(ctx context.Context) error {
 
 // Info returns metadata about the remote backend.
 func (b *RemoteBackend) Info(ctx context.Context) (ModelInfo, error) {
-	resp, err := b.client.Info(ctx, &pb.InfoRequest{})
+	resp, err := b.client.Info(ctx, &classifierpb.InfoRequest{})
 	if err != nil {
 		return ModelInfo{}, err
 	}
@@ -87,7 +87,7 @@ func (b *RemoteBackend) Info(ctx context.Context) (ModelInfo, error) {
 		Name:       resp.Name,
 		Version:    resp.Version,
 		LoadedAt:   time.Now(),
-		MemoryMB:   resp.MemoryMB,
+		MemoryMB:   resp.MemoryMb,
 		DeviceType: resp.DeviceType,
 		Kind:       "remote",
 		Ready:      true,
@@ -104,18 +104,18 @@ func (b *RemoteBackend) Close() error {
 	return b.conn.Close()
 }
 
-func (b *RemoteBackend) marshalClassifyRequest(groups [][]types.Trace) (*pb.ClassifyRequest, error) {
-	req := &pb.ClassifyRequest{
-		Groups: make([]*pb.TraceGroup, 0, len(groups)),
+func (b *RemoteBackend) marshalClassifyRequest(groups [][]types.Trace) (*classifierpb.ClassifyRequest, error) {
+	req := &classifierpb.ClassifyRequest{
+		Groups: make([]*classifierpb.TraceGroup, 0, len(groups)),
 	}
 
 	for _, group := range groups {
-		pbGroup := &pb.TraceGroup{
-			Traces: make([]*pb.Trace, 0, len(group)),
+		pbGroup := &classifierpb.TraceGroup{
+			Traces: make([]*classifierpb.Trace, 0, len(group)),
 		}
 		for _, t := range group {
-			pbGroup.Traces = append(pbGroup.Traces, &pb.Trace{
-				PID:          t.PID,
+			pbGroup.Traces = append(pbGroup.Traces, &classifierpb.Trace{
+				Pid:          t.PID,
 				Syscall:      t.Syscall,
 				Args:         strings.Join(t.Args, " "),
 				ReturnValue:  t.ReturnValue,
@@ -128,7 +128,7 @@ func (b *RemoteBackend) marshalClassifyRequest(groups [][]types.Trace) (*pb.Clas
 	return req, nil
 }
 
-func (b *RemoteBackend) unmarshalClassifyResponse(resp *pb.ClassifyResponse) []types.Flow {
+func (b *RemoteBackend) unmarshalClassifyResponse(resp *classifierpb.ClassifyResponse) []types.Flow {
 	if resp == nil || len(resp.Flows) == 0 {
 		return nil
 	}
@@ -136,8 +136,8 @@ func (b *RemoteBackend) unmarshalClassifyResponse(resp *pb.ClassifyResponse) []t
 	flows := make([]types.Flow, 0, len(resp.Flows))
 	for _, f := range resp.Flows {
 		flows = append(flows, types.Flow{
-			ID:          f.ID,
-			TraceIDs:    f.TraceIDs,
+			ID:          f.Id,
+			TraceIDs:    f.TraceIds,
 			Intent:      f.Intent,
 			Phase:       types.FlowPhase(f.Phase),
 			Description: f.Description,

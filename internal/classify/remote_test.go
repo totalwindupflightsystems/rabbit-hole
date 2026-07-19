@@ -9,33 +9,33 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/classify/pb"
+	classifierpb "github.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1"
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
-// mockClassifierClient implements pb.ClassifierClient for testing.
+// mockClassifierClient implements classifierpb.ClassifierClient for testing.
 type mockClassifierClient struct {
-	pingFn     func(context.Context, *pb.PingRequest, ...grpc.CallOption) (*pb.PingResponse, error)
-	classifyFn func(context.Context, *pb.ClassifyRequest, ...grpc.CallOption) (*pb.ClassifyResponse, error)
-	infoFn     func(context.Context, *pb.InfoRequest, ...grpc.CallOption) (*pb.InfoResponse, error)
+	pingFn     func(context.Context, *classifierpb.PingRequest, ...grpc.CallOption) (*classifierpb.PingResponse, error)
+	classifyFn func(context.Context, *classifierpb.ClassifyRequest, ...grpc.CallOption) (*classifierpb.ClassifyResponse, error)
+	infoFn     func(context.Context, *classifierpb.InfoRequest, ...grpc.CallOption) (*classifierpb.InfoResponse, error)
 }
 
-func (m *mockClassifierClient) Ping(ctx context.Context, in *pb.PingRequest, opts ...grpc.CallOption) (*pb.PingResponse, error) {
+func (m *mockClassifierClient) Ping(ctx context.Context, in *classifierpb.PingRequest, opts ...grpc.CallOption) (*classifierpb.PingResponse, error) {
 	return m.pingFn(ctx, in, opts...)
 }
 
-func (m *mockClassifierClient) Classify(ctx context.Context, in *pb.ClassifyRequest, opts ...grpc.CallOption) (*pb.ClassifyResponse, error) {
+func (m *mockClassifierClient) Classify(ctx context.Context, in *classifierpb.ClassifyRequest, opts ...grpc.CallOption) (*classifierpb.ClassifyResponse, error) {
 	return m.classifyFn(ctx, in, opts...)
 }
 
-func (m *mockClassifierClient) Info(ctx context.Context, in *pb.InfoRequest, opts ...grpc.CallOption) (*pb.InfoResponse, error) {
+func (m *mockClassifierClient) Info(ctx context.Context, in *classifierpb.InfoRequest, opts ...grpc.CallOption) (*classifierpb.InfoResponse, error) {
 	return m.infoFn(ctx, in, opts...)
 }
 
 func TestNewRemoteBackend(t *testing.T) {
 	client := &mockClassifierClient{
-		pingFn: func(_ context.Context, _ *pb.PingRequest, _ ...grpc.CallOption) (*pb.PingResponse, error) {
-			return &pb.PingResponse{}, nil
+		pingFn: func(_ context.Context, _ *classifierpb.PingRequest, _ ...grpc.CallOption) (*classifierpb.PingResponse, error) {
+			return &classifierpb.PingResponse{}, nil
 		},
 	}
 	b := &RemoteBackend{
@@ -50,9 +50,9 @@ func TestNewRemoteBackend(t *testing.T) {
 func TestRemoteBackend_Health(t *testing.T) {
 	var pingDelay time.Duration
 	client := &mockClassifierClient{
-		pingFn: func(_ context.Context, _ *pb.PingRequest, _ ...grpc.CallOption) (*pb.PingResponse, error) {
+		pingFn: func(_ context.Context, _ *classifierpb.PingRequest, _ ...grpc.CallOption) (*classifierpb.PingResponse, error) {
 			time.Sleep(pingDelay)
-			return &pb.PingResponse{}, nil
+			return &classifierpb.PingResponse{}, nil
 		},
 	}
 
@@ -75,7 +75,7 @@ func TestRemoteBackend_Health(t *testing.T) {
 
 func TestRemoteBackend_Health_Error(t *testing.T) {
 	client := &mockClassifierClient{
-		pingFn: func(_ context.Context, _ *pb.PingRequest, _ ...grpc.CallOption) (*pb.PingResponse, error) {
+		pingFn: func(_ context.Context, _ *classifierpb.PingRequest, _ ...grpc.CallOption) (*classifierpb.PingResponse, error) {
 			return nil, errors.New("connection refused")
 		},
 	}
@@ -92,13 +92,13 @@ func TestRemoteBackend_Health_Error(t *testing.T) {
 
 func TestRemoteBackend_Info(t *testing.T) {
 	client := &mockClassifierClient{
-		infoFn: func(_ context.Context, _ *pb.InfoRequest, _ ...grpc.CallOption) (*pb.InfoResponse, error) {
-			return &pb.InfoResponse{
+		infoFn: func(_ context.Context, _ *classifierpb.InfoRequest, _ ...grpc.CallOption) (*classifierpb.InfoResponse, error) {
+			return &classifierpb.InfoResponse{
 				Name:       "central-gemma",
 				Version:    "1.0.0",
 				Kind:       "remote",
 				Ready:      true,
-				MemoryMB:   2048,
+				MemoryMb:   2048,
 				DeviceType: "cuda",
 			}, nil
 		},
@@ -132,7 +132,7 @@ func TestRemoteBackend_Info(t *testing.T) {
 
 func TestRemoteBackend_Classify(t *testing.T) {
 	client := &mockClassifierClient{
-		classifyFn: func(_ context.Context, req *pb.ClassifyRequest, _ ...grpc.CallOption) (*pb.ClassifyResponse, error) {
+		classifyFn: func(_ context.Context, req *classifierpb.ClassifyRequest, _ ...grpc.CallOption) (*classifierpb.ClassifyResponse, error) {
 			if len(req.Groups) != 1 {
 				return nil, errors.New("expected 1 group")
 			}
@@ -146,16 +146,16 @@ func TestRemoteBackend_Classify(t *testing.T) {
 			if !strings.Contains(group.Traces[1].Syscall, "read") {
 				return nil, errors.New("expected read syscall")
 			}
-			return &pb.ClassifyResponse{
-				Flows: []*pb.Flow{
+			return &classifierpb.ClassifyResponse{
+				Flows: []*classifierpb.Flow{
 					{
-						ID:          "flow-001",
+						Id:          "flow-001",
 						Intent:      "read_file",
 						Phase:       "action",
 						Description: "Read auth.go",
 						Outcome:     "success",
 						Confidence:  0.95,
-						TraceIDs:    []string{"trace-1", "trace-2"},
+						TraceIds:    []string{"trace-1", "trace-2"},
 						StartTime:   time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC).UnixNano(),
 						EndTime:     time.Date(2026, 7, 16, 0, 0, 1, 0, time.UTC).UnixNano(),
 						DurationNs:  int64(time.Second),
@@ -210,7 +210,7 @@ func TestRemoteBackend_Classify(t *testing.T) {
 
 func TestRemoteBackend_ClassifyError(t *testing.T) {
 	client := &mockClassifierClient{
-		classifyFn: func(_ context.Context, _ *pb.ClassifyRequest, _ ...grpc.CallOption) (*pb.ClassifyResponse, error) {
+		classifyFn: func(_ context.Context, _ *classifierpb.ClassifyRequest, _ ...grpc.CallOption) (*classifierpb.ClassifyResponse, error) {
 			return nil, errors.New("classifier overloaded")
 		},
 	}
@@ -260,8 +260,8 @@ func TestRemoteBackend_marshalClassifyRequest(t *testing.T) {
 		t.Fatalf("expected 1 trace, got %d", len(req.Groups[0].Traces))
 	}
 	tr := req.Groups[0].Traces[0]
-	if tr.PID != 1 {
-		t.Errorf("expected PID 1, got %d", tr.PID)
+	if tr.Pid != 1 {
+		t.Errorf("expected PID 1, got %d", tr.Pid)
 	}
 	if tr.Args != "/tmp/test" {
 		t.Errorf("expected args '/tmp/test', got '%s'", tr.Args)
@@ -281,22 +281,22 @@ func TestRemoteBackend_unmarshalClassifyResponse(t *testing.T) {
 	}
 
 	// Empty flows.
-	flows = b.unmarshalClassifyResponse(&pb.ClassifyResponse{})
+	flows = b.unmarshalClassifyResponse(&classifierpb.ClassifyResponse{})
 	if len(flows) != 0 {
 		t.Errorf("expected 0 flows for empty response, got %d", len(flows))
 	}
 
 	// Valid flow.
-	resp := &pb.ClassifyResponse{
-		Flows: []*pb.Flow{
+	resp := &classifierpb.ClassifyResponse{
+		Flows: []*classifierpb.Flow{
 			{
-				ID:          "f1",
+				Id:          "f1",
 				Intent:      "read_file",
 				Phase:       "action",
 				Description: "Read file",
 				Outcome:     "success",
 				Confidence:  0.95,
-				TraceIDs:    []string{"t1"},
+				TraceIds:    []string{"t1"},
 				StartTime:   time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC).UnixNano(),
 				EndTime:     time.Date(2026, 7, 16, 12, 0, 1, 0, time.UTC).UnixNano(),
 				DurationNs:  int64(time.Second),
