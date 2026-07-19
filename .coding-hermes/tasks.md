@@ -36,7 +36,7 @@
 | ID | Task | Target | Current | Status |
 |---|---|---|---|---|
 | COV-001 | Unit tests for cmd/rabbit-hole/ — all 9 cobra subcommands | 60%+ | 0% | pending |
-| COV-002 | Unit tests for pkg/types/ — error types, serialization, validation | 80%+ | 0% | pending |
+|| COV-002 | Unit tests for pkg/types/ — error types, serialization | 80%+ | 100% | ✅ complete |
 | COV-003 | Unit tests for internal/classify/pb/ — generated proto types | 80%+ | 0% | pending |
 | COV-004 | Unit tests for internal/collector/ebpf.go — parseTraceEvent, readEvents, loadBpfObjects | 60%+ | 42.4% | pending |
 | COV-005 | Unit tests for storage QueryFlows paths — all filter combinations | 80%+ | 68.8% | pending |
