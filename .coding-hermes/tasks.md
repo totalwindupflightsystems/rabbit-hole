@@ -53,8 +53,9 @@
   - ✅ Added startTime field to Server struct, time.Since() in health handler
   - Commit: e7ab85e
 
-## [ ] INFRA — Install govulncheck for local dependency vulnerability scanning
+## [x] INFRA — Install govulncheck for local dependency vulnerability scanning ✅ Resolved 2026-07-19
   - Discovery sweep 2026-07-19: govulncheck: command not found
   - gitlab-ci.yml has vulncheck stage, but local scanning is unavailable
-  - Install: go install golang.org/x/vuln/cmd/govulncheck@latest
-  - Verify: govulncheck ./...
+  - ✅ Installed at /home/kara/go/bin/govulncheck
+  - ✅ govulncheck ./... → No vulnerabilities found.
+  - Go 1.26.5 is clean across all dependencies
