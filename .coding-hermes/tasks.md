@@ -180,3 +180,7 @@
 | P9 | 3 release | v1.0.0 shipped |
 
 **Total: 63 tasks across 9 phases (plus 6 specs).** If the foreman reports idle, there's something wrong with the board.
+
+## [ ] NEVER-DONE — Run 11-point audit next tick
+- **Priority:** high
+- **Trigger:** Board needs self-improvement scan. Foreman must load `coding-hermes-never-done` skill and run full 11-point audit on next tick (spec alignment, doc coverage, test gaps, deps, pitfalls, perf, endpoint verification, CI/CD health, DuckBrain sync, code quality, middle-out wiring).
