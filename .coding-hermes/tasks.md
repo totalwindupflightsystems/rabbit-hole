@@ -50,7 +50,7 @@
 
 | ID | Task | Description | Status |
 |---|---|---|---|
-| INT-001 | Integration test: attach eBPF to real process (not test binary) | Spawn `sleep 5`, attach, verify syscall traces captured | ✅ 4288349 |
+| INT-001 | Integration test: attach eBPF to real process (not test binary) | Spawn `sleep 5`, attach, verify syscall traces captured | ✅ 078f49c |
 | INT-002 | Integration test: attach → detach lifecycle, session cleanup | Attach, verify session created, detach, verify cleanup | pending |
 | INT-003 | Integration test: TLS interception (attach to HTTPS-making process) | Attach to `curl https://example.com`, verify TLS probes fire | pending |
 | INT-004 | Integration test: Gemma model loaded + classify real trace batch | Load Gemma 3 4B, feed recorded traces, verify classification output | pending |
