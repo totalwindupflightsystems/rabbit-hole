@@ -155,8 +155,13 @@ func (g *GemmaModel) ClassifyBatch(ctx context.Context, groups [][]types.Trace) 
 	default:
 	}
 
+	// Snapshot fields under RLock, release before inference to avoid
+	// RLock→Lock deadlock when updateAvgLatency acquires write lock.
 	g.mu.RLock()
-	defer g.mu.RUnlock()
+	modelName := g.modelName
+	ollamaURL := g.ollamaURL
+	httpClient := g.httpClient
+	g.mu.RUnlock()
 
 	start := time.Now()
 	defer func() {
@@ -165,7 +170,7 @@ func (g *GemmaModel) ClassifyBatch(ctx context.Context, groups [][]types.Trace) 
 	}()
 
 	prompt := g.buildClassificationPrompt(groups)
-	output, err := g.infer(ctx, prompt)
+	output, err := infer(ctx, prompt, modelName, ollamaURL, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("classify: inference: %w", err)
 	}
@@ -190,9 +195,9 @@ func (g *GemmaModel) ClassifyBatch(ctx context.Context, groups [][]types.Trace) 
 }
 
 // infer sends the prompt to Ollama and returns the model's response text.
-func (g *GemmaModel) infer(ctx context.Context, prompt string) (string, error) {
+func infer(ctx context.Context, prompt, modelName, ollamaURL string, httpClient *http.Client) (string, error) {
 	reqBody := ollamaGenerateRequest{
-		Model:  g.modelName,
+		Model:  modelName,
 		Prompt: prompt,
 		Stream: false,
 	}
@@ -203,13 +208,13 @@ func (g *GemmaModel) infer(ctx context.Context, prompt string) (string, error) {
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		g.ollamaURL+"/api/generate", bytes.NewReader(body))
+		ollamaURL+"/api/generate", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("infer: create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := g.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("infer: ollama request: %w", err)
 	}
