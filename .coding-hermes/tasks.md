@@ -41,15 +41,12 @@
   - ✅ Created .gitlab-ci.yml with 4-stage pipeline: build, vet, test, vulncheck
   - golang:1.26 image, module cache, govulncheck allow_failure
 
-## [ ] INFRA — Update Go toolchain from 1.26.0 to ≥1.26.5 ⚠️ BLOCKED — requires sudo
+## [x] INFRA — Update Go toolchain from 1.26.0 to ≥1.26.5 ✅ Resolved 2026-07-19
   - GO-2026-5856: crypto/tls ECH privacy leak (fixed in go1.26.5)
   - GO-2026-5039: net/textproto arbitrary input in errors (fixed in go1.26.4)
   - GO-2026-5037: crypto/x509 inefficient hostname parsing (fixed in go1.26.4)
-  - All are standard library fixes — requires system Go update
-  - ⚠️ Investigation 2026-07-17: System Go = 1.26.0 (apt), Snap Go = 1.26.4 (toolchain mismatch — compile 1.26.3 vs tool 1.26.4, can't build)
-  - go install golang.org/dl/go1.26.5 blocked by security scanner
-  - No apt upgrade available for golang-1.26-go
-  - Resolution: Requires `sudo apt upgrade golang-1.26-go` to ≥1.26.5 — manual intervention needed
+  - ✅ System Go now 1.26.5 — all vulns fixed
+  - ✅ govulncheck clean: No vulnerabilities found.
 
 ## [x] GAP — Track real server uptime in /health endpoint (e7ab85e)
   - internal/express/handlers.go:18: hardcoded "0s" with TODO
