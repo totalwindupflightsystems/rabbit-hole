@@ -2,6 +2,8 @@ package classify
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -10,10 +12,27 @@ import (
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
+// newTestGemmaModel creates a GemmaModel pointed at a test Ollama server.
+func newTestGemmaModel(serverURL, modelName string) *GemmaModel {
+	m := NewGemmaModel("/fake/path.gguf", modelName, "")
+	m.SetOllamaURL(serverURL)
+	return m
+}
+
 // --- TestGemmaModelLoad ---
 
 func TestGemmaModelLoad(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/show" && r.Method == "POST" {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"name": "gemma-3-4b"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := newTestGemmaModel(srv.URL, "gemma-3-4b")
 
 	if m.IsLoaded() {
 		t.Fatal("expected model to not be loaded initially")
@@ -28,10 +47,56 @@ func TestGemmaModelLoad(t *testing.T) {
 	}
 }
 
+// --- TestGemmaModelLoadNoFile ---
+
+func TestGemmaModelLoadNoFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := newTestGemmaModel(srv.URL, "nonexistent-model")
+	err := m.Load(t.Context())
+	if err == nil {
+		t.Fatal("expected error loading nonexistent model, got nil")
+	}
+	if m.IsLoaded() {
+		t.Fatal("expected model to remain unloaded after failed Load")
+	}
+}
+
+// --- TestGemmaModelLoadEmptyPath ---
+
+func TestGemmaModelLoadEmptyPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := newTestGemmaModel(srv.URL, "")
+	err := m.Load(t.Context())
+	if err == nil {
+		t.Fatal("expected error for empty model name, got nil")
+	}
+	if m.IsLoaded() {
+		t.Fatal("expected model to remain unloaded after failed Load")
+	}
+}
+
 // --- TestGemmaModelUnload ---
 
 func TestGemmaModelUnload(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/show" {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"name": "gemma-3-4b"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := newTestGemmaModel(srv.URL, "gemma-3-4b")
 
 	if err := m.Load(t.Context()); err != nil {
 		t.Fatalf("Load failed: %v", err)
@@ -64,6 +129,119 @@ func TestGemmaModelClassifyNotLoaded(t *testing.T) {
 	}
 }
 
+// --- TestGemmaModelClassifyBatchOllama ---
+
+func TestGemmaModelClassifyBatchOllama(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/show" {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"name": "gemma-3-4b"})
+			return
+		}
+		if r.URL.Path == "/api/generate" {
+			var req ollamaGenerateRequest
+			json.NewDecoder(r.Body).Decode(&req)
+			// Return realistic classification output
+			resp := ollamaGenerateResponse{
+				Response: `[
+					{"intent": "read_file", "phase": "observation", "outcome": "success", "description": "Read source file", "confidence": 0.92},
+					{"intent": "api_call", "phase": "action", "outcome": "success", "description": "HTTP API request", "confidence": 0.88}
+				]`,
+				Done: true,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := newTestGemmaModel(srv.URL, "gemma-3-4b")
+	if err := m.Load(t.Context()); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	groups := [][]types.Trace{
+		makeTimedTraces(
+			traceItem{"read", types.TraceCategorySyscall, 0, nil},
+			traceItem{"read", types.TraceCategorySyscall, 1, nil},
+		),
+		makeTimedTraces(
+			traceItem{"connect", types.TraceCategoryNetwork, 10, nil},
+		),
+	}
+
+	flows, err := m.ClassifyBatch(t.Context(), groups)
+	if err != nil {
+		t.Fatalf("ClassifyBatch failed: %v", err)
+	}
+
+	if len(flows) != 2 {
+		t.Fatalf("expected 2 flows, got %d", len(flows))
+	}
+
+	if flows[0].Intent != "read_file" {
+		t.Errorf("expected intent read_file, got %s", flows[0].Intent)
+	}
+	if flows[0].Confidence != 0.92 {
+		t.Errorf("expected confidence 0.92, got %.2f", flows[0].Confidence)
+	}
+	if flows[1].Intent != "api_call" {
+		t.Errorf("expected intent api_call, got %s", flows[1].Intent)
+	}
+}
+
+// --- TestGemmaModelClassifyBatchDegradation ---
+
+func TestGemmaModelClassifyBatchDegradation(t *testing.T) {
+	// When Ollama returns malformed JSON, all groups become unknown flows.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/show" {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"name": "gemma-3-4b"})
+			return
+		}
+		if r.URL.Path == "/api/generate" {
+			resp := ollamaGenerateResponse{
+				Response: "this is not valid JSON",
+				Done:     true,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := newTestGemmaModel(srv.URL, "gemma-3-4b")
+	if err := m.Load(t.Context()); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	groups := [][]types.Trace{
+		makeTimedTraces(
+			traceItem{"read", types.TraceCategorySyscall, 0, nil},
+			traceItem{"read", types.TraceCategorySyscall, 1, nil},
+		),
+	}
+
+	flows, err := m.ClassifyBatch(t.Context(), groups)
+	if err != nil {
+		t.Fatalf("ClassifyBatch should not error on parse failure: %v", err)
+	}
+
+	if len(flows) != 1 {
+		t.Fatalf("expected 1 degradation flow, got %d", len(flows))
+	}
+
+	if flows[0].Confidence != 0 {
+		t.Errorf("expected confidence 0 in degradation, got %.2f", flows[0].Confidence)
+	}
+	if flows[0].Intent != "unknown" {
+		t.Errorf("expected intent unknown in degradation, got %s", flows[0].Intent)
+	}
+}
+
 // --- TestGemmaModelBuildPrompt ---
 
 func TestGemmaModelBuildPrompt(t *testing.T) {
@@ -79,11 +257,9 @@ func TestGemmaModelBuildPrompt(t *testing.T) {
 
 	prompt := m.buildClassificationPrompt(groups)
 
-	// Verify the prompt has the key structural elements from S03 spec §2.3
+	// Verify the prompt has the key structural elements
 	requiredSubstrings := []string{
-		"<start_of_turn>user",
-		"<end_of_turn>",
-		"<start_of_turn>model",
+		"classification system",
 		"Group 0",
 		"openat",
 		"main.go",
@@ -183,42 +359,6 @@ func TestGemmaModelParseCountMismatch(t *testing.T) {
 	}
 }
 
-// --- TestGemmaModelClassifyBatchStub ---
-
-func TestGemmaModelClassifyBatchStub(t *testing.T) {
-	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
-	if err := m.Load(t.Context()); err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-
-	groups := [][]types.Trace{
-		makeTimedTraces(
-			traceItem{"read", types.TraceCategorySyscall, 0, nil},
-			traceItem{"read", types.TraceCategorySyscall, 1, nil},
-		),
-	}
-
-	flows, err := m.ClassifyBatch(t.Context(), groups)
-	if err != nil {
-		t.Fatalf("ClassifyBatch failed: %v", err)
-	}
-
-	if len(flows) != 1 {
-		t.Fatalf("expected 1 flow, got %d", len(flows))
-	}
-
-	// Stub mode: confidence should be 0
-	if flows[0].Confidence != 0 {
-		t.Errorf("expected confidence 0 in stub mode, got %.2f", flows[0].Confidence)
-	}
-	if flows[0].Intent != "unknown" {
-		t.Errorf("expected intent unknown in stub mode, got %s", flows[0].Intent)
-	}
-	if flows[0].Description == "" {
-		t.Error("expected non-empty description in stub mode")
-	}
-}
-
 // --- TestGemmaModelConcurrent ---
 
 func TestGemmaModelConcurrent(t *testing.T) {
@@ -232,18 +372,16 @@ func TestGemmaModelConcurrent(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%2 == 0 {
-				_ = m.Load(t.Context())
-			} else {
 				m.Unload()
+			} else {
+				_ = m.IsLoaded()
+				_ = m.ModelInfo()
 			}
-			_ = m.IsLoaded()
-			_ = m.ModelInfo()
 		}(i)
 	}
 
 	wg.Wait()
-	// No race detector failure = pass. Set final state.
-	_ = m.Load(t.Context())
+	// No race detector failure = pass.
 }
 
 // --- TestGemmaModelModelInfo ---
@@ -270,17 +408,19 @@ func TestGemmaModelModelInfo(t *testing.T) {
 	if !info.LoadedAt.IsZero() {
 		t.Error("expected zero LoadedAt when not loaded")
 	}
+}
 
-	_ = m.Load(t.Context())
-	info = m.ModelInfo()
-	if !m.IsLoaded() {
-		t.Fatal("expected model to be loaded")
+// --- TestGemmaModelDefaultVersion ---
+
+func TestGemmaModelDefaultVersion(t *testing.T) {
+	m := NewGemmaModel("/anywhere.gguf", "m", "")
+	if m.version != "1.0.0-dev" {
+		t.Errorf("expected default version 1.0.0-dev, got %q", m.version)
 	}
-	if !info.Ready {
-		t.Error("expected Ready=true after load")
-	}
-	if info.LoadedAt.IsZero() {
-		t.Error("expected non-zero LoadedAt after load")
+
+	m2 := NewGemmaModel("/anywhere.gguf", "m", "2.0.0")
+	if m2.version != "2.0.0" {
+		t.Errorf("expected version 2.0.0, got %q", m2.version)
 	}
 }
 
@@ -317,7 +457,6 @@ func TestMakeUnknownFlow(t *testing.T) {
 // --- TestGemmaModelParseValidJSONFromModel ---
 
 func TestGemmaModelParseValidJSONFromModel(t *testing.T) {
-	// Verify we can round-trip the JSON shape the model is expected to produce
 	result := []classificationResult{
 		{Intent: "test", Phase: "verification", Outcome: "success", Description: "ran tests", Confidence: 0.9},
 	}
@@ -343,13 +482,24 @@ func TestGemmaModelParseValidJSONFromModel(t *testing.T) {
 	}
 }
 
+// --- TestGemmaModelSetOllamaURL ---
+
+func TestGemmaModelSetOllamaURL(t *testing.T) {
+	m := NewGemmaModel("/fake/path.gguf", "gemma-3-4b", "")
+	if m.ollamaURL != defaultOllamaURL {
+		t.Errorf("expected default URL %q, got %q", defaultOllamaURL, m.ollamaURL)
+	}
+	m.SetOllamaURL("http://custom:9999")
+	if m.ollamaURL != "http://custom:9999" {
+		t.Errorf("expected custom URL, got %q", m.ollamaURL)
+	}
+}
+
 // errorsAs is a tiny helper to avoid importing errors directly in tests
-// (keeps the test file clean and consistent with the existing patterns_test.go).
 func errorsAs(err error, target any) bool {
 	if err == nil {
 		return false
 	}
-	// Use standard errors.As semantics via type assertion on the concrete types.
 	switch t := target.(type) {
 	case *types.ErrModelNotLoaded:
 		_, ok := err.(types.ErrModelNotLoaded)

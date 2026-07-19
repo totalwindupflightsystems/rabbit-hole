@@ -1,9 +1,12 @@
 package classify
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,11 +16,13 @@ import (
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
-// GemmaModel wraps the on-device Gemma LLM used for classifying trace
-// groups that don't match any deterministic pattern. In Phase 4 the
-// model is a stub — Load() succeeds, but inference returns confidence-0
-// flows with descriptions derived from prompt metadata. Real llama.cpp
-// integration arrives in Phase 2.
+// defaultOllamaURL is the default Ollama server address.
+const defaultOllamaURL = "http://localhost:11434"
+
+// GemmaModel wraps a local LLM (via Ollama) used for classifying trace
+// groups that don't match any deterministic pattern. It talks to the
+// Ollama REST API rather than linking llama.cpp directly — this avoids
+// CGo dependencies while keeping the model on-device.
 //
 // Graceful degradation is the pattern: if the model is not available,
 // the engine falls back to unknown flows. All public methods are safe
@@ -26,9 +31,11 @@ type GemmaModel struct {
 	modelPath  string
 	modelName  string
 	version    string
+	ollamaURL  string
 	loadedAt   time.Time
 	loaded     atomic.Bool
 	mu         sync.RWMutex
+	httpClient *http.Client
 	metrics    gemmaMetrics
 }
 
@@ -39,46 +46,104 @@ type gemmaMetrics struct {
 }
 
 // NewGemmaModel creates a new model wrapper. The model is not loaded
-// until Load() is called. version is stored for ModelInfo reporting.
+// until Load() is called. modelPath is the Ollama model tag (e.g.
+// "gemma3:4b"). version is stored for ModelInfo reporting.
+// Set ollamaURL to "" to use the default http://localhost:11434.
 func NewGemmaModel(modelPath, modelName, version string) *GemmaModel {
 	if version == "" {
 		version = "1.0.0-dev"
 	}
 	return &GemmaModel{
-		modelPath: modelPath,
-		modelName: modelName,
-		version:   version,
+		modelPath:  modelPath,
+		modelName:  modelName,
+		version:    version,
+		ollamaURL:  defaultOllamaURL,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-// Load loads the model into memory. In the stub implementation this
-// simply marks the model as loaded and returns nil. Real llama.cpp
-// integration (mmap the GGUF, initialise context, warm up) is Phase 2.
-func (g *GemmaModel) Load(_ context.Context) error {
+// SetOllamaURL overrides the default Ollama server address.
+// Call before Load().
+func (g *GemmaModel) SetOllamaURL(url string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.ollamaURL = url
+}
+
+// Load verifies the model is available in Ollama. It sends a request to
+// /api/show to confirm the model exists and is ready. Returns
+// ErrModelNotLoaded if the model is not found.
+func (g *GemmaModel) Load(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.loaded.Load() {
+		return nil // already loaded
+	}
+
+	body, err := json.Marshal(map[string]string{"name": g.modelName})
+	if err != nil {
+		return fmt.Errorf("load: marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		g.ollamaURL+"/api/show", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("load: create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("load: ollama unreachable at %s: %w", g.ollamaURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return types.ErrModelNotLoaded{}
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("load: ollama returned %d: %s", resp.StatusCode, string(b))
+	}
+
 	g.loadedAt = time.Now()
 	g.loaded.Store(true)
 	return nil
 }
 
-// Unload releases the model from memory.
+// Unload marks the model as not loaded. Ollama manages model memory
+// independently, so this is a logical operation — the model process
+// in Ollama is unaffected.
 func (g *GemmaModel) Unload() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.loaded.Store(false)
 }
 
-// IsLoaded reports whether the model is currently loaded.
+// IsLoaded reports whether the model is currently marked as loaded.
 func (g *GemmaModel) IsLoaded() bool {
 	return g.loaded.Load()
 }
 
-// ClassifyBatch classifies a batch of trace groups. When the model is
-// not loaded it returns ErrModelNotLoaded. When loaded in stub mode
-// (no real llama.cpp binding) it builds the classification prompt for
-// each group and returns flows with confidence=0, using basic trace
-// metadata for descriptions. Real model inference is Phase 2.
+// ollamaGenerateRequest is the JSON body sent to Ollama /api/generate.
+type ollamaGenerateRequest struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+	Stream bool   `json:"stream"`
+}
+
+// ollamaGenerateResponse is the JSON response from Ollama /api/generate.
+type ollamaGenerateResponse struct {
+	Response string `json:"response"`
+	Done     bool   `json:"done"`
+}
+
+// ClassifyBatch classifies a batch of trace groups using the Ollama
+// model. When the model is not loaded it returns ErrModelNotLoaded.
+// The prompt is built from the trace groups, sent to Ollama, and the
+// JSON response is parsed into flows. On parse failure, all groups
+// are returned as unknown (graceful degradation).
 func (g *GemmaModel) ClassifyBatch(ctx context.Context, groups [][]types.Trace) ([]types.Flow, error) {
 	if !g.IsLoaded() {
 		return nil, types.ErrModelNotLoaded{}
@@ -90,38 +155,84 @@ func (g *GemmaModel) ClassifyBatch(ctx context.Context, groups [][]types.Trace) 
 	default:
 	}
 
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
 	start := time.Now()
+	defer func() {
+		g.metrics.totalInferences.Add(1)
+		g.updateAvgLatency(time.Since(start))
+	}()
 
-	// Build the prompt — in production this would be sent to the model.
-	// In stub mode we use it to derive basic descriptions.
-	_ = g.buildClassificationPrompt(groups)
-
-	flows := make([]types.Flow, 0, len(groups))
-	for _, group := range groups {
-		if len(group) == 0 {
-			continue
-		}
-		flow := makeUnknownFlow("", group)
-		flow.ID = uuid.Must(uuid.NewV7()).String()
-		flow.Intent = "unknown"
-		flow.Phase = types.FlowPhaseAction
-		flow.Outcome = types.FlowOutcomeUnknown
-		flow.Confidence = 0
-		flow.Description = buildGroupDescription(group)
-		flows = append(flows, flow)
+	prompt := g.buildClassificationPrompt(groups)
+	output, err := g.infer(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("classify: inference: %w", err)
 	}
 
-	g.updateAvgLatency(time.Since(start))
+	flows, parseErr := g.parseClassificationOutput(groups, output)
+	if parseErr != nil {
+		// Graceful degradation: return unknown flows on parse failure.
+		flows = make([]types.Flow, 0, len(groups))
+		for _, group := range groups {
+			if len(group) == 0 {
+				continue
+			}
+			flow := makeUnknownFlow("", group)
+			flow.ID = uuid.Must(uuid.NewV7()).String()
+			flow.Description = buildGroupDescription(group)
+			flows = append(flows, flow)
+		}
+		return flows, nil
+	}
 
 	return flows, nil
 }
 
-// buildClassificationPrompt constructs the Gemma prompt for a batch of
-// trace groups, following the S03 spec §2.3 prompt template.
+// infer sends the prompt to Ollama and returns the model's response text.
+func (g *GemmaModel) infer(ctx context.Context, prompt string) (string, error) {
+	reqBody := ollamaGenerateRequest{
+		Model:  g.modelName,
+		Prompt: prompt,
+		Stream: false,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("infer: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		g.ollamaURL+"/api/generate", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("infer: create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("infer: ollama request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("infer: ollama returned %d: %s", resp.StatusCode, string(b))
+	}
+
+	var genResp ollamaGenerateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
+		return "", fmt.Errorf("infer: decode response: %w", err)
+	}
+
+	return strings.TrimSpace(genResp.Response), nil
+}
+
+// buildClassificationPrompt constructs the model prompt from trace
+// groups, following the S03 spec prompt template.
 func (g *GemmaModel) buildClassificationPrompt(groups [][]types.Trace) string {
 	var b strings.Builder
 
-	b.WriteString("<start_of_turn>user\n")
 	b.WriteString("You are a classification system for agent behavior traces.\n")
 	b.WriteString("Classify each trace group into a semantic flow.\n\n")
 	b.WriteString("For each group provide: intent, phase, outcome, description, confidence.\n")
@@ -141,9 +252,6 @@ func (g *GemmaModel) buildClassificationPrompt(groups [][]types.Trace) string {
 		}
 		b.WriteString("\n")
 	}
-
-	b.WriteString("<end_of_turn>\n")
-	b.WriteString("<start_of_turn>model\n")
 
 	return b.String()
 }
@@ -213,13 +321,11 @@ func (g *GemmaModel) ModelInfo() ModelInfo {
 	}
 	if loaded {
 		info.LoadedAt = g.loadedAt
-		info.MemoryMB = 0 // stub uses no resident memory
 	}
 	return info
 }
 
 // Health reports whether the model is operational for classification.
-// It returns nil when the model is loaded, or an error otherwise.
 func (g *GemmaModel) Health(_ context.Context) error {
 	if !g.IsLoaded() {
 		return types.ErrModelNotLoaded{}
@@ -227,15 +333,13 @@ func (g *GemmaModel) Health(_ context.Context) error {
 	return nil
 }
 
-// Close unloads the model and releases resources.
+// Close unloads the model logically. Ollama process is unaffected.
 func (g *GemmaModel) Close() error {
 	g.Unload()
 	return nil
 }
 
-// updateAvgLatency updates the running average latency using the model
-// mutex for consistency between the count increment and the average
-// computation.
+// updateAvgLatency updates the running average latency.
 func (g *GemmaModel) updateAvgLatency(d time.Duration) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -246,8 +350,7 @@ func (g *GemmaModel) updateAvgLatency(d time.Duration) {
 }
 
 // buildGroupDescription creates a human-readable summary of a trace
-// group for use in stub-mode classification where no model output is
-// available.
+// group for fallback use when model output is unavailable.
 func buildGroupDescription(group []types.Trace) string {
 	if len(group) == 0 {
 		return "empty group"
