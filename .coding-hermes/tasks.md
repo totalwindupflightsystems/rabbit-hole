@@ -57,7 +57,7 @@
 | INT-005 | Integration test: Remote gRPC backend against real classifier server | Start classifier-only rabbit-hole, connect remote backend, classify | pending |
 | INT-006 | Integration test: WebSocket — connect, receive real-time flows, disconnect | Start server, WebSocket subscribe, push flows, verify received | pending |
 | INT-007 | Integration test: Full server lifecycle — start → health → attach → search → chat → shutdown | Every endpoint exercised against live server | pending |
-| INT-008 | Integration test: FTS5 search with real data — insert flows, search, verify results | 100 flows inserted, FTS5 queries return correct matches | pending |
+|| INT-008 | Integration test: FTS5 search with real data — insert flows, search, verify results | 100 flows inserted, FTS5 queries return correct matches | ✅ dde8d91 |
 | INT-009 | Integration test: Retention/compaction — insert old data, compact, verify deleted | Insert data 31 days old, run compact, verify 0 rows remain | pending |
 
 **Gate:** All integration tests pass. Real eBPF attachment. Real model inference. Real gRPC.
