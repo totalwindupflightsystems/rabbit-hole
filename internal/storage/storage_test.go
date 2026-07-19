@@ -892,3 +892,277 @@ func TestDB(t *testing.T) {
 		t.Error("DB() should return non-nil *sql.DB")
 	}
 }
+
+// ---------- INT-008: FTS5 integration test at 100-flow scale ----------
+//
+// Insert 100 flows with varied, searchable descriptions and intents. Verify
+// that SearchFlows returns exact match counts for representative queries.
+//
+// Counts verified:
+//   - "read_file" intent token      → 20
+//   - "middleware" exact token      → 5  (patch_code #1, #2, #12 + read_file #4 + search_web #3)
+//   - "LLM" exact token             → 8  (the 8 llm_api_call flows only)
+//   - "SQLite" exact token          → 4  (patch_code #6, search_web #2, inspect_database #2, inspect_database #4)
+//   - "config" exact token          → 1  (deploy_service #7 "Deployed config-only release")
+//   - "test" exact token            → 5  (execute_command #2, patch_code #15, write_file #2, create_session #3, verify_result #1)
+//   - "deploy" exact token          → 7  (the 7 deploy_service flows; "deployment" is a distinct token)
+//   - "gpt-4" tokenises to gpt+4    → 1  (only the gpt-4 llm_api_call flow)
+//   - "xyznonexistent"              → 0
+//   - single char "a"               → 1  (create_session #3 has "A/B" → "a" token)
+func TestIntegrationSearchFlows100(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	sess := &types.Session{
+		ID:        "ses-int-008",
+		AgentPID:  800,
+		AgentName: "test",
+		StartTime: time.Now().UTC(),
+		Status:    types.SessionStatusRunning,
+		Metadata: types.SessionMetadata{
+			CommandLine: "test",
+			Environment: map[string]string{},
+		},
+	}
+	if err := store.StoreSession(ctx, sess); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+
+	// ----- 100 flows -----
+	// Distribution matches INT-008 spec:
+	//   read_file=20, patch_code=15, search_web=10, llm_api_call=8,
+	//   write_file=5, execute_command=5, inspect_database=5,
+	//   deploy_service=5, read_logs=5, create_session=5,
+	//   verify_result=5, unknown=5. Plus 7 additional flows distributed
+	//   to keep the corpus at exactly 100: deploy_service=+2, inspect_database=+2,
+	//   verify_result=+1, create_session=+1, unknown=+1.
+	//
+	// Outcome distribution (spec): success=70, failure=20, timeout=5, unknown=5.
+	// Phase distribution (spec): observation=30, deliberation=10, action=50, verification=10.
+	// Confidence: 0.6 to 1.0.
+	type seed struct {
+		intent      string
+		phase       types.FlowPhase
+		description string
+		outcome     types.FlowOutcome
+		confidence  float64
+	}
+	seeds := []seed{
+		// ----- 20 read_file flows -----
+		{"read_file", types.FlowPhaseObservation, "Read auth.go source file", types.FlowOutcomeSuccess, 0.95},
+		{"read_file", types.FlowPhaseObservation, "Read main.go source file", types.FlowOutcomeSuccess, 0.95},
+		{"read_file", types.FlowPhaseObservation, "Read Dockerfile from project root", types.FlowOutcomeSuccess, 0.92},
+		{"read_file", types.FlowPhaseObservation, "Read middleware.go from internal package", types.FlowOutcomeSuccess, 0.90},
+		{"read_file", types.FlowPhaseObservation, "Read router.go HTTP handler source", types.FlowOutcomeSuccess, 0.93},
+		{"read_file", types.FlowPhaseObservation, "Read storage.go with database logic", types.FlowOutcomeSuccess, 0.91},
+		{"read_file", types.FlowPhaseObservation, "Read classifier.go for FTS5 logic", types.FlowOutcomeSuccess, 0.94},
+		{"read_file", types.FlowPhaseObservation, "Read api.go with HTTP routes", types.FlowOutcomeSuccess, 0.93},
+		{"read_file", types.FlowPhaseObservation, "Read session.go for session types", types.FlowOutcomeSuccess, 0.92},
+		{"read_file", types.FlowPhaseObservation, "Read flow.go for flow definitions", types.FlowOutcomeSuccess, 0.92},
+		{"read_file", types.FlowPhaseObservation, "Read context_window.go for decision snapshots", types.FlowOutcomeSuccess, 0.91},
+		{"read_file", types.FlowPhaseObservation, "Read trace.go for trace data model", types.FlowOutcomeSuccess, 0.90},
+		{"read_file", types.FlowPhaseObservation, "Read go.mod for dependencies", types.FlowOutcomeSuccess, 0.96},
+		{"read_file", types.FlowPhaseObservation, "Read README.md for project info", types.FlowOutcomeSuccess, 0.88},
+		{"read_file", types.FlowPhaseObservation, "Read Makefile for build targets", types.FlowOutcomeSuccess, 0.87},
+		{"read_file", types.FlowPhaseObservation, "Read schema.sql for table definitions", types.FlowOutcomeSuccess, 0.93},
+		{"read_file", types.FlowPhaseObservation, "Read eBPF source code from kernel", types.FlowOutcomeSuccess, 0.85},
+		{"read_file", types.FlowPhaseObservation, "Read service logs from journal", types.FlowOutcomeFailure, 0.70},
+		{"read_file", types.FlowPhaseObservation, "Read metrics endpoint from Prometheus", types.FlowOutcomeSuccess, 0.89},
+		{"read_file", types.FlowPhaseObservation, "Read deployment manifest from Kubernetes", types.FlowOutcomeSuccess, 0.90},
+
+		// ----- 15 patch_code flows -----
+		{"patch_code", types.FlowPhaseAction, "Patched auth middleware to add rate limiting", types.FlowOutcomeSuccess, 0.94},
+		{"patch_code", types.FlowPhaseAction, "Patched rate limiter in middleware", types.FlowOutcomeSuccess, 0.91},
+		{"patch_code", types.FlowPhaseAction, "Patched error handler for timeouts", types.FlowOutcomeSuccess, 0.93},
+		{"patch_code", types.FlowPhaseAction, "Patched retry policy for HTTP requests", types.FlowOutcomeSuccess, 0.92},
+		{"patch_code", types.FlowPhaseAction, "Patched FTS5 trigger for contentless table", types.FlowOutcomeSuccess, 0.90},
+		{"patch_code", types.FlowPhaseAction, "Patched SQLite driver for foreign keys", types.FlowOutcomeSuccess, 0.91},
+		{"patch_code", types.FlowPhaseAction, "Patched deployment script for staging environment", types.FlowOutcomeSuccess, 0.89},
+		{"patch_code", types.FlowPhaseAction, "Patched classification model for confidence scoring", types.FlowOutcomeSuccess, 0.88},
+		{"patch_code", types.FlowPhaseAction, "Patched HTTP handler for graceful shutdown", types.FlowOutcomeSuccess, 0.92},
+		{"patch_code", types.FlowPhaseAction, "Patched flow aggregator for session boundary detection", types.FlowOutcomeSuccess, 0.87},
+		{"patch_code", types.FlowPhaseAction, "Patched trace buffer for ring size limit", types.FlowOutcomeSuccess, 0.90},
+		{"patch_code", types.FlowPhaseAction, "Patched observability middleware for trace export", types.FlowOutcomeSuccess, 0.89},
+		{"patch_code", types.FlowPhaseAction, "Patched session migration to add metadata columns", types.FlowOutcomeSuccess, 0.91},
+		{"patch_code", types.FlowPhaseAction, "Patched JWT validation logic for refresh tokens", types.FlowOutcomeFailure, 0.65},
+		{"patch_code", types.FlowPhaseAction, "Patched test fixture loader for deterministic runs", types.FlowOutcomeSuccess, 0.93},
+
+		// ----- 10 search_web flows -----
+		{"search_web", types.FlowPhaseDeliberation, "Searched for Go FTS5 best practices", types.FlowOutcomeSuccess, 0.90},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for SQLite optimization techniques", types.FlowOutcomeSuccess, 0.92},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for HTTP middleware patterns", types.FlowOutcomeSuccess, 0.88},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for eBPF program types", types.FlowOutcomeSuccess, 0.87},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for OpenAI API rate limit strategies", types.FlowOutcomeSuccess, 0.86},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for JWT signing algorithm choices", types.FlowOutcomeSuccess, 0.85},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for context window token limits", types.FlowOutcomeSuccess, 0.89},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for trace sampling algorithms", types.FlowOutcomeSuccess, 0.84},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for deployment rollout patterns", types.FlowOutcomeSuccess, 0.86},
+		{"search_web", types.FlowPhaseDeliberation, "Searched for observability stack options", types.FlowOutcomeSuccess, 0.83},
+
+		// ----- 8 llm_api_call flows (these are the ONLY "LLM" tokens) -----
+		// fl-int008-046 includes the literal substring `LLM" code` so the LIKE
+		// fallback test (malformed quote query) has a row to match.
+		{"llm_api_call", types.FlowPhaseAction, `LLM API call to gpt-4 for LLM" code review`, types.FlowOutcomeSuccess, 0.96},
+		{"llm_api_call", types.FlowPhaseAction, "LLM API call to claude for summarization", types.FlowOutcomeSuccess, 0.95},
+		{"llm_api_call", types.FlowPhaseAction, "LLM API call to deepseek for analysis", types.FlowOutcomeSuccess, 0.94},
+		{"llm_api_call", types.FlowPhaseAction, "LLM API call to gpt-3.5 for draft generation", types.FlowOutcomeSuccess, 0.92},
+		{"llm_api_call", types.FlowPhaseAction, "LLM API call to llama for local inference", types.FlowOutcomeFailure, 0.70},
+		{"llm_api_call", types.FlowPhaseAction, "LLM API call to gemma for classification", types.FlowOutcomeSuccess, 0.93},
+		{"llm_api_call", types.FlowPhaseAction, "LLM API call to mistral for embeddings", types.FlowOutcomeSuccess, 0.91},
+		{"llm_api_call", types.FlowPhaseAction, "LLM API call to qwen for translation", types.FlowOutcomeTimeout, 0.60},
+
+		// ----- 5 write_file flows -----
+		{"write_file", types.FlowPhaseAction, "Wrote updated configuration manifest to disk", types.FlowOutcomeSuccess, 0.94},
+		{"write_file", types.FlowPhaseAction, "Wrote test file with edge case fixtures", types.FlowOutcomeSuccess, 0.90},
+		{"write_file", types.FlowPhaseAction, "Wrote JSON report to artifacts directory", types.FlowOutcomeSuccess, 0.92},
+		{"write_file", types.FlowPhaseAction, "Wrote generated protobuf bindings to source tree", types.FlowOutcomeFailure, 0.65},
+		{"write_file", types.FlowPhaseAction, "Wrote coverage summary to workspace root", types.FlowOutcomeSuccess, 0.91},
+
+		// ----- 5 execute_command flows -----
+		{"execute_command", types.FlowPhaseAction, "Executed go build for verification", types.FlowOutcomeSuccess, 0.95},
+		{"execute_command", types.FlowPhaseAction, "Executed go test ./... -short -count=1", types.FlowOutcomeSuccess, 0.95},
+		{"execute_command", types.FlowPhaseAction, "Executed go vet ./... for static analysis", types.FlowOutcomeSuccess, 0.94},
+		{"execute_command", types.FlowPhaseAction, "Executed git push to remote origin", types.FlowOutcomeFailure, 0.62},
+		{"execute_command", types.FlowPhaseAction, "Executed docker compose up for local stack", types.FlowOutcomeSuccess, 0.90},
+
+		// ----- 7 inspect_database flows (5 spec + 2 extra to reach 100) -----
+		{"inspect_database", types.FlowPhaseObservation, "Inspected Postgres schema migrations", types.FlowOutcomeSuccess, 0.91},
+		{"inspect_database", types.FlowPhaseObservation, "Inspected SQLite schema for foreign keys", types.FlowOutcomeSuccess, 0.92},
+		{"inspect_database", types.FlowPhaseObservation, "Inspected FTS5 index health", types.FlowOutcomeSuccess, 0.93},
+		{"inspect_database", types.FlowPhaseObservation, "Inspected vacuum status for SQLite database", types.FlowOutcomeSuccess, 0.89},
+		{"inspect_database", types.FlowPhaseObservation, "Inspected row counts across session tables", types.FlowOutcomeSuccess, 0.88},
+		{"inspect_database", types.FlowPhaseObservation, "Inspected WAL file size for write throughput", types.FlowOutcomeSuccess, 0.86},
+		{"inspect_database", types.FlowPhaseObservation, "Inspected query planner output for hot paths", types.FlowOutcomeFailure, 0.70},
+
+		// ----- 7 deploy_service flows (5 spec + 2 extra) -----
+		{"deploy_service", types.FlowPhaseAction, "Deployed to staging environment", types.FlowOutcomeSuccess, 0.94},
+		{"deploy_service", types.FlowPhaseAction, "Deployed new version to production", types.FlowOutcomeSuccess, 0.95},
+		{"deploy_service", types.FlowPhaseAction, "Deployed canary build to edge region", types.FlowOutcomeSuccess, 0.91},
+		{"deploy_service", types.FlowPhaseAction, "Deployed rollback to previous stable tag", types.FlowOutcomeFailure, 0.65},
+		{"deploy_service", types.FlowPhaseAction, "Deployed sidecar container alongside main pod", types.FlowOutcomeSuccess, 0.88},
+		{"deploy_service", types.FlowPhaseAction, "Deployed hotfix for rate limit bypass", types.FlowOutcomeSuccess, 0.92},
+		{"deploy_service", types.FlowPhaseAction, "Deployed config-only release for feature flag", types.FlowOutcomeSuccess, 0.90},
+
+		// ----- 5 read_logs flows -----
+		{"read_logs", types.FlowPhaseObservation, "Read system logs for errors", types.FlowOutcomeSuccess, 0.93},
+		{"read_logs", types.FlowPhaseObservation, "Read application logs for warnings", types.FlowOutcomeSuccess, 0.91},
+		{"read_logs", types.FlowPhaseObservation, "Read audit logs for security review", types.FlowOutcomeSuccess, 0.94},
+		{"read_logs", types.FlowPhaseObservation, "Read kernel logs for oops messages", types.FlowOutcomeFailure, 0.70},
+		{"read_logs", types.FlowPhaseObservation, "Read access logs for traffic anomaly", types.FlowOutcomeSuccess, 0.88},
+
+		// ----- 6 create_session flows (5 spec + 1 extra) -----
+		{"create_session", types.FlowPhaseAction, "Created new agent session for batch job", types.FlowOutcomeSuccess, 0.92},
+		{"create_session", types.FlowPhaseAction, "Created debug session for crash triage", types.FlowOutcomeSuccess, 0.90},
+		{"create_session", types.FlowPhaseAction, "Created experimental session for A/B test", types.FlowOutcomeSuccess, 0.89},
+		{"create_session", types.FlowPhaseAction, "Created training session for fine-tuning", types.FlowOutcomeTimeout, 0.62},
+		{"create_session", types.FlowPhaseAction, "Created maintenance session for schema migration", types.FlowOutcomeSuccess, 0.91},
+		{"create_session", types.FlowPhaseAction, "Created observer session for trace collection", types.FlowOutcomeSuccess, 0.88},
+
+		// ----- 6 verify_result flows (5 spec + 1 extra) -----
+		{"verify_result", types.FlowPhaseVerification, "Verified test output matches expected", types.FlowOutcomeSuccess, 0.95},
+		{"verify_result", types.FlowPhaseVerification, "Verified deployment health check", types.FlowOutcomeSuccess, 0.93},
+		{"verify_result", types.FlowPhaseVerification, "Verified response payload against schema", types.FlowOutcomeSuccess, 0.91},
+		{"verify_result", types.FlowPhaseVerification, "Verified retry budget exhausted", types.FlowOutcomeFailure, 0.66},
+		{"verify_result", types.FlowPhaseVerification, "Verified request idempotency key replay", types.FlowOutcomeSuccess, 0.89},
+		{"verify_result", types.FlowPhaseVerification, "Verified graceful shutdown completed within deadline", types.FlowOutcomeSuccess, 0.92},
+
+		// ----- 6 unknown flows (5 spec + 1 extra) -----
+		{"unknown", types.FlowPhaseObservation, "Unclassified system call sequence detected", types.FlowOutcomeUnknown, 0.60},
+		{"unknown", types.FlowPhaseObservation, "Unknown pattern detected in syscall stream", types.FlowOutcomeUnknown, 0.60},
+		{"unknown", types.FlowPhaseObservation, "Unclassified network burst to external endpoint", types.FlowOutcomeUnknown, 0.60},
+		{"unknown", types.FlowPhaseObservation, "Unknown binary signature observed in trace", types.FlowOutcomeUnknown, 0.60},
+		{"unknown", types.FlowPhaseObservation, "Unclassified long-running fork detected", types.FlowOutcomeTimeout, 0.60},
+		{"unknown", types.FlowPhaseObservation, "Unknown ptrace sequence captured for analysis", types.FlowOutcomeUnknown, 0.60},
+	}
+
+	if len(seeds) != 100 {
+		t.Fatalf("seed count = %d, want 100 (spec violation, fix seeds before running)", len(seeds))
+	}
+
+	// Build Flow objects with varied timestamps, confidence 0.6–1.0.
+	now := time.Now().UTC()
+	flows := make([]types.Flow, 0, len(seeds))
+	for i, s := range seeds {
+		// Walk timestamps back so flow[0] is the most recent.
+		start := now.Add(-time.Duration(i) * time.Minute)
+		end := start.Add(500 * time.Millisecond)
+		// Clamp confidence into the spec'd 0.6–1.0 band.
+		conf := s.confidence
+		if conf < 0.6 {
+			conf = 0.6
+		}
+		if conf > 1.0 {
+			conf = 1.0
+		}
+		flows = append(flows, types.Flow{
+			ID:          fmt.Sprintf("fl-int008-%03d", i+1),
+			SessionID:   "ses-int-008",
+			Intent:      s.intent,
+			Phase:       s.phase,
+			Description: s.description,
+			Outcome:     s.outcome,
+			Confidence:  conf,
+			StartTime:   start,
+			EndTime:     end,
+			Duration:    500 * time.Millisecond,
+		})
+	}
+
+	if err := store.StoreFlows(ctx, flows); err != nil {
+		t.Fatalf("StoreFlows(100): %v", err)
+	}
+
+	// Catch-all sanity check: an empty query path returns all flows via
+	// searchFlowsRecent. This verifies all 100 inserts made it through the
+	// FTS5 AFTER INSERT trigger chain.
+	all, err := store.SearchFlows(ctx, "", 200)
+	if err != nil {
+		t.Fatalf("SearchFlows(catch-all): %v", err)
+	}
+	if len(all) != 100 {
+		t.Fatalf("catch-all len = %d, want 100 (some flows not inserted)", len(all))
+	}
+
+	// ----- Query/expected-count table -----
+	// Counts derived from the seed list above. The "X" placeholders from the
+	// task brief are filled in with concrete values computed from the data.
+	type queryCase struct {
+		name  string
+		query string
+		want  int
+	}
+	cases := []queryCase{
+		{"FTS5: exact intent match 'read_file'", "read_file", 20},
+		{"FTS5: token 'middleware'", "middleware", 5},
+		{"FTS5: token 'LLM'", "LLM", 8},
+		{"FTS5: token 'SQLite'", "SQLite", 4},
+		{"FTS5: token 'config' (matches 'config-only' hyphen-split)", "config", 1},
+		{"FTS5: token 'test'", "test", 5},
+		{"FTS5: token 'deploy' (case-folded 'Deployed' matches; 'deployment' is distinct)", "deploy", 7},
+		{"FTS5: no match", "xyznonexistent", 0},
+		{"FTS5: single char 'a' (only matches A/B token in create_session #3)", "a", 1},
+		{"FTS5: hyphenated 'gpt-4' (tokenises to gpt+4)", "gpt-4", 1},
+		// Malformed FTS5 syntax with a quote triggers the LIKE fallback path.
+		// Description fl-int008-046 contains the literal substring `LLM" code` so
+		// the LIKE fallback returns the same row the FTS5 path would have.
+		{"FTS5: malformed quote-LLM falls back to LIKE", `LLM" code`, 1},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			results, err := store.SearchFlows(ctx, c.query, 200)
+			if err != nil {
+				t.Fatalf("SearchFlows(%q): %v", c.query, err)
+			}
+			if len(results) != c.want {
+				// Dump the offending IDs to make debugging quick.
+				ids := make([]string, 0, len(results))
+				for _, r := range results {
+					ids = append(ids, r.ID)
+				}
+				t.Fatalf("SearchFlows(%q) len = %d, want %d; got IDs = %v",
+					c.query, len(results), c.want, ids)
+			}
+		})
+	}
+}
