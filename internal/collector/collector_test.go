@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -170,6 +171,39 @@ func TestRingBuffer_Stats(t *testing.T) {
 	stats = rb.Stats()
 	if stats.Used != 50 {
 		t.Errorf("expected 50 used, got %d", stats.Used)
+	}
+}
+
+func TestRingBuffer_StressOverflow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping stress test in short mode")
+	}
+
+	const size = 100000
+	const total = 200000
+
+	rb := NewRingBuffer(size)
+	for i := 0; i < total; i++ {
+		rb.Push(types.Trace{ID: fmt.Sprintf("#%d", i)})
+	}
+
+	stats := rb.Stats()
+	if stats.Used != size {
+		t.Errorf("expected Used=%d, got %d", size, stats.Used)
+	}
+	if stats.Dropped != uint64(total-size) {
+		t.Errorf("expected Dropped=%d, got %d", total-size, stats.Dropped)
+	}
+
+	batch := rb.PopAll()
+	if len(batch) != size {
+		t.Fatalf("expected PopAll=%d, got %d", size, len(batch))
+	}
+	if batch[0].ID != "#100000" {
+		t.Errorf("expected oldest trace #100000, got %s", batch[0].ID)
+	}
+	if batch[size-1].ID != "#199999" {
+		t.Errorf("expected newest trace #199999, got %s", batch[size-1].ID)
 	}
 }
 
