@@ -367,6 +367,88 @@ func TestServerLifecycle(t *testing.T) {
 	}
 }
 
+// TestFullServerLifecycle exercises the entire server: start → health →
+// seed session (simulates attach) → seed flows → search → chat → shutdown.
+// INT-007: Every endpoint exercised against a live server.
+func TestFullServerLifecycle(t *testing.T) {
+	srv, cl := newTestServer(t)
+	defer cl()
+
+	// 1. Health check — server is alive
+	resp, err := http.Get(getURL(srv, "/health"))
+	if err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("health status: %d", resp.StatusCode)
+	}
+
+	// 2. Seed a session — simulates an attach
+	sess := seedSession(t, srv.store)
+
+	// 3. Seed flows — what the agent did
+	seedFlow(t, srv.store, "0191b000-0000-7000-8000-000000000001", sess.ID)
+	seedFlow(t, srv.store, "0191b000-0000-7000-8000-000000000002", sess.ID)
+
+	// Add a flow with a distinctive description for search verification.
+	f3 := types.Flow{
+		ID: "0191b000-0000-7000-8000-000000000003", SessionID: sess.ID,
+		Intent: "execute_code", Phase: types.FlowPhaseAction,
+		Description: "Ran sql query against billing database",
+		Outcome: types.FlowOutcomeSuccess, Confidence: 0.97,
+		StartTime: time.Now().UTC(), EndTime: time.Now().UTC().Add(3 * time.Millisecond),
+	}
+	if err := srv.store.StoreFlows(context.Background(), []types.Flow{f3}); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	// 4. Search — find the distinctive flow
+	sr := types.SearchRequest{Query: "billing database", Limit: 10}
+	resp = doJSON(t, "POST", getURL(srv, "/api/v1/search"), sr)
+	if resp.StatusCode != 200 {
+		t.Fatalf("search status: %d", resp.StatusCode)
+	}
+	var searchResp types.SearchResponse
+	decodeResp(t, resp, &searchResp)
+	if len(searchResp.Flows) == 0 {
+		t.Fatal("search returned 0 flows for 'billing database'")
+	}
+	found := false
+	for _, f := range searchResp.Flows {
+		if f.ID == "0191b000-0000-7000-8000-000000000003" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("search didn't return the billing database flow")
+	}
+
+	// 5. Chat — NL question about the session (use a query that matches seeded flows)
+	cr := types.ChatRequest{Message: "What about the billing database?", SessionID: sess.ID}
+	resp = doJSON(t, "POST", getURL(srv, "/api/v1/chat"), cr)
+	if resp.StatusCode != 200 {
+		t.Fatalf("chat status: %d", resp.StatusCode)
+	}
+	var chatResp types.ChatResponse
+	decodeResp(t, resp, &chatResp)
+	if chatResp.Answer == "" {
+		t.Error("chat returned empty answer")
+	}
+
+	// 6. Shutdown — server stops
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	_, err = http.Get(getURL(srv, "/health"))
+	if err == nil {
+		t.Error("expected connection refused after shutdown")
+	}
+}
+
 func TestPublishFlow(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()
