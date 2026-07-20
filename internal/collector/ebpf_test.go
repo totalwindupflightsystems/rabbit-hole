@@ -385,3 +385,35 @@ func TestBufSize_Default(t *testing.T) {
 		t.Errorf("bufSize() = %d, want 100000 (default)", got)
 	}
 }
+
+// ---- Benchmarks ----
+
+func BenchmarkParseTraceEvent(b *testing.B) {
+	raw := buildTraceEvent(struct {
+		TimestampNs uint64
+		PID         int32
+		SyscallNr   uint64
+		Args        [6]uint64
+		Ret         int64
+		Errno       int32
+		DurationNs  uint64
+		Category    uint8
+	}{
+		TimestampNs: 1700000000000000000,
+		PID:         12345,
+		SyscallNr:   257, // openat
+		Args:        [6]uint64{0x7f, 0x2, 0x1b6, 0x0, 0x0, 0x0},
+		Ret:         3,
+		Errno:       0,
+		DurationNs:  15000,
+		Category:    2, // TraceCategoryFile
+	})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := parseTraceEvent(raw)
+		if err != nil {
+			b.Fatalf("parseTraceEvent: %v", err)
+		}
+	}
+}

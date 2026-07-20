@@ -1166,3 +1166,83 @@ func TestIntegrationSearchFlows100(t *testing.T) {
 		})
 	}
 }
+
+// ---- Benchmarks ----
+
+func BenchmarkSQLiteStore_StoreTraces(b *testing.B) {
+	store := newTestStore(&testing.T{})
+	defer store.Close()
+	ctx := context.Background()
+
+	// FK: traces reference a session
+	session := &types.Session{
+		ID:        "bench-session",
+		AgentPID:  12345,
+		AgentName: "hermes",
+		StartTime: time.Now().UTC(),
+		Status:    types.SessionStatusRunning,
+	}
+	if err := store.StoreSession(ctx, session); err != nil {
+		b.Fatalf("StoreSession: %v", err)
+	}
+
+	traces := make([]types.Trace, 100)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Unique IDs per iteration to avoid UNIQUE constraint
+		for j := range traces {
+			traces[j] = types.Trace{
+				ID:        fmt.Sprintf("bench-trace-%d-%d", i, j),
+				Timestamp: time.Now().Add(-time.Duration(j) * time.Millisecond),
+				PID:       12345,
+				Syscall:   "read",
+			}
+		}
+		if err := store.StoreTraces(ctx, traces); err != nil {
+			b.Fatalf("StoreTraces: %v", err)
+		}
+	}
+}
+
+func BenchmarkSQLiteStore_SearchFlows(b *testing.B) {
+	store := newTestStore(&testing.T{})
+	defer store.Close()
+	ctx := context.Background()
+
+	// FK: flows reference a session
+	session := &types.Session{
+		ID:        "bench-session",
+		AgentPID:  12345,
+		AgentName: "hermes",
+		StartTime: time.Now().UTC(),
+		Status:    types.SessionStatusRunning,
+	}
+	if err := store.StoreSession(ctx, session); err != nil {
+		b.Fatalf("StoreSession: %v", err)
+	}
+
+	// Pre-populate with known data
+	for i := 0; i < 100; i++ {
+		flow := types.Flow{
+			ID:          fmt.Sprintf("bench-flow-%d", i),
+			SessionID:   "bench-session",
+			Intent:      "test_run",
+			Phase:       types.FlowPhaseAction,
+			Description: fmt.Sprintf("Test run #%d executed", i),
+			Confidence:  0.95,
+			StartTime:   time.Now().Add(-time.Duration(i) * time.Second),
+		}
+		if err := store.StoreFlows(ctx, []types.Flow{flow}); err != nil {
+			b.Fatalf("StoreFlows: %v", err)
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := store.SearchFlows(ctx, "test", 20)
+		if err != nil {
+			b.Fatalf("SearchFlows: %v", err)
+		}
+	}
+}

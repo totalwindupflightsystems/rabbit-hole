@@ -372,3 +372,25 @@ func TestPatternDescriptions(t *testing.T) {
 		})
 	}
 }
+
+// ---- Benchmarks ----
+
+func BenchmarkPatternCatalog_Match(b *testing.B) {
+	pc := NewPatternCatalog()
+	traces := makeTraces("openat", "read", "read", "close")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = pc.Match(traces)
+	}
+}
+
+func BenchmarkPatternCatalog_MatchNetwork(b *testing.B) {
+	pc := NewPatternCatalog()
+	traces := makeTracesWithRC("socket", int64(3), "connect", int64(0))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = pc.Match(traces)
+	}
+}

@@ -385,3 +385,72 @@ func TestDetectAgentName(t *testing.T) {
 		t.Errorf("expected non-empty name for self, got %q", name)
 	}
 }
+
+// ---- Benchmarks ----
+
+func BenchmarkRingBuffer_Push(b *testing.B) {
+	rb := NewRingBuffer(100000)
+	trace := types.Trace{ID: "bench", PID: 100, Syscall: "read"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rb.Push(trace)
+	}
+}
+
+func BenchmarkRingBuffer_PopBatch(b *testing.B) {
+	rb := NewRingBuffer(100000)
+	trace := types.Trace{ID: "bench", PID: 100}
+	for i := 0; i < 50000; i++ {
+		rb.Push(trace)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		batch := rb.PopBatch(100)
+		if len(batch) == 0 {
+			b.Fatal("unexpected empty batch")
+		}
+		// Re-fill to avoid draining mid-benchmark
+		for j := 0; j < len(batch); j++ {
+			rb.Push(trace)
+		}
+	}
+}
+
+func BenchmarkRingBuffer_ConcurrentPush(b *testing.B) {
+	rb := NewRingBuffer(100000)
+	trace := types.Trace{ID: "bench", PID: 100}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for g := 0; g < 10; g++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				rb.Push(trace)
+			}()
+		}
+		wg.Wait()
+	}
+}
+
+func BenchmarkRingBuffer_PopAll(b *testing.B) {
+	rb := NewRingBuffer(100000)
+	trace := types.Trace{ID: "bench", PID: 100}
+	for i := 0; i < 50000; i++ {
+		rb.Push(trace)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		batch := rb.PopAll()
+		if len(batch) == 0 {
+			b.Fatal("unexpected empty batch")
+		}
+		for j := 0; j < len(batch); j++ {
+			rb.Push(trace)
+		}
+	}
+}
