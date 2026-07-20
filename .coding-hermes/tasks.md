@@ -250,6 +250,21 @@
 
 **Total: 63 tasks across 9 phases (plus 6 specs).** If the foreman reports idle, there's something wrong with the board.
 
-## [ ] NEVER-DONE — Run 11-point audit next tick
-- **Priority:** high
-- **Trigger:** Board needs self-improvement scan. Foreman must load `coding-hermes-never-done` skill and run full 11-point audit on next tick (spec alignment, doc coverage, test gaps, deps, pitfalls, perf, endpoint verification, CI/CD health, DuckBrain sync, code quality, middle-out wiring).
+## [ ] DOC-PKG — Add package doc comments to 29 source files
+
+- **Found by:** Never-done audit check 2 (doc coverage) at 2026-07-20 06:49.
+- **Gap:** 29 Go source files across 6 packages lack `// Package <name> ...` doc comments.
+- **Files:** `internal/attach/` (1), `internal/classify/` (6), `internal/collector/` (1), `internal/express/` (5), `cmd/rabbit-hole/` (11), `pkg/types/` (5).
+- **Acceptance criteria:**
+  - AC1: Every non-test, non-proto `.go` file has a package doc comment
+  - AC2: `go build ./...` and `go vet ./...` still pass
+  - AC3: Comments follow Go convention (first line: `// Package <name> ...`)
+
+## [x] NEVER-DONE — 11-point audit (2026-07-20 06:49)
+
+- **Audit run:** 2026-07-20 06:49 tick.
+- **Results:** 8/11 checks pass. 3 findings:
+  - Check 2 (doc coverage): 29 files lack package doc comments → created DOC-PKG above
+  - Check 4 (deps): cilium/ebpf major bump intentionally skipped (known), indirect deps only
+  - Check 8 (CI/CD): Pipeline #507 FAILED, zero online runners — INFRA issue, not code
+- **Next audit:** After DOC-PKG and next phase gates cleared.
