@@ -274,6 +274,7 @@ type classificationResult struct {
 // each result to a flow built from the corresponding trace group.
 func (g *GemmaModel) parseClassificationOutput(groups [][]types.Trace, output string) ([]types.Flow, error) {
 	output = strings.TrimSpace(output)
+	output = stripCodeFences(output)
 
 	var results []classificationResult
 	if err := json.Unmarshal([]byte(output), &results); err != nil {
@@ -352,6 +353,25 @@ func (g *GemmaModel) updateAvgLatency(d time.Duration) {
 	oldAvg := g.metrics.avgLatency.Load()
 	newAvg := (oldAvg*(count-1) + int64(d)) / count
 	g.metrics.avgLatency.Store(newAvg)
+}
+
+// stripCodeFences removes markdown code fence wrappers from model output.
+// Gemma (and many LLMs) frequently wrap JSON responses in ```json / ```
+// blocks. This strips those fences so the raw JSON can be parsed.
+func stripCodeFences(s string) string {
+	// Pattern: ```json\n...\n``` or ```\n...\n```
+	const fence = "```"
+	if strings.HasPrefix(s, fence) {
+		s = s[len(fence):]            // strip opening ```
+		if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+			s = s[idx+1:] // strip language tag (json) and newline
+		}
+		if last := strings.LastIndex(s, fence); last >= 0 {
+			s = s[:last] // strip closing ```
+		}
+		s = strings.TrimSpace(s)
+	}
+	return s
 }
 
 // buildGroupDescription creates a human-readable summary of a trace
