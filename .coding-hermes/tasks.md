@@ -141,7 +141,7 @@
 | STR-002 | 100K trace insert performance test — StoreTraces batch of 100K | Must complete in <30s, verify all stored | ✅ b82b2f0 (1.14s) |
 || STR-003 | 100 concurrent FTS5 searches — latency <50ms per search | Concurrent goroutines, p99 latency measurement | ✅ 0d17aa4 |
 || STR-004 | 10 concurrent sessions — filter map isolation, no cross-talk | 10 agents, verify each session only sees own traces | ✅ 6e7efcd |
-| STR-005 | Classification throughput benchmark — traces/sec through engine | Measure with/without model, with/without pattern matching | pending |
+|| STR-005 | Classification throughput benchmark — traces/sec through engine | Measure with/without model, with/without pattern matching | ✅ 517f831 |
 | STR-006 | 100 concurrent WebSocket connections — flow delivery, no dropped messages | Stress test gorilla/websocket under load | pending |
 | STR-007 | Memory leak detection — 1000 attach/detach cycles | Verify RSS returns to baseline | pending |
 | STR-008 | SQLite WAL pressure — 1M trace inserts, verify WAL doesn't grow unbounded | WAL checkpoint behavior under sustained write load | pending |
