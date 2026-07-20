@@ -123,8 +123,8 @@
 | INT-002 | Integration test: attach → detach lifecycle, session cleanup | Attach, verify session created, detach, verify cleanup | ✅ ba4e9b6 |
 | INT-003 | Integration test: TLS interception (attach to HTTPS-making process) | Attach to `curl https://example.com`, verify TLS probes fire | ✅ 0e7f23b |
 | INT-004 | Integration test: Gemma model loaded + classify real trace batch | Load Gemma 3 4B, feed recorded traces, verify classification output | ✅ 45a916b |
-| INT-005 | Integration test: Remote gRPC backend against real classifier server | Start classifier-only rabbit-hole, connect remote backend, classify | pending |
-| INT-006 | Integration test: WebSocket — connect, receive real-time flows, disconnect | Start server, WebSocket subscribe, push flows, verify received | pending |
+|| INT-005 | Integration test: Remote gRPC backend against real classifier server | Start classifier-only rabbit-hole, connect remote backend, classify | ✅ e68a246 |
+|| INT-006 | Integration test: WebSocket — connect, receive real-time flows, disconnect | Start server, WebSocket subscribe, push flows, verify received | ✅ (TestWebSocket in server_test.go:379, passes) |
 | INT-007 | Integration test: Full server lifecycle — start → health → attach → search → chat → shutdown | Every endpoint exercised against live server | pending |
 || INT-008 | Integration test: FTS5 search with real data — insert flows, search, verify results | 100 flows inserted, FTS5 queries return correct matches | ✅ dde8d91 |
 | INT-009 | Integration test: Retention/compaction — insert old data, compact, verify deleted | Insert data 31 days old, run compact, verify 0 rows remain | pending |
