@@ -70,12 +70,31 @@
   - AC4: `go test -bench=. -run='^$' ./... -count=1 -p 2` finds ≥3 Benchmark functions
   - AC5: All existing unit tests still pass
 
-## [~] INFRA — Host thread exhaustion: cgroup pids.max increased to 512 (PARTIAL)
+## [~] INFRA — Host thread exhaustion: cgroup pids.max at 512 — CONDITION WORSENING 🚨
 
 - **Detected:** 2026-07-19 tick. Go build panics with `failed to create new OS thread (have 9 already; errno=11)`.
-- **Partial fix:** 2026-07-19 20:36. cgroup pids.max increased from 256 → 512. `go build ./...` and `go test ./... -short` now pass (9/9 packages green at 2026-07-19 20:37). `go test -cover` still crashes when parallel compilation spawns too many threads (pids.current hit 401/512 during coverage run).
-- **Remaining:** Increase pids.max further to 1024 (requires sudo) or reduce Go test parallelism with `-p 2`.
-- **Workaround:** Use `go test -p 2` for parallel compilation. Coverage tests can run with `-p 1`.
+- **Partial fix (2026-07-19 20:36):** cgroup pids.max increased from 256 → 512. Initially worked.
+- **WORSENING (2026-07-20 00:17):** Even `go test -p 1` and `go test -p 2` crash with thread exhaustion. `go build ./...`, `go vet ./...`, and `go test ./...` ALL fail. The Go toolchain is completely non-functional in this environment. The binary from the last successful build (Jul 19 10:11, 18.6MB) still exists on disk but no new code can be compiled or tested.
+- **Remaining:** Increase pids.max further to 1024+ (requires sudo). This is a host-level blocker — NO Go foreman or worker tasks can proceed until resolved.
+- **Impact:** ALL Phase 2-9 tasks (INT, STR, DEP, PROD, DOC requiring go doc, E2E, REL) are BLOCKED. Only documentation (Phase 6 prose) and DuckBrain (Phase 8) tasks are possible without a working Go toolchain.
+- **2026-07-20 00:17 tick:** Foreman could not spawn a worker for INT-004. Environment blocked.
+
+---
+
+## [ ] CI — GitLab pipeline #502 FAILED (2026-07-20)
+
+- **Found by:** Step 1.6 signal scan at 2026-07-20 00:17.
+- **Pipeline:** #502 failed, #496 canceled, #492 canceled. Recent CI is non-functional.
+- **Action:** Investigate failure root cause — may be thread exhaustion affecting runner, or a code regression. Check job logs via GitLab API.
+- **Priority:** High — blocks merge validation.
+
+---
+
+## [ ] INT-004 — BLOCKED by host thread exhaustion (INFRA task)
+
+- **Task:** Integration test: Gemma model loaded + classify real trace batch
+- **Blocker:** Go toolchain non-functional (thread exhaustion). Cannot compile or run tests.
+- **Resolution:** Requires INFRA fix (sudo increase pids.max to 1024+). This task will be picked up automatically once Go is functional.
 
 ---
 
