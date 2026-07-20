@@ -30,6 +30,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 // ebpLoadFailureLogSnippet is the substring emitted by NewEBPFCollector when
@@ -357,5 +359,172 @@ func TestEBPFIntegration_AttachNonRootPID(t *testing.T) {
 	_, err = c.Attach(context.Background(), bogusPID, CollectOptions{})
 	if err == nil {
 		t.Errorf("Attach(bogusPID=%d) returned nil error; expected ErrProcessNotFound", bogusPID)
+	}
+}
+
+// tlsProbesUnavailableLogSnippet is the substring emitted by collector.Attach
+// when TLS interception was requested but the uprobes could not attach
+// (typically because the target binary is statically linked or libssl was
+// not found in /proc/PID/maps). Detecting it from the logger lets us skip
+// the INT-003 assertions gracefully instead of failing.
+const tlsProbesUnavailableLogSnippet = "TLS probes unavailable"
+
+// tlsBudget is the wall-clock budget for at least one TLS-intercepted trace
+// to arrive after Attach. curl https://example.com performs the TLS handshake
+// and a single GET over SSL_read/SSL_write within ~1s on a warm cache, so
+// 10s is generous headroom for slow CI / cold DNS.
+const tlsBudget = 10 * time.Second
+
+// TestEBPFIntegration_TLSInterception (INT-003) verifies the full TLS
+// interception path: it spawns `curl https://example.com`, attaches the
+// eBPF collector with TLSInterception=true, and confirms that the
+// SSL_read/SSL_write uprobes fire and deliver at least one trace event
+// tagged category=LLM_CALL.
+//
+// Run with:
+//
+//	sudo -E go test -v -run TestEBPFIntegration_TLSInterception -count=1 ./internal/collector/
+//
+// Skipped (not failed) when:
+//   - testing.Short() is true
+//   - not running as root
+//   - the eBPF program fails to load (degraded mode)
+//   - TLS interception failed because libssl was not found in the target
+//     process (e.g. statically-linked curl)
+func TestEBPFIntegration_TLSInterception(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping eBPF integration test in -short mode")
+	}
+	if os.Getuid() != 0 {
+		t.Skipf("eBPF integration test requires root (current uid=%d); re-run with sudo", os.Getuid())
+	}
+
+	// Capture collector logs so we can detect both "eBPF failed to load"
+	// (degraded mode) and "TLS probes unavailable" (libssl not found).
+	logBuf := &bytes.Buffer{}
+	logger := slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	// 1) Build the collector.
+	c, err := NewEBPFCollector(100000, 50, logger)
+	if err != nil {
+		t.Fatalf("NewEBPFCollector: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	// 2) Spawn `curl -s --max-time 5 https://example.com`. curl is
+	//    dynamically linked against libssl on Debian/Ubuntu, so the
+	//    uprobes on SSL_read/SSL_write should fire during the TLS
+	//    handshake and the GET request.
+	//
+	//    We do NOT wait for curl to exit before attaching — TLS events
+	//    are emitted while the process is alive, and Attach must run
+	//    concurrently with the HTTPS request to catch them. curl's
+	//    --max-time bounds its lifetime from below.
+	cmd := exec.Command("curl", "-s", "--max-time", "5", "https://example.com")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start curl: %v", err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process == nil {
+			return
+		}
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+
+	pid := int32(cmd.Process.Pid)
+	t.Logf("spawned curl PID=%d", pid)
+
+	// 3) Attach the collector with TLSInterception enabled.
+	attachCtx, attachCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer attachCancel()
+
+	session, err := c.Attach(attachCtx, pid, CollectOptions{
+		BufferSize:      100000,
+		TLSInterception: true,
+	})
+	if err != nil {
+		t.Fatalf("Attach(pid=%d): %v", pid, err)
+	}
+	if session == nil || session.ID == "" {
+		t.Fatalf("Attach returned empty session")
+	}
+	t.Logf("attached session=%s pid=%d (TLSInterception=true)", session.ID, session.AgentPID)
+
+	// Detach on test exit — runs in LIFO order after the stream context
+	// is cancelled below.
+	t.Cleanup(func() {
+		detachCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := c.Detach(detachCtx, session.ID); err != nil {
+			t.Logf("cleanup Detach: %v", err)
+		}
+	})
+
+	// 4) Skip gracefully if eBPF itself never loaded.
+	if strings.Contains(logBuf.String(), ebpLoadFailureLogSnippet) {
+		t.Skipf("eBPF program failed to load on this kernel — skipping TLS interception test.\n"+
+			"collector log:\n%s\n"+
+			"hint: regenerate BPF objects with `go generate ./internal/collector/` "+
+			"and ensure the running kernel supports uprobes and all declared BPF map types.",
+			logBuf.String())
+	}
+
+	// 5) Skip gracefully if TLS interception could not attach. This is
+	//    expected on hosts with a statically-linked curl or a libssl
+	//    variant that findLibSSL() does not recognise.
+	if strings.Contains(logBuf.String(), tlsProbesUnavailableLogSnippet) {
+		t.Skipf("TLS probes could not attach to PID %d — libssl likely not found in /proc/%d/maps (statically-linked curl?). "+
+			"Skipping TLS interception assertions.\n"+
+			"collector log:\n%s",
+			pid, pid, logBuf.String())
+	}
+
+	// 6) Open a stream channel and wait for at least one TLS-intercepted
+	//    trace within the budget.
+	streamCtx, streamCancel := context.WithCancel(context.Background())
+	t.Cleanup(streamCancel)
+
+	ch, err := c.Stream(streamCtx, session.ID)
+	if err != nil {
+		t.Fatalf("Stream(session=%s): %v", session.ID, err)
+	}
+
+	deadline := time.After(tlsBudget)
+	var (
+		gotLLMTrace bool
+		otherCats   = map[types.TraceCategory]int{}
+	)
+	for !gotLLMTrace {
+		select {
+		case trace, ok := <-ch:
+			if !ok {
+				t.Fatalf("stream channel closed before any LLM_CALL trace arrived (other cats=%v)", otherCats)
+			}
+			if trace.PID != pid {
+				t.Errorf("trace.PID = %d, want %d", trace.PID, pid)
+			}
+			if trace.Category == types.TraceCategoryLLMCall {
+				gotLLMTrace = true
+				t.Logf("captured TLS trace: pid=%d category=%s id=%s timestamp=%s",
+					trace.PID, trace.Category, trace.ID, trace.Timestamp)
+			} else {
+				otherCats[trace.Category]++
+			}
+		case <-deadline:
+			stats := c.BufferStats()
+			t.Fatalf("no LLM_CALL trace captured within %s — TLS uprobes did not fire or libssl not intercepted.\n"+
+				"ring buffer stats: used=%d/%d dropped=%d\n"+
+				"non-LLM categories observed: %v\n"+
+				"collector log tail:\n%s",
+				tlsBudget, stats.Used, stats.Size, stats.Dropped, otherCats, logBuf.String())
+		}
+	}
+
+	// 7) Confirm at least one LLM_CALL trace had the spawned PID.
+	if !gotLLMTrace {
+		t.Fatalf("internal error: gotLLMTrace should be true after the select loop completed")
 	}
 }
