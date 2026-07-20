@@ -138,7 +138,7 @@
 | ID | Task | Description | Status |
 |---|---|---|---|
 | STR-001 | Ring buffer overflow test — push 2x capacity, verify oldest dropped | 200K traces into 100K buffer, verify drop count = 100K | ✅ 4954433 |
-| STR-002 | 100K trace insert performance test — StoreTraces batch of 100K | Must complete in <30s, verify all stored | pending |
+| STR-002 | 100K trace insert performance test — StoreTraces batch of 100K | Must complete in <30s, verify all stored | ✅ b82b2f0 (1.14s) |
 | STR-003 | 100 concurrent FTS5 searches — latency <50ms per search | Concurrent goroutines, p99 latency measurement | pending |
 | STR-004 | 10 concurrent sessions — filter map isolation, no cross-talk | 10 agents, verify each session only sees own traces | pending |
 | STR-005 | Classification throughput benchmark — traces/sec through engine | Measure with/without model, with/without pattern matching | pending |
