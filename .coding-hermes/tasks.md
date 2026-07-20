@@ -154,7 +154,7 @@
 
 | ID | Task | Description | Status |
 |---|---|---|---|
-| DEP-001 | systemd unit file — rabbit-hole.service with eBPF capabilities | CAP_BPF, CAP_SYS_ADMIN, MemoryMax, Restart=always | pending |
+|| DEP-001 | systemd unit file — rabbit-hole.service with eBPF capabilities | CAP_BPF, CAP_SYS_ADMIN, MemoryMax, Restart=always | ✅ <commit> |
 | DEP-002 | install.sh — one-command install with model download | curl | bash install, optional systemd enable | pending |
 | DEP-003 | Dockerfile — `docker run rabbit-hole serve` | Multi-stage build, eBPF capabilities, volume for data | pending |
 | DEP-004 | Makefile completion — add bench, stress, integration, e2e targets | make bench, make stress, make integration, make e2e | pending |

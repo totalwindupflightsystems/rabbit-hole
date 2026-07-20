@@ -1,0 +1,50 @@
+[Unit]
+Description=Rabbit-Hole — Agent Legibility Daemon
+Documentation=https://gitlab.readydedis.com/rabbit-hole/rabbit-hole
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rabbit-hole
+Group=rabbit-hole
+WorkingDirectory=/var/lib/rabbit-hole
+
+# Path to the rabbit-hole binary (adjust if installed elsewhere)
+ExecStart=/usr/local/bin/rabbit-hole serve
+
+# Restart policy
+Restart=always
+RestartSec=5s
+
+# Graceful shutdown — SIGTERM triggers cleanup (drain buffer, close DB, stop server)
+TimeoutStopSec=30s
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/rabbit-hole /var/log/rabbit-hole
+
+# eBPF capabilities — required for kernel-level trace collection
+AmbientCapabilities=CAP_BPF CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_BPF CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_NET_ADMIN CAP_NET_RAW
+
+# Resource limits
+MemoryMax=2G
+MemoryHigh=1.5G
+LimitNOFILE=65536
+LimitNPROC=256
+
+# Logging — journald captures stdout/stderr
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rabbit-hole
+
+# Environment file for configuration (optional)
+# Create /etc/rabbit-hole/env with RABBITHOLE_* variables
+EnvironmentFile=-/etc/rabbit-hole/env
+
+[Install]
+WantedBy=multi-user.target
