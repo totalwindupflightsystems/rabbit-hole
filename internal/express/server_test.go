@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -481,6 +484,141 @@ func TestWebSocket(t *testing.T) {
 	json.Unmarshal(msg, &flow)
 	if flow.ID != "ws-flow-1" {
 		t.Errorf("got flow %s", flow.ID)
+	}
+}
+
+// TestStress_ConcurrentWebSocket verifies STR-006: 100 concurrent WebSocket
+// connections receive all published flows with no dropped messages and no
+// cross-talk between sessions.
+func TestStress_ConcurrentWebSocket(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stress test — skipped in short mode")
+	}
+
+	srv, cl := newTestServer(t)
+	defer cl()
+
+	// Seed two sessions — one for the 100 connections, one for cross-talk check.
+	sess := seedSession(t, srv.store)
+	other := &types.Session{
+		ID: "0191a000-0000-7000-8000-000000000099", AgentPID: 99999, AgentName: "cross-talk",
+		StartTime: time.Now().UTC(), Status: types.SessionStatusRunning,
+		Metadata: types.SessionMetadata{WorkDir: "/tmp"},
+	}
+	if err := srv.store.StoreSession(context.Background(), other); err != nil {
+		t.Fatalf("StoreSession other: %v", err)
+	}
+
+	const numConns = 100
+	const numFlows = 50
+
+	type connResult struct {
+		id       int
+		received int
+		errors   []string
+	}
+
+	url := "ws://" + srv.Addr() + "/api/v1/ws/sessions/" + sess.ID
+
+	var dialErrCount atomic.Int32
+	var wg sync.WaitGroup
+	results := make([]connResult, numConns)
+
+	for i := 0; i < numConns; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+			if err != nil {
+				results[id].id = id
+				results[id].errors = append(results[id].errors, "dial: "+err.Error())
+				dialErrCount.Add(1)
+				return
+			}
+			defer conn.Close()
+			results[id].id = id
+
+			for {
+				conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+				_, msg, err := conn.ReadMessage()
+				if err != nil {
+					break
+				}
+				var flow types.Flow
+				if err := json.Unmarshal(msg, &flow); err != nil {
+					results[id].errors = append(results[id].errors, "unmarshal: "+err.Error())
+					continue
+				}
+				results[id].received++
+			}
+		}(i)
+	}
+
+	// Wait for all connections to dial and subscribe.
+	wgReady := make(chan struct{})
+	go func() {
+		time.Sleep(2 * time.Second)
+		close(wgReady)
+	}()
+	<-wgReady
+
+	if n := dialErrCount.Load(); n > 0 {
+		t.Fatalf("%d connections failed to dial", n)
+	}
+
+	// Publish flows to the target session.
+	for j := 0; j < numFlows; j++ {
+		srv.PublishFlow(sess.ID, types.Flow{
+			ID:        fmt.Sprintf("stress-ws-%d", j),
+			SessionID: sess.ID,
+			Intent:    "stress_test",
+			Outcome:   types.FlowOutcomeSuccess,
+		})
+	}
+
+	// Also publish to the other session — should NOT be received by our connections.
+	srv.PublishFlow(other.ID, types.Flow{
+		ID: "stress-ws-cross-talk", SessionID: other.ID,
+		Intent: "cross_talk", Outcome: types.FlowOutcomeSuccess,
+	})
+
+	// Wait for delivery, then close the server to terminate connections.
+	time.Sleep(500 * time.Millisecond)
+	srv.Shutdown(context.Background())
+
+	// Wait for all goroutines to finish.
+	wg.Wait()
+
+	// Collect results.
+	totalReceived := 0
+	failures := 0
+	fullReceipts := 0
+	for _, res := range results {
+		if len(res.errors) > 0 {
+			failures++
+			for _, e := range res.errors {
+				t.Errorf("conn %d: %s", res.id, e)
+			}
+			continue
+		}
+		totalReceived += res.received
+		if res.received == numFlows {
+			fullReceipts++
+		}
+	}
+
+	if failures > 0 {
+		t.Fatalf("%d/%d connections failed", failures, numConns)
+	}
+
+	t.Logf("100 connections: %d full receipts, %d total messages received (expected %d)",
+		fullReceipts, totalReceived, numConns*numFlows)
+
+	if fullReceipts < numConns {
+		t.Errorf("only %d/%d connections received all %d flows", fullReceipts, numConns, numFlows)
+	}
+	if totalReceived != numConns*numFlows {
+		t.Errorf("total received %d, expected %d (possible cross-talk or drops)", totalReceived, numConns*numFlows)
 	}
 }
 
