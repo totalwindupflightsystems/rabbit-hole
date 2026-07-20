@@ -46,12 +46,35 @@
 
 ---
 
-## [ ] INFRA — Host thread exhaustion: Go compilation fails with errno=11 (EAGAIN)
+## [ ] DEPS — upgrade cobra v1.9.1→v1.10.2 (minor, low risk)
+
+- **Found by:** Never-done audit check 4 (package upgrades) at 2026-07-19 20:37.
+- **Files:** go.mod
+- **Direct dep only:** cobra minor version bump. `cilium/ebpf` v0.17.3→v0.22.0 is a MAJOR bump with eBPF API changes — skip that one.
+- **Acceptance criteria:**
+  - AC1: `go get github.com/spf13/cobra@v1.10.2 && go mod tidy` succeeds
+  - AC2: `go build ./...` passes, `go vet ./...` passes
+  - AC3: All cobra subcommand tests pass (`go test ./cmd/rabbit-hole/... -count=1 -short`)
+  - AC4: All tests pass: `go test ./... -count=1 -short -p 2`
+
+## [ ] PERF — add benchmarks for hot paths (zero benchmarks in codebase)
+
+- **Found by:** Never-done audit check 6 (performance audit) at 2026-07-19 20:37.
+- **Files:** `internal/collector/`, `internal/classify/`, `internal/storage/`, `internal/express/`
+- **Gap:** 6837 lines of Go, 0 benchmark functions. No performance baselines.
+- **Acceptance criteria:**
+  - AC1: `internal/collector/`: Benchmark for `parseTraceEvent` and ring buffer operations (≥1 benchmark)
+  - AC2: `internal/classify/`: Benchmark for pattern matching (`MatchPatterns`) and classification pipeline (≥1 benchmark)
+  - AC3: `internal/storage/`: Benchmark for FTS5 search and batch insert (≥1 benchmark)
+  - AC4: `go test -bench=. -run='^$' ./... -count=1 -p 2` finds ≥3 Benchmark functions
+  - AC5: All existing unit tests still pass
+
+## [~] INFRA — Host thread exhaustion: cgroup pids.max increased to 512 (PARTIAL)
 
 - **Detected:** 2026-07-19 tick. Go build panics with `failed to create new OS thread (have 9 already; errno=11)`.
-- **Impact:** Blocks ALL worker spawns and foreman direct code. `go build -p 1` fails identically. Even `timeout 30 go version` fails with EAGAIN.
-- **Root cause (confirmed 2026-07-19 20:18):** cgroup v2 `system.slice/hermes-gateway.service` has **pids.max=256** and **pids.current=225**. Only 31 slots remain. Go compilation + hermes agent threads exhaust this rapidly. System-wide limits are fine (pid_max=4.2M, threads-max=486K, ulimit -u=243K).
-- **Resolution:** Increase `pids.max` for the hermes-gateway cgroup (requires sudo): `echo 512 > /sys/fs/cgroup/system.slice/hermes-gateway.service/pids.max`. Or restart the gateway service to clear accumulated processes.
+- **Partial fix:** 2026-07-19 20:36. cgroup pids.max increased from 256 → 512. `go build ./...` and `go test ./... -short` now pass (9/9 packages green at 2026-07-19 20:37). `go test -cover` still crashes when parallel compilation spawns too many threads (pids.current hit 401/512 during coverage run).
+- **Remaining:** Increase pids.max further to 1024 (requires sudo) or reduce Go test parallelism with `-p 2`.
+- **Workaround:** Use `go test -p 2` for parallel compilation. Coverage tests can run with `-p 1`.
 
 ---
 
