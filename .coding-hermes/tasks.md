@@ -58,7 +58,7 @@
   - AC3: ✅ `go test ./cmd/rabbit-hole/... -count=1 -short` passes (0.792s)
   - AC4: ⚠️ `go test ./...` — cobra package passes; 3 packages (proto, storage, types) hit pre-existing thread exhaustion (INFRA, not cobra-related)
 
-## [x] DEPS-002 — upgrade modernc.org/sqlite v1.35.0→v1.54.0 ✅ <commit>
+## [x] DEPS-002 — upgrade modernc.org/sqlite v1.35.0→v1.54.0 ✅ 7be5b5d
 
 - **Found by:** Never-done audit check 4 at 2026-07-20 04:16.
 - **Direct dep:** `modernc.org/sqlite` is imported by `internal/storage/sqlite.go` — 19 minor versions behind.
