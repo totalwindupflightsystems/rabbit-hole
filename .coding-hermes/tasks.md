@@ -78,6 +78,7 @@
 - **Remaining:** Increase pids.max further to 1024+ (requires sudo). This is a host-level blocker — NO Go foreman or worker tasks can proceed until resolved.
 - **Impact:** ALL Phase 2-9 tasks (INT, STR, DEP, PROD, DOC requiring go doc, E2E, REL) are BLOCKED. Only documentation (Phase 6 prose) and DuckBrain (Phase 8) tasks are possible without a working Go toolchain.
 - **2026-07-20 00:17 tick:** Foreman could not spawn a worker for INT-004. Environment blocked.
+- **2026-07-20 05:28 tick (idle #2):** Worsening — even `curl` forks fail with "Resource temporarily unavailable." Discovery sweep: binary smoke OK (health 200, Hilo 78 files/411 edges), but `/api/v1/status` returns 404. All code tasks blocked. Idle tick counter=2.
 
 ---
 
