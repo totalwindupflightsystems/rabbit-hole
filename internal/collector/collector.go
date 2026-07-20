@@ -1,3 +1,5 @@
+// Package collector provides eBPF-based kernel telemetry collection for agent process monitoring.
+
 package collector
 
 import (

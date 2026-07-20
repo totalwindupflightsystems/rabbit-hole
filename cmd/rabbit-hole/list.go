@@ -1,3 +1,6 @@
+// Package main — Rabbit-Hole CLI. Agent legibility through eBPF collection,
+// pluggable classification, and natural-language expression.
+
 package main
 
 import (

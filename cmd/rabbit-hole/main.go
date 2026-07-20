@@ -1,5 +1,8 @@
 // Rabbit-Hole: agent legibility platform.
 // Three layers, one binary: COLLECT (eBPF) → CLASSIFY (Gemma) → EXPRESS (chat).
+// Package main — Rabbit-Hole CLI. Agent legibility through eBPF collection,
+// pluggable classification, and natural-language expression.
+
 package main
 
 import (

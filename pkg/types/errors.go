@@ -1,3 +1,5 @@
+// Package types defines core data types: Flow, Session, ContextWindow, and error types for the Rabbit-Hole agent legibility system.
+
 package types
 
 import "fmt"

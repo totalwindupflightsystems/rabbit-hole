@@ -1,3 +1,6 @@
+// Package classify provides pluggable classification backends:
+// local Gemma 3 via Ollama, remote gRPC, and pattern matching for fast-path classification.
+
 package classify
 
 import (

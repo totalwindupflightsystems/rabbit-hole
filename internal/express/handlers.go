@@ -1,3 +1,5 @@
+// Package express provides the chat API, WebSocket streaming, and HTTP expression server.
+
 package express
 
 import (

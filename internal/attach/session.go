@@ -1,3 +1,5 @@
+// Package attach provides session attachment and lifecycle management for eBPF-based agent monitoring.
+
 package attach
 
 import (

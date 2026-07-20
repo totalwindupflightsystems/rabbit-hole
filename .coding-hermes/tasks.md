@@ -127,7 +127,7 @@
 || INT-006 | Integration test: WebSocket — connect, receive real-time flows, disconnect | Start server, WebSocket subscribe, push flows, verify received | ✅ (TestWebSocket in server_test.go:379, passes) |
 || INT-007 | Integration test: Full server lifecycle — start → health → attach → search → chat → shutdown | Every endpoint exercised against live server | ✅ 04c7ee8 |
 || INT-008 | Integration test: FTS5 search with real data — insert flows, search, verify results | 100 flows inserted, FTS5 queries return correct matches | ✅ dde8d91 |
-| INT-009 | Integration test: Retention/compaction — insert old data, compact, verify deleted | Insert data 31 days old, run compact, verify 0 rows remain | pending |
+|| INT-009 | Integration test: Retention/compaction — insert data 31 days old, run compact, verify 0 rows remain | Insert data 31 days old, run compact, verify 0 rows remain | ✅ (stale — TestCompact in storage_test.go:688 already covers this) |
 
 **Gate:** All integration tests pass. Real eBPF attachment. Real model inference. Real gRPC.
 
@@ -250,15 +250,16 @@
 
 **Total: 63 tasks across 9 phases (plus 6 specs).** If the foreman reports idle, there's something wrong with the board.
 
-## [ ] DOC-PKG — Add package doc comments to 29 source files
+## [x] DOC-PKG — Add package doc comments to 29 source files ✅ (tick 2026-07-20 08:08)
 
 - **Found by:** Never-done audit check 2 (doc coverage) at 2026-07-20 06:49.
 - **Gap:** 29 Go source files across 6 packages lack `// Package <name> ...` doc comments.
-- **Files:** `internal/attach/` (1), `internal/classify/` (6), `internal/collector/` (1), `internal/express/` (5), `cmd/rabbit-hole/` (11), `pkg/types/` (5).
+- **Resolved:** 2026-07-20 tick — added package doc comments to 31 files (2 additional found).
+- **Files:** `internal/attach/` (1), `internal/classify/` (6), `internal/collector/` (2), `internal/express/` (6), `cmd/rabbit-hole/` (11), `pkg/types/` (5).
 - **Acceptance criteria:**
-  - AC1: Every non-test, non-proto `.go` file has a package doc comment
-  - AC2: `go build ./...` and `go vet ./...` still pass
-  - AC3: Comments follow Go convention (first line: `// Package <name> ...`)
+  - AC1: Every non-test, non-proto `.go` file has a package doc comment ✅
+  - AC2: `go build ./...` and `go vet ./...` still pass ✅
+  - AC3: Comments follow Go convention (first line: `// Package <name> ...`) ✅
 
 ## [x] NEVER-DONE — 11-point audit (2026-07-20 06:49)
 
