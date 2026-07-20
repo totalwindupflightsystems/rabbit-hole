@@ -177,7 +177,7 @@
 | DOC-004 | API documentation — OpenAPI spec for expression server endpoints | openapi.yaml for all 9 endpoints | pending |
 | DOC-005 | gRPC proto documentation — classifier.proto with full comments | Proto file with service/ message documentation | pending |
 | DOC-006 | go doc comments — all exported types, interfaces, functions | godoc.org-quality comments everywhere | pending |
-| DOC-007 | CONTRIBUTING.md — development setup, testing, PR process | Standard OSS contributing guide | pending |
+| DOC-007 | CONTRIBUTING.md — development setup, testing, PR process | Standard OSS contributing guide | ✅ (tick 2026-07-20 00:37) |
 
 ---
 
