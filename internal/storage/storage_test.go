@@ -1246,3 +1246,55 @@ func BenchmarkSQLiteStore_SearchFlows(b *testing.B) {
 		}
 	}
 }
+
+func TestStress_100KTraceInsert(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stress: use -short to skip")
+	}
+
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	session := &types.Session{
+		ID:        "stress-100k",
+		AgentPID:  99999,
+		AgentName: "stress-test",
+		StartTime: time.Now().UTC(),
+		Status:    types.SessionStatusRunning,
+	}
+	if err := store.StoreSession(ctx, session); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+
+	const traceCount = 100_000
+	traces := make([]types.Trace, traceCount)
+	baseTime := time.Now().UTC()
+	for i := range traces {
+		traces[i] = types.Trace{
+			ID:        fmt.Sprintf("stress-trace-%06d", i),
+			PID:       99999,
+			Timestamp: baseTime.Add(time.Duration(i) * time.Nanosecond),
+			Category:  types.TraceCategoryFile,
+			Syscall:   "read",
+		}
+	}
+
+	start := time.Now()
+	err := store.StoreTraces(ctx, traces)
+	elapsed := time.Since(start)
+	t.Logf("inserted %d traces in %s", traceCount, elapsed)
+	if err != nil {
+		t.Fatalf("StoreTraces: %v", err)
+	}
+
+	var count int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM traces`).Scan(&count); err != nil {
+		t.Fatalf("count traces: %v", err)
+	}
+	if count != traceCount {
+		t.Fatalf("trace count = %d, want %d", count, traceCount)
+	}
+	if elapsed >= 30*time.Second {
+		t.Fatalf("StoreTraces took %s, want under 30s", elapsed)
+	}
+}
