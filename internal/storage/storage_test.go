@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -1296,5 +1298,243 @@ func TestStress_100KTraceInsert(t *testing.T) {
 	}
 	if elapsed >= 30*time.Second {
 		t.Fatalf("StoreTraces took %s, want under 30s", elapsed)
+	}
+}
+
+func TestStress_ConcurrentFTS5Search(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stress: use -short to skip")
+	}
+
+	store := newTestStore(t)
+	defer store.Close()
+	ctx := context.Background()
+
+	// Seed session
+	session := &types.Session{
+		ID:        "stress-concurrent-fts5",
+		AgentPID:  99998,
+		AgentName: "stress-test",
+		StartTime: time.Now().UTC(),
+		Status:    types.SessionStatusRunning,
+	}
+	if err := store.StoreSession(ctx, session); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+
+	// Generate 100 flows with varied, searchable descriptions
+	descriptors := []struct {
+		intent, desc string
+		phase        types.FlowPhase
+	}{
+		// 20 read_file flows
+		{"read_file", "Read auth middleware source", types.FlowPhaseObservation},
+		{"read_file", "Read main entrypoint", types.FlowPhaseObservation},
+		{"read_file", "Read Dockerfile from root", types.FlowPhaseObservation},
+		{"read_file", "Read middleware handler", types.FlowPhaseObservation},
+		{"read_file", "Read router configuration", types.FlowPhaseObservation},
+		{"read_file", "Read storage layer source", types.FlowPhaseObservation},
+		{"read_file", "Read classifier module", types.FlowPhaseObservation},
+		{"read_file", "Read API route file", types.FlowPhaseObservation},
+		{"read_file", "Read session type file", types.FlowPhaseObservation},
+		{"read_file", "Read flow definition file", types.FlowPhaseObservation},
+		{"read_file", "Read context window module", types.FlowPhaseObservation},
+		{"read_file", "Read trace data model", types.FlowPhaseObservation},
+		{"read_file", "Read go.mod dependencies", types.FlowPhaseObservation},
+		{"read_file", "Read README documentation", types.FlowPhaseObservation},
+		{"read_file", "Read Makefile build targets", types.FlowPhaseObservation},
+		{"read_file", "Read schema SQL file", types.FlowPhaseObservation},
+		{"read_file", "Read eBPF kernel source", types.FlowPhaseObservation},
+		{"read_file", "Read service journal logs", types.FlowPhaseObservation},
+		{"read_file", "Read metrics endpoint code", types.FlowPhaseObservation},
+		{"read_file", "Read deployment manifest", types.FlowPhaseObservation},
+
+		// 15 patch_code flows
+		{"patch_code", "Patched auth middleware for rate limiting", types.FlowPhaseAction},
+		{"patch_code", "Patched rate limiter in middleware", types.FlowPhaseAction},
+		{"patch_code", "Patched error handler for timeout", types.FlowPhaseAction},
+		{"patch_code", "Patched retry policy for HTTP", types.FlowPhaseAction},
+		{"patch_code", "Patched FTS5 trigger for contentless", types.FlowPhaseAction},
+		{"patch_code", "Patched SQLite driver for FK", types.FlowPhaseAction},
+		{"patch_code", "Patched deployment script for staging", types.FlowPhaseAction},
+		{"patch_code", "Patched classification model", types.FlowPhaseAction},
+		{"patch_code", "Patched HTTP handler for shutdown", types.FlowPhaseAction},
+		{"patch_code", "Patched flow aggregator for sessions", types.FlowPhaseAction},
+		{"patch_code", "Patched trace buffer ring size", types.FlowPhaseAction},
+		{"patch_code", "Patched observability middleware", types.FlowPhaseAction},
+		{"patch_code", "Patched session migration schema", types.FlowPhaseAction},
+		{"patch_code", "Patched JWT validation refresh", types.FlowPhaseAction},
+		{"patch_code", "Patched test fixture loader", types.FlowPhaseAction},
+
+		// 10 search_web flows
+		{"search_web", "Searched for Go FTS5 best practices", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for SQLite optimization", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for HTTP middleware patterns", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for eBPF program types", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for API rate limit strategies", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for JWT signing algorithms", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for context window token limits", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for trace sampling algorithms", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for deployment rollout patterns", types.FlowPhaseDeliberation},
+		{"search_web", "Searched for observability stack options", types.FlowPhaseDeliberation},
+
+		// 8 llm_api_call flows
+		{"llm_api_call", "LLM API call to GPT for code review", types.FlowPhaseAction},
+		{"llm_api_call", "LLM API call to Claude for summarization", types.FlowPhaseAction},
+		{"llm_api_call", "LLM API call to Deepseek for analysis", types.FlowPhaseAction},
+		{"llm_api_call", "LLM API call for draft generation", types.FlowPhaseAction},
+		{"llm_api_call", "LLM API call to Llama for inference", types.FlowPhaseAction},
+		{"llm_api_call", "LLM API call for classification", types.FlowPhaseAction},
+		{"llm_api_call", "LLM API call for embeddings", types.FlowPhaseAction},
+		{"llm_api_call", "LLM API call for translation task", types.FlowPhaseAction},
+
+		// 5 write_file flows
+		{"write_file", "Wrote configuration manifest to disk", types.FlowPhaseAction},
+		{"write_file", "Wrote test file with edge fixtures", types.FlowPhaseAction},
+		{"write_file", "Wrote JSON report to artifacts", types.FlowPhaseAction},
+		{"write_file", "Wrote protobuf bindings to tree", types.FlowPhaseAction},
+		{"write_file", "Wrote coverage summary to root", types.FlowPhaseAction},
+
+		// 5 execute_command flows
+		{"execute_command", "Executed go build for verification", types.FlowPhaseAction},
+		{"execute_command", "Executed go test suite run", types.FlowPhaseAction},
+		{"execute_command", "Executed go vet static analysis", types.FlowPhaseAction},
+		{"execute_command", "Executed git push to remote", types.FlowPhaseAction},
+		{"execute_command", "Executed docker compose up", types.FlowPhaseAction},
+
+		// 7 inspect_database flows
+		{"inspect_database", "Inspected Postgres schema migration", types.FlowPhaseObservation},
+		{"inspect_database", "Inspected SQLite schema FK", types.FlowPhaseObservation},
+		{"inspect_database", "Inspected FTS5 index health", types.FlowPhaseObservation},
+		{"inspect_database", "Inspected vacuum status SQLite", types.FlowPhaseObservation},
+		{"inspect_database", "Inspected row counts sessions", types.FlowPhaseObservation},
+		{"inspect_database", "Inspected WAL file write size", types.FlowPhaseObservation},
+		{"inspect_database", "Inspected query planner hot paths", types.FlowPhaseObservation},
+
+		// 7 deploy_service flows
+		{"deploy_service", "Deployed to staging environment", types.FlowPhaseAction},
+		{"deploy_service", "Deployed to production", types.FlowPhaseAction},
+		{"deploy_service", "Deployed canary to edge region", types.FlowPhaseAction},
+		{"deploy_service", "Deployed rollback to stable tag", types.FlowPhaseAction},
+		{"deploy_service", "Deployed blue-green switch", types.FlowPhaseAction},
+		{"deploy_service", "Deployed hotfix to production", types.FlowPhaseAction},
+		{"deploy_service", "Deployed feature flag update", types.FlowPhaseAction},
+
+		// 5 read_logs flows
+		{"read_logs", "Read application error logs from journal", types.FlowPhaseObservation},
+		{"read_logs", "Read access logs for rate limit hits", types.FlowPhaseObservation},
+		{"read_logs", "Read deployment audit trail", types.FlowPhaseObservation},
+		{"read_logs", "Read database slow query log", types.FlowPhaseObservation},
+		{"read_logs", "Read API gateway metrics log", types.FlowPhaseObservation},
+
+		// 5 create_session flows
+		{"create_session", "Created new agent session for coding", types.FlowPhaseObservation},
+		{"create_session", "Created billing session for usage", types.FlowPhaseObservation},
+		{"create_session", "Created debug session for tracing", types.FlowPhaseObservation},
+		{"create_session", "Created admin session for config", types.FlowPhaseObservation},
+		{"create_session", "Created monitoring session for health", types.FlowPhaseObservation},
+
+		// 6 verify_result flows
+		{"verify_result", "Verified build artifact integrity", types.FlowPhaseVerification},
+		{"verify_result", "Verified test coverage percentage", types.FlowPhaseVerification},
+		{"verify_result", "Verified deployment health checks", types.FlowPhaseVerification},
+		{"verify_result", "Verified API response schema", types.FlowPhaseVerification},
+		{"verify_result", "Verified database migration applied", types.FlowPhaseVerification},
+		{"verify_result", "Verified rate limit configuration", types.FlowPhaseVerification},
+
+		// 7 unknown/edge flows (timeout, error, gap scenarios)
+		{"unknown", "Detected anomaly in trace buffer", types.FlowPhaseObservation},
+		{"unknown", "Triggered circuit breaker on timeout", types.FlowPhaseObservation},
+		{"unknown", "Failed to connect database backend", types.FlowPhaseObservation},
+		{"read_file", "Timed out reading large binary file", types.FlowPhaseObservation},
+		{"patch_code", "Patch error handler for timeout recovery", types.FlowPhaseAction},
+		{"execute_command", "Command timeout exceeded limit", types.FlowPhaseAction},
+		{"read_logs", "Scanned logs for timeout patterns", types.FlowPhaseObservation},
+	}
+
+	flows := make([]types.Flow, len(descriptors))
+	baseTime := time.Now().UTC()
+	for i, d := range descriptors {
+		flows[i] = types.Flow{
+			ID:          fmt.Sprintf("stress-flow-%03d", i),
+			SessionID:   session.ID,
+			Intent:      d.intent,
+			Phase:       d.phase,
+			Description: d.desc,
+			Outcome:     types.FlowOutcomeSuccess,
+			Confidence:  0.9,
+			StartTime:   baseTime.Add(-time.Duration(len(descriptors)-i) * time.Second),
+			EndTime:     baseTime,
+			Duration:    10 * time.Millisecond,
+		}
+	}
+
+	if err := store.StoreFlows(ctx, flows); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	// Queries that exercise FTS5 path
+	queries := []string{
+		"auth", "patch", "search", "timeout", "deploy", "read_file",
+		"error handler", "middleware", "rate limit", "log",
+		"session", "verify", "database", "health", "build",
+	}
+
+	const concurrency = 100
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	latencies := make([]time.Duration, 0, concurrency)
+
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			q := queries[rand.Intn(len(queries))]
+
+			start := time.Now()
+			_, err := store.SearchFlows(ctx, q, 20)
+			elapsed := time.Since(start)
+
+			mu.Lock()
+			latencies = append(latencies, elapsed)
+			mu.Unlock()
+
+			if err != nil {
+				t.Errorf("goroutine %d: SearchFlows(%q): %v", idx, q, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Compute percentiles
+	sort.Slice(latencies, func(i, j int) bool {
+		return latencies[i] < latencies[j]
+	})
+
+	p := func(pct float64) time.Duration {
+		idx := int(float64(len(latencies)) * pct / 100.0)
+		if idx >= len(latencies) {
+			idx = len(latencies) - 1
+		}
+		return latencies[idx]
+	}
+
+	p50 := p(50)
+	p75 := p(75)
+	p90 := p(90)
+	p99 := p(99)
+	p999 := p(99.9)
+
+	t.Logf("concurrent FTS5 search latencies (n=%d):", concurrency)
+	t.Logf("  p50:  %v", p50)
+	t.Logf("  p75:  %v", p75)
+	t.Logf("  p90:  %v", p90)
+	t.Logf("  p99:  %v", p99)
+	t.Logf("  p999: %v", p999)
+	t.Logf("  min:  %v", latencies[0])
+	t.Logf("  max:  %v", latencies[len(latencies)-1])
+
+	if p99 >= 50*time.Millisecond {
+		t.Fatalf("p99 latency = %v, want < 50ms", p99)
 	}
 }
