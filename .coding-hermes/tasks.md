@@ -58,7 +58,7 @@
   - AC3: ✅ `go test ./cmd/rabbit-hole/... -count=1 -short` passes (0.792s)
   - AC4: ⚠️ `go test ./...` — cobra package passes; 3 packages (proto, storage, types) hit pre-existing thread exhaustion (INFRA, not cobra-related)
 
-## [ ] PERF — add benchmarks for hot paths (zero benchmarks in codebase)
+## [x] PERF — add benchmarks for hot paths ✅ 7d103a5
 
 - **Found by:** Never-done audit check 6 (performance audit) at 2026-07-19 20:37.
 - **Files:** `internal/collector/`, `internal/classify/`, `internal/storage/`, `internal/express/`
