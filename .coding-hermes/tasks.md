@@ -49,9 +49,9 @@
 ## [ ] INFRA — Host thread exhaustion: Go compilation fails with errno=11 (EAGAIN)
 
 - **Detected:** 2026-07-19 tick. Go build panics with `failed to create new OS thread (have 9 already; errno=11)`.
-- **Impact:** Blocks ALL worker spawns and foreman direct code. `go build -p 1` fails identically. cgroup pids files also return EAGAIN.
-- **Likely cause:** cgroup process/thread limit reached on host. System has ample resources (59GB RAM, load 3.8, ulimit -u 243115, 143 processes) but Go runtime thread creation is blocked.
-- **Resolution:** Restart host or increase cgroup pids.max. Check Docker/cgroup v2 limits if running in container.
+- **Impact:** Blocks ALL worker spawns and foreman direct code. `go build -p 1` fails identically. Even `timeout 30 go version` fails with EAGAIN.
+- **Root cause (confirmed 2026-07-19 20:18):** cgroup v2 `system.slice/hermes-gateway.service` has **pids.max=256** and **pids.current=225**. Only 31 slots remain. Go compilation + hermes agent threads exhaust this rapidly. System-wide limits are fine (pid_max=4.2M, threads-max=486K, ulimit -u=243K).
+- **Resolution:** Increase `pids.max` for the hermes-gateway cgroup (requires sudo): `echo 512 > /sys/fs/cgroup/system.slice/hermes-gateway.service/pids.max`. Or restart the gateway service to clear accumulated processes.
 
 ---
 
