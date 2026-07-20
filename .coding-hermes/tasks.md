@@ -58,6 +58,17 @@
   - AC3: ✅ `go test ./cmd/rabbit-hole/... -count=1 -short` passes (0.792s)
   - AC4: ⚠️ `go test ./...` — cobra package passes; 3 packages (proto, storage, types) hit pre-existing thread exhaustion (INFRA, not cobra-related)
 
+## [ ] DEPS-002 — upgrade modernc.org/sqlite v1.35.0→v1.54.0
+
+- **Found by:** Never-done audit check 4 at 2026-07-20 04:16.
+- **Direct dep:** `modernc.org/sqlite` is imported by `internal/storage/sqlite.go` — 19 minor versions behind.
+- **Risk:** Moderate — pure-Go SQLite, no CGo. Breaking changes possible in WAL/journal behavior.
+- **Acceptance criteria:**
+  - AC1: `go get modernc.org/sqlite@v1.54.0 && go mod tidy` succeeds
+  - AC2: `go build ./...` passes
+  - AC3: `go test ./internal/storage/... -count=1 -short` passes (storage tests exercise real SQLite)
+  - AC4: FTS5 search and retention/compaction still work
+
 ## [x] PERF — add benchmarks for hot paths ✅ 7d103a5
 
 - **Found by:** Never-done audit check 6 (performance audit) at 2026-07-19 20:37.
@@ -100,7 +111,7 @@
 | INT-001 | Integration test: attach eBPF to real process (not test binary) | Spawn `sleep 5`, attach, verify syscall traces captured | ✅ 078f49c |
 | INT-002 | Integration test: attach → detach lifecycle, session cleanup | Attach, verify session created, detach, verify cleanup | ✅ ba4e9b6 |
 | INT-003 | Integration test: TLS interception (attach to HTTPS-making process) | Attach to `curl https://example.com`, verify TLS probes fire | ✅ 0e7f23b |
-| INT-004 | Integration test: Gemma model loaded + classify real trace batch | Load Gemma 3 4B, feed recorded traces, verify classification output | pending |
+| INT-004 | Integration test: Gemma model loaded + classify real trace batch | Load Gemma 3 4B, feed recorded traces, verify classification output | ✅ 45a916b |
 | INT-005 | Integration test: Remote gRPC backend against real classifier server | Start classifier-only rabbit-hole, connect remote backend, classify | pending |
 | INT-006 | Integration test: WebSocket — connect, receive real-time flows, disconnect | Start server, WebSocket subscribe, push flows, verify received | pending |
 | INT-007 | Integration test: Full server lifecycle — start → health → attach → search → chat → shutdown | Every endpoint exercised against live server | pending |
