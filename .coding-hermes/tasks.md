@@ -81,12 +81,15 @@
 
 ---
 
-## [ ] CI — GitLab pipeline #502 FAILED (2026-07-20)
+## [~] CI — GitLab pipeline #502 FAILED (2026-07-20) — ROOT CAUSE: Runner capacity (INFRA)
 
-- **Found by:** Step 1.6 signal scan at 2026-07-20 00:17.
-- **Pipeline:** #502 failed, #496 canceled, #492 canceled. Recent CI is non-functional.
-- **Action:** Investigate failure root cause — may be thread exhaustion affecting runner, or a code regression. Check job logs via GitLab API.
-- **Priority:** High — blocks merge validation.
+- **Investigated:** 2026-07-20 05:28 UTC. GitLab API confirmed.
+- **Pipeline #502:** Build job failed with `stuck_or_timeout_failure`, `runner=None`. All 4 jobs (build, vet, test, vulncheck) show no runner assigned. Pipeline #477 same pattern.
+- **Pipeline #504:** Pending (created 05:22) — likely to suffer same fate.
+- **Runners:** Zero online runners returned by GitLab API query.
+- **Root cause:** GitLab runner(s) are either offline or resource-starved. This matches the host-level thread exhaustion (pids.max=512) — the runner process can't fork enough threads to compile Go, times out, and gets stuck. NOT a code regression.
+- **Verdict:** CI failures are an INFRA issue, not a code issue. Resolution requires host-level intervention (sudo increase pids.max, restart GitLab runner). Blocked on INFRA task resolution.
+- **Priority:** High — blocks merge validation but is not actionable until INFRA is fixed.
 
 ---
 
