@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"testing"
@@ -1664,4 +1666,128 @@ func TestStress_ConcurrentSessionIsolation(t *testing.T) {
 	if len(seen) != numSessions*flowsPerSession {
 		t.Errorf("total unique flows returned: %d, want %d", len(seen), numSessions*flowsPerSession)
 	}
+}
+
+// ---------- Stress: WAL Pressure (STR-008) ----------
+
+func TestStress_WALPressure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stress: use -short to skip")
+	}
+
+	// File-backed DB so we can inspect the WAL file on disk.
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "wal-pressure.db")
+	store, err := NewSQLiteStore(dbPath, nil)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	ctx := context.Background()
+
+	// Create a session for FK constraint.
+	session := &types.Session{
+		ID:        "stress-wal-pressure",
+		AgentPID:  88888,
+		AgentName: "stress-test",
+		StartTime: time.Now().UTC(),
+		Status:    types.SessionStatusRunning,
+	}
+	if err := store.StoreSession(ctx, session); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+
+	const totalTraces = 1_000_000
+	const batchSize = 10_000
+	walFile := dbPath + "-wal"
+	shmFile := dbPath + "-shm"
+	baseTime := time.Now().UTC()
+
+	var maxWALSize int64
+	var maxSHMSize int64
+
+	start := time.Now()
+	numBatches := totalTraces / batchSize
+	for batch := 0; batch < numBatches; batch++ {
+		traces := make([]types.Trace, batchSize)
+		for i := range traces {
+			idx := batch*batchSize + i
+			traces[i] = types.Trace{
+				ID:        fmt.Sprintf("wal-trace-%07d", idx),
+				PID:       88888,
+				Timestamp: baseTime.Add(time.Duration(idx) * time.Nanosecond),
+				Category:  types.TraceCategoryFile,
+				Syscall:   "write",
+			}
+		}
+		if err := store.StoreTraces(ctx, traces); err != nil {
+			t.Fatalf("StoreTraces batch %d/%d: %v", batch, numBatches, err)
+		}
+
+		// Sample WAL size every batch.
+		if info, err := os.Stat(walFile); err == nil {
+			if info.Size() > maxWALSize {
+				maxWALSize = info.Size()
+			}
+		}
+		if info, err := os.Stat(shmFile); err == nil {
+			if info.Size() > maxSHMSize {
+				maxSHMSize = info.Size()
+			}
+		}
+	}
+	elapsed := time.Since(start)
+
+	// Primary DB file size.
+	dbInfo, err := os.Stat(dbPath)
+	if err != nil {
+		t.Fatalf("stat db: %v", err)
+	}
+
+	throughput := float64(totalTraces) / elapsed.Seconds()
+	t.Logf("total: %d traces in %s (%.0f traces/sec)", totalTraces, elapsed, throughput)
+	t.Logf("max WAL size:  %s bytes (%.2f MB)", formatBytes(maxWALSize), float64(maxWALSize)/(1024*1024))
+	t.Logf("max SHM size:  %s bytes (%.2f MB)", formatBytes(maxSHMSize), float64(maxSHMSize)/(1024*1024))
+	t.Logf("DB file size:  %s bytes (%.2f MB)", formatBytes(dbInfo.Size()), float64(dbInfo.Size())/(1024*1024))
+
+	// Verify WAL doesn't grow unbounded — must stay under 64MB.
+	if maxWALSize > 64*1024*1024 {
+		t.Fatalf("WAL grew to %d bytes (%.2f MB), want < 64 MB", maxWALSize, float64(maxWALSize)/(1024*1024))
+	}
+
+	// Verify all traces are stored.
+	var count int
+	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM traces`).Scan(&count); err != nil {
+		t.Fatalf("count traces: %v", err)
+	}
+	if count != totalTraces {
+		t.Fatalf("trace count = %d, want %d", count, totalTraces)
+	}
+
+	// Force a truncating checkpoint — WAL should go to 0.
+	if _, err := store.DB().ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		t.Fatalf("wal_checkpoint(TRUNCATE): %v", err)
+	}
+
+	walInfo, err := os.Stat(walFile)
+	if err == nil {
+		t.Logf("after TRUNCATE checkpoint: WAL size = %d bytes", walInfo.Size())
+		if walInfo.Size() > 0 {
+			t.Errorf("WAL file not truncated after checkpoint: %d bytes remaining", walInfo.Size())
+		}
+	}
+}
+
+func formatBytes(n int64) string {
+	const unit = 1000
+	if n < unit {
+		return fmt.Sprintf("%d", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%c", float64(n)/float64(div), "kMGTPE"[exp])
 }
