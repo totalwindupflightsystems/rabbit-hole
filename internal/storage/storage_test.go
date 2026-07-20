@@ -1538,3 +1538,130 @@ func TestStress_ConcurrentFTS5Search(t *testing.T) {
 		t.Fatalf("p99 latency = %v, want < 50ms", p99)
 	}
 }
+
+func TestStress_ConcurrentSessionIsolation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stress: use -short to skip")
+	}
+
+	store := newTestStore(t)
+	defer store.Close()
+	ctx := context.Background()
+
+	const numSessions = 10
+	const flowsPerSession = 5
+
+	// Create 10 sessions, each with 5 flows (50 total)
+	allFlows := make([]types.Flow, 0, numSessions*flowsPerSession)
+	baseTime := time.Now().UTC()
+
+	for si := 0; si < numSessions; si++ {
+		sessionID := fmt.Sprintf("str004-sess-%d", si)
+
+		sess := &types.Session{
+			ID:        sessionID,
+			AgentPID:  int32(9000 + si),
+			AgentName: "stress-test",
+			StartTime: baseTime,
+			Status:    types.SessionStatusRunning,
+			Metadata: types.SessionMetadata{
+				CommandLine: "stress",
+				Environment: map[string]string{},
+			},
+		}
+		if err := store.StoreSession(ctx, sess); err != nil {
+			t.Fatalf("StoreSession(%s): %v", sessionID, err)
+		}
+
+		for fi := 0; fi < flowsPerSession; fi++ {
+			flow := types.Flow{
+				ID:          fmt.Sprintf("str004-fl-%d-%d", si, fi),
+				SessionID:   sessionID,
+				Intent:      fmt.Sprintf("intent-%d-%d", si, fi),
+				Phase:       types.FlowPhaseObservation,
+				Description: fmt.Sprintf("flow %d in session %d", fi, si),
+				StartTime:   baseTime.Add(time.Duration(fi) * time.Second),
+				EndTime:     baseTime.Add(time.Duration(fi)*time.Second + 10*time.Millisecond),
+				Duration:    10 * time.Millisecond,
+			}
+			allFlows = append(allFlows, flow)
+		}
+	}
+
+	if err := store.StoreFlows(ctx, allFlows); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	// Run 10 goroutines concurrently — each queries flows for ONE specific session
+	var wg sync.WaitGroup
+	errs := make(chan error, numSessions)
+	results := make(chan []types.Flow, numSessions)
+
+	for si := 0; si < numSessions; si++ {
+		wg.Add(1)
+		go func(sessionIdx int) {
+			defer wg.Done()
+			sessionID := fmt.Sprintf("str004-sess-%d", sessionIdx)
+
+			flows, _, err := store.QueryFlows(ctx, types.FlowQuery{
+				SessionID: sessionID,
+				Limit:     100,
+			})
+			if err != nil {
+				errs <- fmt.Errorf("QueryFlows(%s): %v", sessionID, err)
+				return
+			}
+			results <- flows
+		}(si)
+	}
+
+	wg.Wait()
+	close(errs)
+	close(results)
+
+	// Check for errors
+	for err := range errs {
+		t.Errorf("concurrent error: %v", err)
+	}
+
+	// Collect results
+	seen := make(map[string]bool)     // track all flow IDs received
+	sessionCounts := make([]int, numSessions)
+
+	for flows := range results {
+		for _, f := range flows {
+			sessionIdx := f.SessionID[len("str004-sess-"):]
+			si := 0
+			if _, scanErr := fmt.Sscanf(sessionIdx, "%d", &si); scanErr != nil {
+				t.Errorf("unexpected session ID: %s", f.SessionID)
+				continue
+			}
+
+			// Verify flow belongs to the right session
+			expectedSessID := fmt.Sprintf("str004-sess-%d", si)
+			if f.SessionID != expectedSessID {
+				t.Errorf("cross-talk: flow %s has SessionID %s (expected %s)", f.ID, f.SessionID, expectedSessID)
+			}
+
+			// Check for duplicates
+			if seen[f.ID] {
+				t.Errorf("duplicate flow returned: %s", f.ID)
+			}
+			seen[f.ID] = true
+
+			sessionCounts[si]++
+		}
+	}
+
+	// Verify each session got EXACTLY 5 flows
+	for si := 0; si < numSessions; si++ {
+		if sessionCounts[si] != flowsPerSession {
+			t.Errorf("session %d: got %d flows, want %d", si, sessionCounts[si], flowsPerSession)
+		}
+	}
+
+	// Verify ALL 50 flows were returned (no gaps, no duplication)
+	if len(seen) != numSessions*flowsPerSession {
+		t.Errorf("total unique flows returned: %d, want %d", len(seen), numSessions*flowsPerSession)
+	}
+}
