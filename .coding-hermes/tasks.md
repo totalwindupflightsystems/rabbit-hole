@@ -129,7 +129,7 @@
 || INT-008 | Integration test: FTS5 search with real data — insert flows, search, verify results | 100 flows inserted, FTS5 queries return correct matches | ✅ dde8d91 |
 || INT-009 | Integration test: Retention/compaction — insert data 31 days old, run compact, verify 0 rows remain | Insert data 31 days old, run compact, verify 0 rows remain | ✅ (stale — TestCompact in storage_test.go:688 already covers this) |
 
-**Gate:** All integration tests pass. Real eBPF attachment. Real model inference. Real gRPC.
+**Gate:** All integration tests pass. Real eBPF attachment. Real model inference. Real gRPC. ✅
 
 ---
 
