@@ -3,7 +3,7 @@ module github.com/totalwindupflightsystems/rabbit-hole
 go 1.25.0
 
 require (
-	github.com/spf13/cobra v1.9.1
+	github.com/spf13/cobra v1.10.2
 	modernc.org/sqlite v1.35.0
 )
 
@@ -22,7 +22,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	golang.org/x/exp v0.0.0-20230315142452-642cacee5cc0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	google.golang.org/grpc v1.82.1
