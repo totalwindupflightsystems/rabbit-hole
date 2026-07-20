@@ -143,7 +143,7 @@
 || STR-004 | 10 concurrent sessions — filter map isolation, no cross-talk | 10 agents, verify each session only sees own traces | ✅ 6e7efcd |
 || STR-005 | Classification throughput benchmark — traces/sec through engine | Measure with/without model, with/without pattern matching | ✅ 517f831 |
 || STR-006 | 100 concurrent WebSocket connections — flow delivery, no dropped messages | Stress test gorilla/websocket under load | ✅ 81e7119 |
-| STR-007 | Memory leak detection — 1000 attach/detach cycles | Verify RSS returns to baseline | ✅ <commit> |
+| STR-007 | Memory leak detection — 1000 attach/detach cycles | Verify RSS returns to baseline | ✅ f6e409d |
 | STR-008 | SQLite WAL pressure — 1M trace inserts, verify WAL doesn't grow unbounded | WAL checkpoint behavior under sustained write load | pending |
 
 **Gate:** All stress tests pass. No memory leaks. P99 latency within bounds.
