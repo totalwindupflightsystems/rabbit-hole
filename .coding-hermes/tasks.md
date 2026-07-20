@@ -46,6 +46,15 @@
 
 ---
 
+## [ ] INFRA — Host thread exhaustion: Go compilation fails with errno=11 (EAGAIN)
+
+- **Detected:** 2026-07-19 tick. Go build panics with `failed to create new OS thread (have 9 already; errno=11)`.
+- **Impact:** Blocks ALL worker spawns and foreman direct code. `go build -p 1` fails identically. cgroup pids files also return EAGAIN.
+- **Likely cause:** cgroup process/thread limit reached on host. System has ample resources (59GB RAM, load 3.8, ulimit -u 243115, 143 processes) but Go runtime thread creation is blocked.
+- **Resolution:** Restart host or increase cgroup pids.max. Check Docker/cgroup v2 limits if running in container.
+
+---
+
 ## PHASE 2: Integration Tests — Real Infrastructure
 
 | ID | Task | Description | Status |
