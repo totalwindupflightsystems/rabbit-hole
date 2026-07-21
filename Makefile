@@ -24,3 +24,15 @@ clean:
 
 install:
 	$(GO) install $(GOFLAGS) ./cmd/rabbit-hole/
+
+bench:
+	$(GO) test -bench=. -benchtime=1s -run='^$$' ./... -count=1
+
+stress:
+	$(GO) test ./... -count=1 -race -timeout 10m
+
+integration:
+	$(GO) test ./... -count=1 -tags=integration -timeout 5m
+
+e2e:
+	$(GO) test ./... -count=1 -timeout 10m
