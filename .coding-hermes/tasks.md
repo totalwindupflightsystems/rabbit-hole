@@ -174,7 +174,7 @@
 | PROD-003 | Structured logging — JSON log format, request IDs, trace sampling | ~partial: config groundwork done (10e2316), wiring blocked by INFRA |
 | PROD-004 | Metrics endpoint — Prometheus /metrics with collector/classifier/express stats | goroutine count, trace rate, classify latency, buffer drops, session count | ✅ 8d6658f |
 | PROD-005 | Health endpoint depth — add classifier health, storage health, model loaded status | /health returns component-level status | pending |
-| PROD-006 | Graceful shutdown — SIGTERM drains ring buffer, closes DB, stops server | Signal handler with 30s drain timeout | pending |
+| PROD-006 | Graceful shutdown — SIGTERM drains ring buffer, closes DB, stops server | Signal handler with 30s drain timeout | ✅ 6d8346d |
 | PROD-007 | Crash recovery — WAL replay on restart, session state reconciliation | On start, mark running sessions as crashed, allow reattach | pending |
 | PROD-008 | Config validation at startup — fail fast on invalid config | Validate all env vars, model path existence, port availability | pending |
 
