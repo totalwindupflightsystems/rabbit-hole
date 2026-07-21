@@ -1,0 +1,47 @@
+# Git
+.git/
+.gitignore
+.gitlab-ci.yml
+.gitleaks.toml
+.gitreins/
+
+# Build output
+bin/
+/rabbit-hole
+*.exe
+*.test
+*.out
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Project data
+.rabbit-hole/
+data/
+.vfs/
+.coding-hermes/
+
+# Documentation (not needed at runtime)
+*.md
+specs/
+deploy/
+install.sh
+AGENTS.md
+CONTRIBUTING.md
+
+# Test / coverage
+coverage.out
+
+# Pre-built binary (will be rebuilt in container)
+rabbit-hole
+
+# eBPF generated files (architecture-specific, rebuilt in container)
+internal/collector/bpf/vmlinux.h
+*.o
