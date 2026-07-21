@@ -38,6 +38,10 @@ type Server struct {
 	// ChatModel translates NL to search queries and back.
 	chatModel ChatModel
 
+	// metrics owns the Prometheus registry and the background ticker
+	// that refreshes runtime gauges. See metrics.go.
+	metrics *MetricsCollector
+
 	// startTime records when the server was created, used for uptime.
 	startTime time.Time
 }
@@ -75,10 +79,18 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 		startTime: time.Now(),
 	}
 
+	s.metrics = NewMetricsCollector(s.startTime, logger)
+
 	s.mux = http.NewServeMux()
 
 	// Health
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+
+	// Prometheus metrics — bypasses auth and rate limit (see auth.go and
+	// middleware.go). Registered at both the root and /api/v1/metrics
+	// for parity with other endpoints.
+	s.mux.Handle("GET /metrics", s.metrics.Handler())
+	s.mux.Handle("GET /api/v1/metrics", s.metrics.Handler())
 
 	// Sessions
 	s.mux.HandleFunc("GET /api/v1/sessions", s.handleListSessions)
@@ -99,7 +111,7 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 
 	s.srv = &http.Server{
 		Addr:    addr,
-		Handler: withMiddleware(apiKeyMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger)), s.logger),
+		Handler: withMetrics(apiKeyMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger)), s.metrics, s.logger),
 	}
 
 	return s
@@ -124,11 +136,18 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.metrics != nil {
+		s.metrics.Stop()
+	}
 	return s.srv.Shutdown(ctx)
 }
 
 // Addr returns the server's listen address, useful for tests.
 func (s *Server) Addr() string { return s.srv.Addr }
+
+// Metrics returns the metrics collector so tests and external wiring
+// (e.g. classifying handlers) can record samples.
+func (s *Server) Metrics() *MetricsCollector { return s.metrics }
 
 // ---------- Stub Chat Model ----------
 
