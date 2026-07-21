@@ -157,7 +157,7 @@
 ||| DEP-001 | systemd unit file — rabbit-hole.service with eBPF capabilities | CAP_BPF, CAP_SYS_ADMIN, MemoryMax, Restart=always | ✅ 859412d |
 || DEP-002 | install.sh — one-command install with model download | curl | bash install, optional systemd enable | ✅ 77a2cf9 |
 || DEP-003 | Dockerfile — `docker run rabbit-hole serve` | Multi-stage build, eBPF capabilities, volume for data | ✅ c4af891 |
-| DEP-004 | Makefile completion — add bench, stress, integration, e2e targets | make bench, make stress, make integration, make e2e | pending |
+|| DEP-004 | Makefile completion — add bench, stress, integration, e2e targets | make bench, make stress, make integration, make e2e | ✅ 2a68c86 |
 | DEP-005 | Shell completion — bash, zsh, fish | cobra completion generation in install script | pending |
 | DEP-006 | CHANGELOG.md — track versions and changes | Semantic versioning, keep-a-changelog format | pending |
 
