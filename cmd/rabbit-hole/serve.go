@@ -53,6 +53,15 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 			}
 			defer store.Close()
 
+			// Crash recovery: reconcile sessions that were running at last shutdown.
+			count, err := store.ReconcileCrashedSessions(cobraCmd.Context())
+			if err != nil {
+				return fmt.Errorf("crash recovery: %w", err)
+			}
+			if count > 0 {
+				logger.Info("crash recovery: reconciled sessions", "count", count)
+			}
+
 			// 2. Collector
 			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
 			if err != nil {

@@ -472,6 +472,28 @@ func (s *SQLiteStore) UpdateSession(ctx context.Context, session *types.Session)
 	return nil
 }
 
+// ReconcileCrashedSessions marks all sessions with status 'running' as
+// 'crashed' with an end_time of now. Returns the number of sessions
+// reconciled. This is called on daemon startup to recover from an
+// unclean shutdown where the eBPF collector lost its ring buffer but
+// sessions were still marked running in the database.
+func (s *SQLiteStore) ReconcileCrashedSessions(ctx context.Context) (int, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE sessions SET status = 'crashed', end_time = ?, updated_at = datetime('now') WHERE status = 'running'`,
+		now,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("reconcile crashed sessions: %w", err)
+	}
+	count, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rows affected: %w", err)
+	}
+	s.logger.Info("reconciled crashed sessions", "count", count)
+	return int(count), nil
+}
+
 func scanSession(scanner interface{ Scan(...any) error }) (*types.Session, error) {
 	var s types.Session
 	var startTs, envJSON string

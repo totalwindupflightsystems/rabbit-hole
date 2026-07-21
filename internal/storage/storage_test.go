@@ -102,6 +102,102 @@ func TestListSessions(t *testing.T) {
 	}
 }
 
+func TestReconcileCrashedSessions(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Two running sessions (the ones that should be reconciled).
+	running1 := &types.Session{
+		ID:        "ses-reconcile-1",
+		AgentPID:  5001,
+		AgentName: "hermes",
+		StartTime: time.Now().UTC().Add(-10 * time.Minute),
+		Status:    types.SessionStatusRunning,
+		Metadata: types.SessionMetadata{
+			CommandLine: "hermes chat",
+			Environment: map[string]string{},
+		},
+	}
+	running2 := &types.Session{
+		ID:        "ses-reconcile-2",
+		AgentPID:  5002,
+		AgentName: "codex",
+		StartTime: time.Now().UTC().Add(-5 * time.Minute),
+		Status:    types.SessionStatusRunning,
+		Metadata: types.SessionMetadata{
+			CommandLine: "codex chat",
+			Environment: map[string]string{},
+		},
+	}
+	// One completed session that must remain untouched.
+	completedEnd := time.Now().UTC().Add(-time.Minute)
+	completed := &types.Session{
+		ID:        "ses-reconcile-done",
+		AgentPID:  5003,
+		AgentName: "test",
+		StartTime: time.Now().UTC().Add(-time.Hour),
+		EndTime:   &completedEnd,
+		Status:    types.SessionStatusCompleted,
+		Metadata: types.SessionMetadata{
+			CommandLine: "test",
+			Environment: map[string]string{},
+		},
+	}
+	for _, sess := range []*types.Session{running1, running2, completed} {
+		if err := store.StoreSession(ctx, sess); err != nil {
+			t.Fatalf("StoreSession(%s): %v", sess.ID, err)
+		}
+	}
+
+	// Reconcile — should report the 2 running sessions.
+	count, err := store.ReconcileCrashedSessions(ctx)
+	if err != nil {
+		t.Fatalf("ReconcileCrashedSessions: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("count = %d, want 2", count)
+	}
+
+	// The two previously-running sessions should now be 'crashed' with an end time.
+	for _, id := range []string{"ses-reconcile-1", "ses-reconcile-2"} {
+		got, err := store.GetSession(ctx, id)
+		if err != nil {
+			t.Fatalf("GetSession(%s): %v", id, err)
+		}
+		if got.Status != types.SessionStatusCrashed {
+			t.Errorf("%s: status = %q, want %q", id, got.Status, types.SessionStatusCrashed)
+		}
+		if got.EndTime == nil {
+			t.Errorf("%s: EndTime is nil, want non-nil", id)
+		} else if got.EndTime.IsZero() {
+			t.Errorf("%s: EndTime is zero, want populated", id)
+		}
+	}
+
+	// The completed session must be unchanged.
+	doneGot, err := store.GetSession(ctx, "ses-reconcile-done")
+	if err != nil {
+		t.Fatalf("GetSession(completed): %v", err)
+	}
+	if doneGot.Status != types.SessionStatusCompleted {
+		t.Errorf("completed: status = %q, want %q", doneGot.Status, types.SessionStatusCompleted)
+	}
+	if doneGot.EndTime == nil {
+		t.Errorf("completed: EndTime is nil, want original value preserved")
+	} else if !doneGot.EndTime.Equal(completedEnd) {
+		t.Errorf("completed: EndTime = %v, want %v (should be unchanged)", doneGot.EndTime, completedEnd)
+	}
+
+	// A second reconciliation should find no more running sessions.
+	count2, err := store.ReconcileCrashedSessions(ctx)
+	if err != nil {
+		t.Fatalf("ReconcileCrashedSessions (second call): %v", err)
+	}
+	if count2 != 0 {
+		t.Errorf("second count = %d, want 0", count2)
+	}
+}
+
 func TestUpdateSession(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
