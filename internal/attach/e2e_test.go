@@ -136,7 +136,7 @@ func TestE2E_ServeAttachSearchDetach(t *testing.T) {
 	})
 
 	// 5. Express server on a random free port.
-	server := express.NewServer(store, nil, "127.0.0.1:0")
+	server := express.NewServer(store, nil, "127.0.0.1:0", nil)
 	if err := server.Start(ctx); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}

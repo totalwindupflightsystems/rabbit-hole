@@ -54,6 +54,12 @@ type Config struct {
 	// Logging
 	LogLevel        string        // RABBITHOLE_LOG_LEVEL — default: info
 
+	// Rate Limiting
+	RateLimitEnabled   bool // RABBITHOLE_RATE_LIMIT_ENABLED — default: true
+	RateLimitSearchRPS int  // RABBITHOLE_RATE_LIMIT_SEARCH_RPS — default: 10
+	RateLimitChatRPS   int  // RABBITHOLE_RATE_LIMIT_CHAT_RPS — default: 5
+	RateLimitWSRPS     int  // RABBITHOLE_RATE_LIMIT_WS_RPS — default: 20
+
 	// Debug
 	BPFDebug        bool          // RABBITHOLE_BPF_DEBUG — default: false
 }
@@ -89,6 +95,10 @@ func Defaults() Config {
 		RetentionDays:    30,
 		CompactInterval:  1 * time.Hour,
 		LogLevel:         "info",
+		RateLimitEnabled:   true,
+		RateLimitSearchRPS: 10,
+		RateLimitChatRPS:   5,
+		RateLimitWSRPS:     20,
 		BPFDebug:         false,
 	}
 }
@@ -229,6 +239,27 @@ func Load() (Config, error) {
 		}
 		cfg.RetentionDays = n
 	}
+	if v := os.Getenv("RABBITHOLE_RATE_LIMIT_SEARCH_RPS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("RABBITHOLE_RATE_LIMIT_SEARCH_RPS: %w", err)
+		}
+		cfg.RateLimitSearchRPS = n
+	}
+	if v := os.Getenv("RABBITHOLE_RATE_LIMIT_CHAT_RPS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("RABBITHOLE_RATE_LIMIT_CHAT_RPS: %w", err)
+		}
+		cfg.RateLimitChatRPS = n
+	}
+	if v := os.Getenv("RABBITHOLE_RATE_LIMIT_WS_RPS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("RABBITHOLE_RATE_LIMIT_WS_RPS: %w", err)
+		}
+		cfg.RateLimitWSRPS = n
+	}
 
 	// Booleans
 	if v := os.Getenv("RABBITHOLE_TLS_INTERCEPT"); v != "" {
@@ -251,6 +282,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("RABBITHOLE_CHAT_ENABLED: %w", err)
 		}
 		cfg.ChatEnabled = b
+	}
+	if v := os.Getenv("RABBITHOLE_RATE_LIMIT_ENABLED"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("RABBITHOLE_RATE_LIMIT_ENABLED: %w", err)
+		}
+		cfg.RateLimitEnabled = b
 	}
 	if v := os.Getenv("RABBITHOLE_BPF_DEBUG"); v != "" {
 		b, err := strconv.ParseBool(v)
@@ -305,6 +343,15 @@ func (c Config) Validate() error {
 	}
 	if !validLogLevel(c.LogLevel) {
 		errs = append(errs, "RABBITHOLE_LOG_LEVEL must be one of: debug, info, warn, error")
+	}
+	if c.RateLimitSearchRPS < 1 {
+		errs = append(errs, "RABBITHOLE_RATE_LIMIT_SEARCH_RPS must be at least 1")
+	}
+	if c.RateLimitChatRPS < 1 {
+		errs = append(errs, "RABBITHOLE_RATE_LIMIT_CHAT_RPS must be at least 1")
+	}
+	if c.RateLimitWSRPS < 1 {
+		errs = append(errs, "RABBITHOLE_RATE_LIMIT_WS_RPS must be at least 1")
 	}
 
 	if len(errs) > 0 {

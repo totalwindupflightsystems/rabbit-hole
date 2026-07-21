@@ -29,7 +29,7 @@ func newTestServer(t *testing.T) (*Server, func()) {
 	addr := ln.Addr().String()
 	ln.Close()
 	store := newTestStore(t)
-	srv := NewServer(store, nil, addr)
+	srv := NewServer(store, nil, addr, nil)
 	if err := srv.Start(context.Background()); err != nil {
 		store.Close()
 		t.Fatalf("Start: %v", err)

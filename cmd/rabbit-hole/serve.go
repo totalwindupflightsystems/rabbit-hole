@@ -89,7 +89,13 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 			go pipeline.Run(cobraCmd.Context())
 
 			// 5. Expression server
-			server := express.NewServer(store, logger, cfg.ListenAddr)
+			rl := express.NewRateLimiter(
+				cfg.RateLimitSearchRPS,
+				cfg.RateLimitChatRPS,
+				cfg.RateLimitWSRPS,
+				cfg.RateLimitEnabled,
+			)
+			server := express.NewServer(store, logger, cfg.ListenAddr, rl)
 			if err := server.Start(cobraCmd.Context()); err != nil {
 				return fmt.Errorf("server: %w", err)
 			}

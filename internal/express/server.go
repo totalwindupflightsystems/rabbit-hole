@@ -28,6 +28,9 @@ type Server struct {
 	upgrader websocket.Upgrader
 	logger   *slog.Logger
 
+	// rateLimiter controls per-endpoint request rates.
+	rateLimiter *RateLimiter
+
 	// subscribers: sessionID -> list of flow channels
 	subscribers map[string][]chan types.Flow
 	subMu       sync.Mutex
@@ -53,7 +56,9 @@ type ChatModel interface {
 //   - If the OpenAI-compatible chat env vars are all set (RABBITHOLE_CHAT_MODEL_ENDPOINT,
 //     RABBITHOLE_CHAT_MODEL_NAME, RABBITHOLE_CHAT_MODEL_API_KEY), the RealChatModel is used.
 //   - Otherwise, the server logs a warning and falls back to the stub.
-func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string) *Server {
+//
+// Pass nil for rl to disable rate limiting. Pass nil for logger to use slog.Default().
+func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl *RateLimiter) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -61,6 +66,7 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string) *Se
 	s := &Server{
 		store:       store,
 		logger:      logger,
+		rateLimiter: rl,
 		subscribers: make(map[string][]chan types.Flow),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
@@ -93,7 +99,7 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string) *Se
 
 	s.srv = &http.Server{
 		Addr:    addr,
-		Handler: withMiddleware(s.mux, s.logger),
+		Handler: withMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger), s.logger),
 	}
 
 	return s

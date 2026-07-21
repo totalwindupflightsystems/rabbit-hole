@@ -4,9 +4,11 @@ package express
 
 import (
 	"bufio"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,6 +65,91 @@ func withMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
 			"request_id", reqID,
 		)
 	})
+}
+
+// endpointFromPath maps a URL path to its rate-limit endpoint category.
+// Returns empty string if the path should not be rate-limited.
+func endpointFromPath(path string) Endpoint {
+	switch {
+	case strings.HasPrefix(path, "/api/v1/search"):
+		return EndpointSearch
+	case strings.HasPrefix(path, "/api/v1/chat"):
+		return EndpointChat
+	case strings.HasPrefix(path, "/api/v1/ws/"):
+		return EndpointWebSocket
+	default:
+		return ""
+	}
+}
+
+// withRateLimit wraps a handler with per-endpoint rate limiting.
+// It skips rate limiting for the /health endpoint.
+// If rl is nil, all requests pass through (no rate limiting).
+func withRateLimit(next http.Handler, rl *RateLimiter, logger *slog.Logger) http.Handler {
+	if rl == nil {
+		return next
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip rate limiting for health checks.
+		if r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		endpoint := endpointFromPath(r.URL.Path)
+		if endpoint == "" {
+			// Non-rate-limited path — pass through.
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ip := clientIP(r)
+		allowed, retryAfter := rl.Allow(ip, endpoint)
+		if !allowed {
+			retrySec := int(retryAfter.Seconds())
+			if retrySec < 1 {
+				retrySec = 1
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", http.TimeFormat)
+			// Use a relative seconds value that clients can parse.
+			w.Header().Set("Retry-After", itoa(retrySec))
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(map[string]any{
+				"error":       "rate limit exceeded",
+				"retry_after": retrySec,
+			})
+			logger.Warn("rate limit exceeded",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"client_ip", ip,
+				"endpoint", endpoint,
+				"retry_after", retrySec,
+			)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// itoa converts an int to an ASCII string without importing strconv.
+// Used in the hot path for Retry-After header values.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	buf := [16]byte{}
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code.
