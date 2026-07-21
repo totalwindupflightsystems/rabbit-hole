@@ -170,7 +170,7 @@
 | ID | Task | Description | Status |
 |---|---|---|---|
 | PROD-001 | Rate limiting — per-endpoint limits on search/chat/websocket | Token bucket, configurable limits, 429 responses | ✅ 96d8224 |
-| PROD-002 | Authentication — API key or token for expression server | RABBITHOLE_API_KEY env var, 401 on all endpoints if set | pending |
+| PROD-002 | Authentication — API key or token for expression server | RABBITHOLE_API_KEY env var, 401 on all endpoints if set | ✅ 7dbf47f |
 | PROD-003 | Structured logging — JSON log format, request IDs, trace sampling | slog JSON handler with consistent field names | pending |
 | PROD-004 | Metrics endpoint — Prometheus /metrics with collector/classifier/express stats | goroutine count, trace rate, classify latency, buffer drops, session count | pending |
 | PROD-005 | Health endpoint depth — add classifier health, storage health, model loaded status | /health returns component-level status | pending |
