@@ -241,7 +241,7 @@
 | P1 | 7 coverage | All packages ≥60%, zero at 0% |
 | P2 | 9 integration | Real eBPF, real Gemma, real gRPC |
 | P3 | 8 stress | No leaks, P99 within bounds |
-| P4 | 6 deployment | One-command install works |
+| P4 | 6 deployment | One-command install works | ✅ |
 | P5 | 8 hardening | Metrics scrapeable, graceful shutdown |
 | P6 | 5 docs | godoc, OpenAPI, ADRs complete |
 | P7 | 6 E2E | Full agent session capture verified |
