@@ -159,7 +159,7 @@
 || DEP-003 | Dockerfile — `docker run rabbit-hole serve` | Multi-stage build, eBPF capabilities, volume for data | ✅ c4af891 |
 || DEP-004 | Makefile completion — add bench, stress, integration, e2e targets | make bench, make stress, make integration, make e2e | ✅ 2a68c86 |
 | DEP-005 | Shell completion — bash, zsh, fish | cobra completion generation in install script | ✅ 7cbc619 |
-| DEP-006 | CHANGELOG.md — track versions and changes | Semantic versioning, keep-a-changelog format | pending |
+| DEP-006 | CHANGELOG.md — track versions and changes | Semantic versioning, keep-a-changelog format | ✅ (tick 2026-07-20) |
 
 **Gate:** External dev goes zero → `rabbit-hole attach --pid <PID>` → `rabbit-hole chat` < 5 min.
 
