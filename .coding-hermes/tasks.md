@@ -186,7 +186,7 @@
 
 | ID | Task | Description | Status |
 |---|---|---|---|
-| DOC-003 | Architecture Decision Records — key design decisions in docs/adr/ | ADR-001: Go+eBPF, ADR-002: SQLite over Postgres, ADR-003: Pluggable classifiers | pending |
+| DOC-003 | Architecture Decision Records — key design decisions in docs/adr/ | ADR-001: Go+eBPF, ADR-002: SQLite over Postgres, ADR-003: Pluggable classifiers | ✅ 325d125 |
 | DOC-004 | API documentation — OpenAPI spec for expression server endpoints | openapi.yaml for all 9 endpoints | pending |
 | DOC-005 | gRPC proto documentation — classifier.proto with full comments | Proto file with service/ message documentation | pending |
 | DOC-006 | go doc comments — all exported types, interfaces, functions | godoc.org-quality comments everywhere | pending |
