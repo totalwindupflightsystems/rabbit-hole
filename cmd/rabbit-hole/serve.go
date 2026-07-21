@@ -96,6 +96,30 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 				cfg.RateLimitEnabled,
 			)
 			server := express.NewServer(store, logger, cfg.ListenAddr, rl)
+
+			// Wire component-level health checks. Storage and metrics are
+			// reported automatically by the server (they live on the Server
+			// struct). Classifier and collector are wired here because they
+			// are constructed in the serve command.
+			if cls != nil {
+				classifierDetail := "local model backend"
+				if remote != "" {
+					classifierDetail = "remote gRPC backend"
+				}
+				clsRef := cls
+				server.RegisterHealthCheck(express.HealthCheck{
+					Name:   "classifier",
+					Detail: classifierDetail,
+					Check:  clsRef.Health,
+				})
+			}
+			collRef := coll
+			server.RegisterHealthCheck(express.HealthCheck{
+				Name:   "collector",
+				Detail: "eBPF probes attached",
+				Check:  collRef.Health,
+			})
+
 			if err := server.Start(cobraCmd.Context()); err != nil {
 				return fmt.Errorf("server: %w", err)
 			}

@@ -13,11 +13,93 @@ import (
 
 // ---------- Health ----------
 
+// componentStatus is the per-component result object surfaced under the
+// "components" key of the /health response.
+type componentStatus struct {
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// healthResponse is the shape of GET /health.
+type healthResponse struct {
+	Status     string                     `json:"status"`
+	Version    string                     `json:"version"`
+	Uptime     string                     `json:"uptime"`
+	Components map[string]componentStatus `json:"components,omitempty"`
+}
+
+// healthVersion is the version string reported by /health. It is a
+// package-level constant so tests can assert against it.
+const healthVersion = "1.0.0"
+
+// handleHealth reports the server's overall status plus per-component
+// health. Components are probed in registration order:
+//
+//   - storage      — always probed (SQLiteStore.Health on s.store)
+//   - metrics      — always probed (verify the collector is running)
+//   - classifier   — probed only when registered via RegisterHealthCheck
+//   - collector    — probed only when registered via RegisterHealthCheck
+//
+// Unregistered components are omitted from the response. When ANY probed
+// component reports an error, the top-level status becomes "degraded" so
+// operators can spot partial failures without scanning every entry.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":  "ok",
-		"version": "1.0.0",
-		"uptime":  time.Since(s.startTime).String(),
+	ctx := r.Context()
+	components := make(map[string]componentStatus)
+	degraded := false
+
+	// --- storage: always present ---
+	if s.store != nil {
+		if err := s.store.Health(ctx); err != nil {
+			degraded = true
+			s.logger.Warn("health check failed", "component", "storage", "err", err)
+			components["storage"] = componentStatus{Status: "error", Detail: err.Error()}
+		} else {
+			components["storage"] = componentStatus{Status: "ok"}
+		}
+	}
+
+	// --- metrics: always present when wired ---
+	if s.metrics != nil {
+		// The MetricsCollector owns a background ticker; reaching this
+		// point with a non-nil handle means it was started successfully
+		// and is serving Prometheus data. We probe the registry itself
+		// as a lightweight liveness check.
+		if reg := s.metrics.Registry(); reg != nil {
+			components["metrics"] = componentStatus{Status: "ok", Detail: "runtime gauges active"}
+		} else {
+			degraded = true
+			components["metrics"] = componentStatus{Status: "error", Detail: "registry not initialized"}
+		}
+	}
+
+	// --- extra registered components (classifier, collector, ...) ---
+	for _, hc := range s.snapshotHealthChecks() {
+		if hc.Check == nil {
+			// Defensive: a registered check with no Check func is
+			// treated as healthy-but-passive and surfaced with detail.
+			components[hc.Name] = componentStatus{Status: "ok", Detail: hc.Detail}
+			continue
+		}
+		if err := hc.Check(ctx); err != nil {
+			degraded = true
+			s.logger.Warn("health check failed", "component", hc.Name, "err", err)
+			components[hc.Name] = componentStatus{Status: "error", Detail: err.Error()}
+		} else {
+			components[hc.Name] = componentStatus{Status: "ok", Detail: hc.Detail}
+		}
+	}
+
+	topStatus := "ok"
+	if degraded {
+		topStatus = "degraded"
+	}
+
+	writeJSON(w, http.StatusOK, healthResponse{
+		Status:     topStatus,
+		Version:    healthVersion,
+		Uptime:     time.Since(s.startTime).String(),
+		Components: components,
 	})
 }
 

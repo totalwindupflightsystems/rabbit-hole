@@ -44,6 +44,52 @@ type Server struct {
 
 	// startTime records when the server was created, used for uptime.
 	startTime time.Time
+
+	// healthChecks are extra components (classifier, collector) that the
+	// serve command wires in at construction time. Storage and metrics
+	// are reported unconditionally because they live on the Server.
+	healthChecks []HealthCheck
+
+	// healthMu guards healthChecks during registration.
+	healthMu sync.RWMutex
+}
+
+// HealthCheck is a named component probe for the /health endpoint. The
+// Detail string is surfaced verbatim in the per-component status object
+// when non-empty. Check must return nil when the component is healthy and
+// a descriptive error otherwise.
+type HealthCheck struct {
+	Name   string
+	Detail string
+	Check  func(ctx context.Context) error
+}
+
+// RegisterHealthCheck adds a component probe to the server's health
+// registry. Safe to call after NewServer (e.g. from the serve command
+// once the classifier and collector have been constructed). Names are
+// unique by last-writer-wins: registering a check with a duplicate name
+// replaces the previous entry.
+func (s *Server) RegisterHealthCheck(hc HealthCheck) {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	for i, existing := range s.healthChecks {
+		if existing.Name == hc.Name {
+			s.healthChecks[i] = hc
+			return
+		}
+	}
+	s.healthChecks = append(s.healthChecks, hc)
+}
+
+// snapshotHealthChecks returns a copy of the registered probes under the
+// read lock so handleHealth can iterate without holding the mutex while
+// each component runs its probe.
+func (s *Server) snapshotHealthChecks() []HealthCheck {
+	s.healthMu.RLock()
+	defer s.healthMu.RUnlock()
+	out := make([]HealthCheck, len(s.healthChecks))
+	copy(out, s.healthChecks)
+	return out
 }
 
 // ChatModel translates natural language to search queries and back.
