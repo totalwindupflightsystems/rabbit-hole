@@ -37,6 +37,7 @@ Self-hosted. One binary. Zero SDK.`,
 		newCompactCmd(),
 		newStatusCmd(),
 		newVersionCmd(),
+		newCompletionCmd(),
 	)
 
 	rootCmd.Execute()

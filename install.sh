@@ -146,6 +146,31 @@ if ! "$BINARY" version &>/dev/null; then
 fi
 log "Binary verified: $("$BINARY" version 2>&1 | head -1)"
 
+# --- Shell completions ---
+step "Installing shell completions"
+
+BASH_COMPLETIONS_DIR="/usr/share/bash-completion/completions"
+ZSH_COMPLETIONS_DIR="/usr/share/zsh/site-functions"
+FISH_COMPLETIONS_DIR="/usr/share/fish/vendor_completions.d"
+
+if [[ -d "$BASH_COMPLETIONS_DIR" ]]; then
+    "$BINARY" completion bash > "${BASH_COMPLETIONS_DIR}/rabbit-hole" 2>/dev/null && \
+        log "Bash completion installed to ${BASH_COMPLETIONS_DIR}/rabbit-hole" || \
+        warn "Failed to install bash completion"
+fi
+
+if [[ -d "$ZSH_COMPLETIONS_DIR" ]]; then
+    "$BINARY" completion zsh > "${ZSH_COMPLETIONS_DIR}/_rabbit-hole" 2>/dev/null && \
+        log "Zsh completion installed to ${ZSH_COMPLETIONS_DIR}/_rabbit-hole" || \
+        warn "Failed to install zsh completion"
+fi
+
+if [[ -d "$FISH_COMPLETIONS_DIR" ]]; then
+    "$BINARY" completion fish > "${FISH_COMPLETIONS_DIR}/rabbit-hole.fish" 2>/dev/null && \
+        log "Fish completion installed to ${FISH_COMPLETIONS_DIR}/rabbit-hole.fish" || \
+        warn "Failed to install fish completion"
+fi
+
 # --- Directories ---
 step "Setting up directories"
 
