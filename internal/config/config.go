@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -319,8 +320,30 @@ func (c Config) Validate() error {
 	if c.ListenAddr == "" {
 		errs = append(errs, "RABBITHOLE_LISTEN_ADDR must not be empty")
 	}
+	// Listen address must parse as host:port (e.g. 127.0.0.1:9734).
+	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
+		errs = append(errs, "RABBITHOLE_LISTEN_ADDR must be in host:port format (e.g., 127.0.0.1:9734)")
+	}
 	if c.DataDir == "" {
 		errs = append(errs, "RABBITHOLE_DATA_DIR must not be empty")
+	}
+	// DataDir must exist on disk — fail fast at startup rather than crashing later.
+	if c.DataDir != "" {
+		if info, err := os.Stat(c.DataDir); err != nil {
+			errs = append(errs, fmt.Sprintf("RABBITHOLE_DATA_DIR does not exist: %s", c.DataDir))
+		} else if !info.IsDir() {
+			errs = append(errs, fmt.Sprintf("RABBITHOLE_DATA_DIR is not a directory: %s", c.DataDir))
+		}
+	}
+	// Model path parent directory must exist, but only when the user explicitly
+	// set RABBITHOLE_MODEL_PATH. The default model path lives under DataDir which
+	// may not be populated yet in fresh installs; checking it there would break
+	// Defaults().Validate() and is covered by the DataDir check above.
+	if c.ModelPath != "" && os.Getenv("RABBITHOLE_MODEL_PATH") != "" {
+		parentDir := filepath.Dir(c.ModelPath)
+		if _, err := os.Stat(parentDir); err != nil {
+			errs = append(errs, fmt.Sprintf("RABBITHOLE_MODEL_PATH parent directory does not exist: %s", parentDir))
+		}
 	}
 	if c.BufferSize < 1000 {
 		errs = append(errs, "RABBITHOLE_BUFFER_SIZE must be at least 1000")

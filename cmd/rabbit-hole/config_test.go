@@ -74,22 +74,25 @@ func TestLoadConfigWithEnv(t *testing.T) {
 
 func TestLoadConfigDataDirOverride(t *testing.T) {
 	// Test that setting RABBITHOLE_DATA_DIR impacts dependent paths
-	os.Setenv("RABBITHOLE_DATA_DIR", "/tmp/test-rabbit")
+	// Create the dir so config.Validate() (wired into loadConfig via PROD-008)
+	// doesn't reject it for not existing.
+	dir := t.TempDir()
+	os.Setenv("RABBITHOLE_DATA_DIR", dir)
 	defer os.Unsetenv("RABBITHOLE_DATA_DIR")
 
 	cfg, err := loadConfig()
 	if err != nil {
 		t.Fatalf("loadConfig() returned error: %v", err)
 	}
-	if cfg.DataDir != "/tmp/test-rabbit" {
-		t.Errorf("DataDir = %q, want %q", cfg.DataDir, "/tmp/test-rabbit")
+	if cfg.DataDir != dir {
+		t.Errorf("DataDir = %q, want %q", cfg.DataDir, dir)
 	}
 	// DBPath and ModelPath should be re-derived from DataDir
-	if cfg.DBPath != "/tmp/test-rabbit/rabbit-hole.db" {
-		t.Errorf("DBPath = %q, want %q", cfg.DBPath, "/tmp/test-rabbit/rabbit-hole.db")
+	if cfg.DBPath != dir+"/rabbit-hole.db" {
+		t.Errorf("DBPath = %q, want %q", cfg.DBPath, dir+"/rabbit-hole.db")
 	}
-	if cfg.ModelPath != "/tmp/test-rabbit/models/gemma-3-4b.gguf" {
-		t.Errorf("ModelPath = %q, want %q", cfg.ModelPath, "/tmp/test-rabbit/models/gemma-3-4b.gguf")
+	if cfg.ModelPath != dir+"/models/gemma-3-4b.gguf" {
+		t.Errorf("ModelPath = %q, want %q", cfg.ModelPath, dir+"/models/gemma-3-4b.gguf")
 	}
 }
 

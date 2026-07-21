@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -288,6 +289,16 @@ func TestValidateErrors(t *testing.T) {
 			modify:  func(c *Config) { c.ModelThreads = 0 },
 			wantErr: "RABBITHOLE_MODEL_THREADS must be at least 1",
 		},
+		{
+			name:    "invalid listen address format",
+			modify:  func(c *Config) { c.ListenAddr = "bad-addr" },
+			wantErr: "RABBITHOLE_LISTEN_ADDR must be in host:port format (e.g., 127.0.0.1:9734)",
+		},
+		{
+			name:    "non-existent data dir",
+			modify:  func(c *Config) { c.DataDir = "/this/path/should/not/exist/rabbit-hole-test-xyz" },
+			wantErr: "RABBITHOLE_DATA_DIR does not exist",
+		},
 	}
 
 	for _, tt := range tests {
@@ -332,5 +343,29 @@ func TestLoadInvalidBool(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Fatal("expected error for invalid bool, got nil")
+	}
+}
+
+// TestValidateValidAddr confirms that a well-formed host:port listen address
+// passes the new SplitHostPort check without producing an error.
+func TestValidateValidAddr(t *testing.T) {
+	cfg := Defaults()
+	cfg.ListenAddr = "127.0.0.1:9734"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected validation to pass for 127.0.0.1:9734, got: %v", err)
+	}
+}
+
+// TestValidateDataDirNotExist confirms that a non-existent DataDir triggers a
+// validation error.
+func TestValidateDataDirNotExist(t *testing.T) {
+	cfg := Defaults()
+	cfg.DataDir = "/this/path/should/not/exist/rabbit-hole-test-xyz-12345"
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for non-existent DataDir, got nil")
+	}
+	if !strings.Contains(err.Error(), "RABBITHOLE_DATA_DIR does not exist") {
+		t.Errorf("expected error mentioning RABBITHOLE_DATA_DIR does not exist, got: %v", err)
 	}
 }

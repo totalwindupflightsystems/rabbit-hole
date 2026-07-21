@@ -13,7 +13,14 @@ import (
 )
 
 func loadConfig() (config.Config, error) {
-	return config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Config{}, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return config.Config{}, err
+	}
+	return cfg, nil
 }
 
 func newLogger(level string) *slog.Logger {
