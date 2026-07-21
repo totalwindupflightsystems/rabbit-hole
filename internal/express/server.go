@@ -99,7 +99,7 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 
 	s.srv = &http.Server{
 		Addr:    addr,
-		Handler: withMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger), s.logger),
+		Handler: withMiddleware(apiKeyMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger)), s.logger),
 	}
 
 	return s
