@@ -53,6 +53,7 @@ type Config struct {
 
 	// Logging
 	LogLevel        string        // RABBITHOLE_LOG_LEVEL — default: info
+	LogFormat       string        // RABBITHOLE_LOG_FORMAT — default: text (text|json)
 
 	// Rate Limiting
 	RateLimitEnabled   bool // RABBITHOLE_RATE_LIMIT_ENABLED — default: true
@@ -95,6 +96,7 @@ func Defaults() Config {
 		RetentionDays:    30,
 		CompactInterval:  1 * time.Hour,
 		LogLevel:         "info",
+		LogFormat:        "text",
 		RateLimitEnabled:   true,
 		RateLimitSearchRPS: 10,
 		RateLimitChatRPS:   5,
@@ -302,6 +304,9 @@ func Load() (Config, error) {
 	if v := os.Getenv("RABBITHOLE_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
 	}
+	if v := os.Getenv("RABBITHOLE_LOG_FORMAT"); v != "" {
+		cfg.LogFormat = v
+	}
 
 	return cfg, nil
 }
@@ -344,6 +349,9 @@ func (c Config) Validate() error {
 	if !validLogLevel(c.LogLevel) {
 		errs = append(errs, "RABBITHOLE_LOG_LEVEL must be one of: debug, info, warn, error")
 	}
+	if !validLogFormat(c.LogFormat) {
+		errs = append(errs, "RABBITHOLE_LOG_FORMAT must be one of: text, json")
+	}
 	if c.RateLimitSearchRPS < 1 {
 		errs = append(errs, "RABBITHOLE_RATE_LIMIT_SEARCH_RPS must be at least 1")
 	}
@@ -363,6 +371,15 @@ func (c Config) Validate() error {
 func validLogLevel(level string) bool {
 	switch level {
 	case "debug", "info", "warn", "error":
+		return true
+	default:
+		return false
+	}
+}
+
+func validLogFormat(format string) bool {
+	switch format {
+	case "text", "json":
 		return true
 	default:
 		return false
