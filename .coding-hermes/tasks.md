@@ -281,7 +281,7 @@
   - **Check 2 (doc coverage):** ✅ Only generated protobuf files lack comments — expected. DOC-006 tracked.
   - **Check 3 (test gaps):** ✅ Zero untested packages. All ≥60% coverage (classify 64.8%, config 75.3%, express 86.4%, storage 83.4%, types 100%).
   - **Check 4 (package upgrades):** ⚠️ `prometheus/client_golang` v1.22.0→v1.24.0 minor bump available. `cilium/ebpf` major bump intentionally blocked (known).
-  - **Check 5 (pitfall hunt):** ⚙️ `.gitleaks.toml` allowlist narrowed — removed `specs/`, `docs/`, `.*\\.md$` from allowlist. Gitleaks confirms 6.42MB clean in 677ms. Both `return nil, nil` hits are legitimate guard clauses. Zero TODO/FIXME/HACK.
+  - **Check 5 (pitfall hunt):** ⚙️ `.gitleaks.toml` allowlist narrowed — removed `specs/`, `docs/`, `.*\\\\.md$` from allowlist. Gitleaks confirms 6.42MB clean in 677ms. Both `return nil, nil` hits are legitimate guard clauses. Zero TODO/FIXME/HACK.
   - **Check 6 (performance):** ✅ 14 benchmarks across 3 packages. PERF tasks marked [x].
   - **Check 7 (endpoint verification):** ✅ 10 HTTP endpoints, 10 CLI subcommands, all with real handlers. No stubs.
   - **Check 8 (CI/CD health):** ⚠️ Pipeline #507 FAILED, zero online runners — INFRA, not code. No change since prior tick.
@@ -289,7 +289,7 @@
   - **Check 10 (code quality):** ✅ Zero TODOs, no untracked files, .gitignore complete. Hilo: 532 edges, 90 files, healthy.
   - **Check 11 (middle-out wiring):** ✅ `serve.go` imports all 5 internal packages, 10 CLIs via cobra, gRPC registration exists, config from env vars.
 - **New tasks created:** `## [x] DEPS-003 — upgrade prometheus/client_golang v1.22.0→v1.24.0 ✅ 049b892`
-- **Mechanical fixes applied:** `.gitleaks.toml` allowlist narrowed (removed `specs/`, `docs/`, `.*\\.md$`).
+- **Mechanical fixes applied:** `.gitleaks.toml` allowlist narrowed (removed `specs/`, `docs/`, `.*\\\\.md$`).
 
 ## Idle Tick #3 — 2026-07-22 01:00 UTC
 
@@ -395,3 +395,57 @@ All 11 checks identical to idle tick #4. No code changes, no spec changes, no de
 - **No worker spawned.** All quality gates green. Blockers are INFRA (host-level) and human-gated (release).
 
 **Idle tick #5 — 5/7 (cooldown at 12h).**
+
+## Idle Tick #6 — 2026-07-22 12:11 UTC
+
+> ⚠️ **HOST RESOURCE EXHAUSTION:** System load 4.57/4.99/5.32, 3730 processes. All terminal operations blocked by `BlockingIOError` / `can't start new thread`. Root: pids.max=512 cgroup limit saturated. NOT a project issue — host-level INFRA.
+
+### Discovery Sweep
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Build | 🔴 BLOCKED | Thread exhaustion — cannot fork `go build`. Binary `./bin/rabbit-hole` works. |
+| Vet | 🔴 BLOCKED | Same thread exhaustion. |
+| Tests | 🔴 BLOCKED | Same thread exhaustion. |
+| Vulns | 🔴 BLOCKED | `govulncheck` can't fork. |
+| Stubs/TODOs | ✅ | Zero real stubs. `stubChatModel` is a named type (keyword fallback model), not an unimplemented stub. Doc comments say "previously held hand-written stubs" (PAST tense). |
+| Binary | ✅ | `./bin/rabbit-hole --help` works. All CLI subcommands registered. |
+| CI (GitLab) | ⚠️ | INFRA-blocked — same root cause (zero online runners, same thread exhaustion). |
+| Remote | 🔴 BLOCKED | `git fetch` can't fork. Last known: no remote commits at idle tick #5. |
+| Hilo | 🔴 BLOCKED | `hilo graph stats` can't fork. Last known: 532 edges, 90 files, healthy. |
+| Deps | 🔴 BLOCKED | `go list` can't fork. Last known: 15 transitive bumps, cilium/ebpf major intentionally blocked. |
+
+### Never-Done Audit (from prior tick data)
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| 1. Spec alignment | ✅ | 6 specs, architecture matches code (no code changes since verified) |
+| 2. Doc coverage | ✅ | DOC-PKG done, OpenAPI spec exists |
+| 3. Test gaps | ✅ | 10/10 packages pass, all ≥60% coverage |
+| 4. Package upgrades | ✅ | Direct deps current. Transitive-only bumps are noise. |
+| 5. Pitfall hunt | ✅ | Zero stubs/TODOs/FIXMEs. gitleaks clean. |
+| 6. Performance | ✅ | 14 benchmarks across 3 packages |
+| 7. Endpoint verification | ✅ | 10 CLI + 10 HTTP, all real handlers. Binary works. |
+| 8. CI/CD health | ⚠️ | GitLab INFRA-blocked — zero online runners (host thread exhaustion) |
+| 9. DuckBrain | ✅ | 49 keys, all populated |
+| 10. Code quality | ✅ | 0 TODO/FIXME/HACK, Hilo 532 edges/90 files |
+| 11. Middle-out wiring | ✅ | serve.go imports all 5 internal packages |
+
+### Actions
+- **0 new tasks created.** All 11 checks pass or blocked by INFRA. REL-001 + REL-003 human-gated.
+- **No worker spawned.** Project is complete — 63 tasks across 9 phases all ✅.
+- **Cooldown at 12h (43200s)** — confirmed by idle tick #5 GET.
+
+### Graduated Slowdown Status
+| Tick | Date UTC | Cooldown | Action |
+|------|----------|----------|--------|
+| #1 | 2026-07-21 23:27 | 600s | Initial — never-done audit found DEPS-003 |
+| #2 | ~2026-07-22 00:00 | 1800s | Escalated — DEPS-003 completed |
+| #3 | 2026-07-22 01:00 | 14400s (4h) | Escalated — board sync (E2E, REL-002) |
+| #4 | 2026-07-22 04:10 | 14400s (4h) | Cooldown verified (prior tick fabricated) |
+| #5 | 2026-07-22 08:09 | 43200s (12h) | Escalated |
+| **#6** | **2026-07-22 12:11** | **43200s (12h)** | **This tick — HOST EXHAUSTION, all checks blocked** |
+
+**Next escalation:** At idle tick #7 (per coding-hermes-foreman § Self-Pause: "At 7+ idle ticks, escalate to Bane instead of disabling"). The next tick (~2026-07-23 00:11 UTC) will hit the escalation threshold.
+
+**Project status: COMPLETE.** 63/63 tasks across 9 phases done. Two human-gated release tasks remain (REL-001: cut v1.0.0 release, REL-003: external dev verification). Host thread exhaustion (pids.max=512) blocks all automated operations but binary and source are healthy.
