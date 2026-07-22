@@ -1,0 +1,1007 @@
+openapi: 3.1.0
+info:
+  title: Rabbit-Hole Expression Server API
+  version: 1.0.0
+  summary: HTTP and WebSocket interface for the Rabbit-Hole EXPRESS layer.
+  description: |
+    Rabbit-Hole makes AI-agent activity legible. This API is the EXPRESS layer
+    over COLLECT telemetry and CLASSIFY semantic flows: it provides health and
+    Prometheus observability, session and flow retrieval, structured search,
+    natural-language chat, and live flow streaming.
+
+    This contract implements the expression-layer design in
+    [S04 — Expression Layer](./04-Expression-Layer.md). Persistent objects and
+    their relationships are defined by [S05 — Storage & Data Model](./05-Storage-Data-Model.md).
+
+    Authentication is opt-in. When `RABBITHOLE_API_KEY` is unset, the server
+    permits every request. When it is set, routes marked with `ApiKeyAuth`
+    require the exact key in the `X-API-Key` header. `/health`, `/metrics`, and
+    `/api/v1/metrics` remain public for health probes and Prometheus scrapers.
+  contact:
+    name: Rabbit-Hole
+    url: https://gitlab.readydedis.com/rabbit-hole/rabbit-hole
+  license:
+    name: MIT
+    url: https://opensource.org/license/mit
+servers:
+  - url: http://localhost:8472
+    description: Default local expression server
+    variables: {}
+tags:
+  - name: Health
+    description: Liveness and component-health reporting.
+  - name: Metrics
+    description: Prometheus-format runtime and application metrics.
+  - name: Sessions
+    description: Monitored agent sessions.
+  - name: Flows
+    description: Semantic units of agent activity produced by CLASSIFY.
+  - name: Search
+    description: Full-text and structured flow search.
+  - name: Chat
+    description: Natural-language queries over agent activity.
+  - name: Streaming
+    description: Real-time flow events over WebSocket.
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Get server and component health
+      description: |
+        Returns overall health plus storage and metrics component status. Other
+        components, such as `classifier` and `collector`, are present only when
+        registered by the serve command. The response is `degraded` when any
+        reported component is in an `error` state.
+      security: []
+      responses:
+        '200':
+          description: Health report.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                version: 1.0.0
+                uptime: 5h30m15s
+                components:
+                  storage: {status: ok}
+                  metrics: {status: ok, detail: runtime gauges active}
+                  classifier: {status: ok}
+                  collector: {status: error, detail: ring buffer not started}
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /metrics:
+    get:
+      tags: [Metrics]
+      operationId: getMetrics
+      summary: Get Prometheus metrics
+      description: |
+        Exposes the server's dedicated Prometheus registry in text exposition
+        format. This endpoint bypasses API-key authentication and rate limiting.
+      security: []
+      responses:
+        '200':
+          description: Prometheus text exposition data.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP rabbit_hole_goroutines Number of goroutines that currently exist.
+                # TYPE rabbit_hole_goroutines gauge
+                rabbit_hole_goroutines 42
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/metrics:
+    get:
+      tags: [Metrics]
+      operationId: getMetricsV1
+      summary: Get Prometheus metrics (API v1 alias)
+      description: |
+        Alias of `GET /metrics`; it uses the same Prometheus handler and has
+        identical authentication and rate-limit bypass behavior.
+      security: []
+      responses:
+        '200':
+          description: Prometheus text exposition data.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions:
+    get:
+      tags: [Sessions]
+      operationId: listSessions
+      summary: List monitored sessions
+      description: Returns paginated session summaries. The server defaults `offset` to 0 and `limit` to 20, and caps `limit` at 100.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/SessionListLimit'
+      responses:
+        '200':
+          description: Paginated session summaries.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions/{id}:
+    get:
+      tags: [Sessions]
+      operationId: getSession
+      summary: Get a monitored session
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Full session object, including sanitized process metadata.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/flows/{id}:
+    get:
+      tags: [Flows]
+      operationId: getFlow
+      summary: Get a semantic flow
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FlowId'
+      responses:
+        '200':
+          description: Full semantic flow, optionally including its captured context window.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/FlowNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/flows/{id}/context-window:
+    get:
+      tags: [Flows]
+      operationId: getContextWindow
+      summary: Get a flow's captured context window
+      description: |
+        Returns the LLM context captured at the flow's decision point. Context
+        capture is optional and disabled by default because it can be expensive.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FlowId'
+      responses:
+        '200':
+          description: Captured context window.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextWindow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ContextWindowNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/search:
+    post:
+      tags: [Search]
+      operationId: searchFlows
+      summary: Search flows with full-text or structured filters
+      description: |
+        Searches FTS5 when `query` is supplied. With an empty query, the server
+        applies the structured filters and cursor pagination. Search execution
+        has a 30-second deadline. This endpoint is rate-limited by client IP
+        and endpoint using a token bucket.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            example:
+              query: read auth.go
+              session_id: 0191a000-0000-7000-8000-000000000001
+              time_range:
+                start: '2026-07-21T00:00:00Z'
+                end: '2026-07-21T23:59:59Z'
+              categories: [action]
+              outcomes: [success, failure]
+              limit: 50
+              cursor: ''
+              include_context_windows: false
+      responses:
+        '200':
+          description: Matching flows and pagination state.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequestBody'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '504':
+          $ref: '#/components/responses/SearchTimedOut'
+
+  /api/v1/chat:
+    post:
+      tags: [Chat]
+      operationId: chat
+      summary: Ask a natural-language question about agent activity
+      description: |
+        The chat model translates the message into a search, retrieves relevant
+        flows, generates a natural-language answer, and adds follow-up
+        suggestions. If answer generation fails, the server returns a
+        structured fallback answer. This endpoint is rate-limited by client IP
+        and endpoint using a token bucket.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            example:
+              message: What did helios do at 3am?
+              session_id: 0191a000-0000-7000-8000-000000000001
+      responses:
+        '200':
+          description: Natural-language answer, supporting flows, and suggestions.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          description: Invalid JSON request body or empty message.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidBody:
+                  value: {error: 'invalid request body: unexpected end of JSON input'}
+                missingMessage:
+                  value: {error: message is required}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/ws/sessions/{id}:
+    get:
+      tags: [Streaming]
+      operationId: streamSessionFlows
+      summary: Stream real-time flows for a session over WebSocket
+      description: |
+        Initiate an HTTP WebSocket upgrade using gorilla/websocket. Include
+        `X-API-Key` in the initial HTTP upgrade request. After a successful
+        `101 Switching Protocols` response, the server sends one complete
+        `Flow` JSON object per text message whenever a flow is published for
+        the session. The endpoint is rate-limited by client IP and endpoint.
+
+        The server sends a WebSocket Ping control message every 30 seconds. The
+        client must answer with Pong control messages; the read deadline is 60
+        seconds and is extended after every Pong. When the subscription channel
+        closes, the server sends a normal WebSocket close frame with reason
+        `session ended`.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: Connection
+          in: header
+          required: true
+          description: Must be `Upgrade` for the initial WebSocket request.
+          schema: {type: string, example: Upgrade}
+        - name: Upgrade
+          in: header
+          required: true
+          description: Must be `websocket` for the initial WebSocket request.
+          schema: {type: string, example: websocket}
+        - name: Sec-WebSocket-Key
+          in: header
+          required: true
+          description: Client-generated WebSocket handshake key.
+          schema: {type: string}
+        - name: Sec-WebSocket-Version
+          in: header
+          required: true
+          description: WebSocket protocol version.
+          schema: {type: string, example: '13'}
+      responses:
+        '101':
+          description: |
+            WebSocket upgrade accepted. Each subsequent text message is a JSON
+            `Flow` object. The server sends Ping every 30 seconds and a normal
+            close frame with `session ended` when the stream ends.
+          headers:
+            Upgrade:
+              schema: {type: string, example: websocket}
+            Connection:
+              schema: {type: string, example: Upgrade}
+            Sec-WebSocket-Accept:
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      x-websocket:
+        subprotocol: none
+        messageType: text
+        messageSchema:
+          $ref: '#/components/schemas/Flow'
+        pingInterval: PT30S
+        pongTimeout: PT60S
+        closeReason: session ended
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key configured through `RABBITHOLE_API_KEY`. Authentication is
+        enforced only when that environment variable is non-empty.
+
+  headers:
+    RequestId:
+      description: Request correlation ID. Echoes the incoming `X-Request-ID` or is generated as a UUID v7.
+      schema:
+        type: string
+        format: uuid
+    CorsAllowOrigin:
+      description: CORS middleware currently allows all origins.
+      schema:
+        type: string
+        example: '*'
+
+  parameters:
+    Offset:
+      name: offset
+      in: query
+      description: Zero-based number of sessions to skip.
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+    SessionListLimit:
+      name: limit
+      in: query
+      description: Maximum number of session summaries. Values greater than 100 are capped by the server.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+    SessionId:
+      name: id
+      in: path
+      required: true
+      description: UUID v7 that identifies a monitored agent session.
+      schema:
+        $ref: '#/components/schemas/UUIDv7'
+    FlowId:
+      name: id
+      in: path
+      required: true
+      description: UUID v7 that identifies a semantic flow.
+      schema:
+        $ref: '#/components/schemas/UUIDv7'
+
+  responses:
+    InvalidRequestBody:
+      description: Request JSON could not be decoded.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {error: 'invalid request body: unexpected end of JSON input'}
+    Unauthorized:
+      description: API key is missing or does not match `RABBITHOLE_API_KEY`.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {error: unauthorized}
+    SessionNotFound:
+      description: The requested session does not exist.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {error: session not found}
+    FlowNotFound:
+      description: The requested flow does not exist.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {error: flow not found}
+    ContextWindowNotFound:
+      description: Context windows are optional, and none is available for this flow.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {error: 'context window not available — may not have been captured'}
+    RateLimitExceeded:
+      description: Per-IP, per-endpoint token bucket has no available tokens.
+      headers:
+        Retry-After:
+          description: Number of seconds to wait before retrying.
+          schema: {type: integer, minimum: 1}
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RateLimitErrorResponse'}
+          example: {error: rate limit exceeded, retry_after: 30}
+    SearchTimedOut:
+      description: Search exceeded its 30-second execution deadline.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {error: 'search timed out — try narrowing your query'}
+    InternalServerError:
+      description: Unexpected server failure.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {error: internal server error}
+
+  schemas:
+    UUIDv7:
+      type: string
+      format: uuid
+      description: UUID version 7 identifier.
+      examples: ['0191a000-0000-7000-8000-000000000001']
+
+    RFC3339Timestamp:
+      type: string
+      format: date-time
+      description: UTC timestamp encoded as RFC 3339/RFC 3339 Nano text.
+      examples: ['2026-07-21T12:00:00Z']
+
+    GoDuration:
+      type: string
+      description: Go `time.Duration` string.
+      pattern: '^-?(?:[0-9]+(?:\.[0-9]+)?(?:ns|us|µs|ms|s|m|h))+$'
+      examples: [2s, 1.5s, 5h30m15s]
+
+    FlowPhase:
+      type: string
+      description: Stage in the agent decision cycle (`types.FlowPhase`).
+      enum: [observation, deliberation, action, verification]
+
+    FlowOutcome:
+      type: string
+      description: Result of a semantic flow (`types.FlowOutcome`).
+      enum: [success, failure, timeout, unknown]
+
+    SessionStatus:
+      type: string
+      description: Lifecycle state of a monitored session (`types.SessionStatus`).
+      enum: [running, completed, crashed, killed]
+
+    ComponentStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        detail:
+          type: string
+          description: Optional diagnostic text supplied by the component probe.
+
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, version, uptime, components]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        version:
+          type: string
+          description: Server version; currently `1.0.0`.
+          example: 1.0.0
+        uptime:
+          $ref: '#/components/schemas/GoDuration'
+        components:
+          type: object
+          description: |
+            Component name to health result. `storage` and `metrics` are always
+            reported by a normally initialized server; dynamically registered
+            component names include `classifier` and `collector`.
+          additionalProperties:
+            $ref: '#/components/schemas/ComponentStatus'
+          example:
+            storage: {status: ok}
+            metrics: {status: ok, detail: runtime gauges active}
+
+    SessionMetadata:
+      type: object
+      additionalProperties: false
+      required: [command_line, environment, work_dir, binary_path, version]
+      properties:
+        command_line:
+          type: string
+          description: Full command line of the monitored agent process.
+        environment:
+          type: object
+          description: Sanitized environment map; secrets should be redacted before persistence.
+          additionalProperties:
+            type: string
+          example: {OPENAI_API_KEY: '***'}
+        work_dir:
+          type: string
+        binary_path:
+          type: string
+        version:
+          type: string
+      example:
+        command_line: hermes chat
+        environment: {OPENAI_API_KEY: '***'}
+        work_dir: /home/kara
+        binary_path: /usr/local/bin/hermes
+        version: 0.18.2
+
+    Session:
+      type: object
+      additionalProperties: false
+      required: [id, agent_pid, agent_name, start_time, status, metadata]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDv7'
+        agent_pid:
+          type: integer
+          format: int32
+          description: Operating-system PID of the monitored agent process.
+          example: 12345
+        agent_name:
+          type: string
+          examples: [hermes, codex, claude-code]
+        start_time:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+        end_time:
+          anyOf:
+            - $ref: '#/components/schemas/RFC3339Timestamp'
+            - type: 'null'
+          description: Null while the session is running.
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        metadata:
+          $ref: '#/components/schemas/SessionMetadata'
+      example:
+        id: 0191a000-0000-7000-8000-000000000001
+        agent_pid: 12345
+        agent_name: hermes
+        start_time: '2026-07-21T12:00:00Z'
+        end_time: null
+        status: running
+        metadata:
+          command_line: hermes chat
+          environment: {OPENAI_API_KEY: '***'}
+          work_dir: /home/kara
+          binary_path: /usr/local/bin/hermes
+          version: 0.18.2
+
+    SessionSummary:
+      type: object
+      additionalProperties: false
+      required: [id, agent_pid, agent_name, start_time, status]
+      properties:
+        id: {$ref: '#/components/schemas/UUIDv7'}
+        agent_pid: {type: integer, format: int32}
+        agent_name: {type: string}
+        start_time: {$ref: '#/components/schemas/RFC3339Timestamp'}
+        end_time:
+          anyOf:
+            - $ref: '#/components/schemas/RFC3339Timestamp'
+            - type: 'null'
+        status: {$ref: '#/components/schemas/SessionStatus'}
+
+    SessionListResponse:
+      type: object
+      additionalProperties: false
+      required: [sessions, total, offset, limit]
+      properties:
+        sessions:
+          type: array
+          items: {$ref: '#/components/schemas/SessionSummary'}
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of summaries returned in this response.
+        offset:
+          type: integer
+          format: int32
+          minimum: 0
+        limit:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+      example:
+        sessions:
+          - id: 0191a000-0000-7000-8000-000000000001
+            agent_pid: 12345
+            agent_name: hermes
+            start_time: '2026-07-21T12:00:00Z'
+            end_time: null
+            status: running
+        total: 1
+        offset: 0
+        limit: 20
+
+    ContextWindow:
+      type: object
+      additionalProperties: false
+      required: [flow_id, timestamp, model_name, prompt_text, messages_in, messages_out, token_count, duration]
+      properties:
+        flow_id:
+          $ref: '#/components/schemas/UUIDv7'
+        timestamp:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+        model_name:
+          type: string
+          example: deepseek-v4-pro
+        prompt_text:
+          type: string
+          description: Complete system prompt visible to the model.
+        messages_in:
+          type: string
+          description: Captured inbound message history.
+        messages_out:
+          type: string
+          description: Captured model response.
+        token_count:
+          type: integer
+          format: int64
+          minimum: 0
+        duration:
+          $ref: '#/components/schemas/GoDuration'
+      example:
+        flow_id: 0191b000-0000-7000-8000-000000000001
+        timestamp: '2026-07-21T12:00:00Z'
+        model_name: deepseek-v4-pro
+        prompt_text: 'You are a helpful assistant.'
+        messages_in: '[{"role":"user","content":"Read auth.go"}]'
+        messages_out: '[{"role":"assistant","content":"..."}]'
+        token_count: 2048
+        duration: 1.5s
+
+    Flow:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - trace_ids
+        - intent
+        - phase
+        - description
+        - outcome
+        - confidence
+        - start_time
+        - end_time
+        - duration
+        - context_window
+        - metadata
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDv7'
+        session_id:
+          $ref: '#/components/schemas/UUIDv7'
+        trace_ids:
+          type: array
+          description: UUID v7 identifiers of traces grouped into this flow.
+          items: {$ref: '#/components/schemas/UUIDv7'}
+        intent:
+          type: string
+          description: |
+            Classifier intent, commonly `read_file`, `patch_code`, `search_web`,
+            or `llm_api_call`. Intent is intentionally open-ended.
+          examples: [read_file, patch_code, search_web, llm_api_call]
+        phase:
+          $ref: '#/components/schemas/FlowPhase'
+        description:
+          type: string
+          description: Human-readable description of the classified activity.
+        outcome:
+          $ref: '#/components/schemas/FlowOutcome'
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Classifier confidence from 0.0 through 1.0.
+        start_time:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+        end_time:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+        duration:
+          $ref: '#/components/schemas/GoDuration'
+        context_window:
+          anyOf:
+            - $ref: '#/components/schemas/ContextWindow'
+            - type: 'null'
+          description: Optional LLM decision-point snapshot.
+        metadata:
+          type: object
+          description: Arbitrary layer-specific JSON metadata.
+          additionalProperties: true
+      example:
+        id: 0191b000-0000-7000-8000-000000000001
+        session_id: 0191a000-0000-7000-8000-000000000001
+        trace_ids: [0191c000-0000-7000-8000-000000000001]
+        intent: read_file
+        phase: action
+        description: Read auth.go (247 lines, 2ms)
+        outcome: success
+        confidence: 0.95
+        start_time: '2026-07-21T12:00:00Z'
+        end_time: '2026-07-21T12:00:02Z'
+        duration: 2s
+        context_window: null
+        metadata: {}
+
+    TimeRange:
+      type: object
+      additionalProperties: false
+      properties:
+        start:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+        end:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+      description: Inclusive time-window filters. Both fields are optional.
+
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          description: FTS5 full-text query. Empty selects structured filtering instead.
+        session_id:
+          $ref: '#/components/schemas/UUIDv7'
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        categories:
+          type: array
+          description: Flow phases to include.
+          items: {$ref: '#/components/schemas/FlowPhase'}
+        outcomes:
+          type: array
+          description: Flow outcomes to include.
+          items: {$ref: '#/components/schemas/FlowOutcome'}
+        limit:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 500
+          default: 50
+          description: Maximum results; zero defaults to 50 and values above 500 are capped.
+        cursor:
+          type: string
+          description: Cursor returned by a preceding structured search.
+        include_context_windows:
+          type: boolean
+          default: false
+          description: Include optional context-window snapshots in matching flows.
+      example:
+        query: read auth.go
+        session_id: 0191a000-0000-7000-8000-000000000001
+        time_range:
+          start: '2026-07-21T00:00:00Z'
+          end: '2026-07-21T23:59:59Z'
+        categories: [action]
+        outcomes: [success, failure]
+        limit: 50
+        cursor: ''
+        include_context_windows: false
+
+    SearchResponse:
+      type: object
+      additionalProperties: false
+      required: [flows, total, cursor, has_more]
+      properties:
+        flows:
+          type: array
+          items: {$ref: '#/components/schemas/Flow'}
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of flows returned by this search operation.
+        cursor:
+          type: string
+          description: Next-page cursor, or an empty string when no next page exists.
+        has_more:
+          type: boolean
+          description: True when `cursor` contains another-page cursor.
+
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          description: Natural-language question about observed agent activity.
+        session_id:
+          $ref: '#/components/schemas/UUIDv7'
+          description: Optional session scope for the query.
+
+    ChatResponse:
+      type: object
+      additionalProperties: false
+      required: [answer, flows, suggestions]
+      properties:
+        answer:
+          type: string
+          description: Natural-language answer generated from matching flows.
+        flows:
+          type: array
+          description: Flows that support the answer.
+          items: {$ref: '#/components/schemas/Flow'}
+        suggestions:
+          type: array
+          description: Suggested follow-up natural-language questions.
+          items: {type: string}
+      example:
+        answer: At 3am, helios read auth.go, patched server.go, and searched for rate_limit.
+        flows: []
+        suggestions:
+          - Show all 47 results
+          - Why did these failures happen?
+          - What happened in the last hour?
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error detail.
+
+    RateLimitErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, retry_after]
+      properties:
+        error:
+          type: string
+          description: Human-readable error detail.
+        retry_after:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Relative retry delay in seconds; duplicates the `Retry-After` header.
+
+x-cors:
+  description: Middleware handles OPTIONS for every path before route dispatch.
+  allowOrigin: '*'
+  allowMethods: [GET, POST, OPTIONS]
+  allowHeaders: [Content-Type, X-Request-ID]
+  preflightStatus: 204
+x-api-notes:
+  - All responses receive `X-Request-ID`; callers may supply it to correlate a request.
+  - Endpoint-level rate limiting is a per-IP, per-endpoint token bucket for search, chat, and WebSocket upgrades.
+  - WebSocket flow data uses the same Flow schema as GET /api/v1/flows/{id}.
