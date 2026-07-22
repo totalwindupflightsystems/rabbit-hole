@@ -290,9 +290,9 @@
 - **New tasks created:** `## [x] DEPS-003 — upgrade prometheus/client_golang v1.22.0→v1.24.0 ✅ 049b892`
 - **Mechanical fixes applied:** `.gitleaks.toml` allowlist narrowed (removed `specs/`, `docs/`, `.*\.md$`).
 
-## Idle Tick #2 — 2026-07-22 00:21 UTC
+## Idle Tick #3 — 2026-07-22 01:00 UTC
 
-> Board cleanup + never-done re-audit. Scheduler cooldown: 1800s (30m).
+> Scheduler cooldown escalated: 1800s → 14400s (4h). Build/vet/vulncheck all green. 0 new tasks.
 
 ### Board sync
 - **E2E-001 through E2E-006:** Marked ✅ — all 6 E2E scenarios already tested. `TestE2E_ServeAttachSearchDetach`, `TestChat_ValidMessage`, `TestWebSocket`, `TestRemoteBackend_Integration`, `TestContextWindow`, `TestReconcileCrashedSessions` all exist and pass.
@@ -323,4 +323,4 @@
 - No worker spawned. No new code.
 - Scheduler cooldown: 1800s (30m). Recommend increase to 4h (14400s) if ≤3 consecutive idle ticks.
 
-**Idle tick #2 — 2/3 (no action ≤2).**
+**Idle tick #3 — 3/7 (cooldown escalated to 4h).**
