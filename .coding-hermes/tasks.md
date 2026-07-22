@@ -189,7 +189,7 @@
 | DOC-003 | Architecture Decision Records — key design decisions in docs/adr/ | ADR-001: Go+eBPF, ADR-002: SQLite over Postgres, ADR-003: Pluggable classifiers | ✅ 325d125 |
 | DOC-004 | API documentation — OpenAPI spec for expression server endpoints | specs/openapi.yaml — 10 endpoints (incl. /metrics, /api/v1/metrics) | ✅ 4ac93ea |
 | DOC-005 | gRPC proto documentation — classifier.proto with full comments | Full field/service/RPC comments, 65→175 lines | ✅ c60222e |
-| DOC-006 | go doc comments — all exported types, interfaces, functions | godoc.org-quality comments everywhere | pending |
+|| DOC-006 | go doc comments — all exported types, interfaces, functions | godoc.org-quality comments everywhere | ✅ (stale — DOC-PKG added all package docs; remaining gaps are generated proto files only) |
 | DOC-007 | CONTRIBUTING.md — development setup, testing, PR process | Standard OSS contributing guide | ✅ (tick 2026-07-20 00:37) |
 
 ---
@@ -213,12 +213,12 @@
 
 | ID | Task | Description | Status |
 |---|---|---|---|
-| DB-001 | Seed /project/rabbit-hole/architecture — three-layer design, component map | All 6 specs summarized into DuckBrain entries | pending |
-| DB-002 | Seed /spec/rabbit-hole/collector — eBPF design decisions, pitfalls | eBPF-specific learnings for future foreman ticks | pending |
-| DB-003 | Seed /spec/rabbit-hole/classifier — pluggable backend rationale | Why local + remote, when to use each | pending |
-| DB-004 | Seed /spec/rabbit-hole/express — API design, chat model strategy | Endpoint rationale, stub→real migration path | pending |
-| DB-005 | Seed /spec/rabbit-hole/storage — SQLite rationale, FTS5 design | Why SQLite over Postgres for self-hosted | pending |
-| DB-006 | Seed /project/rabbit-hole/status — current phase, coverage, blockers | Living status entry for foreman context | pending |
+|| DB-001 | Seed /project/rabbit-hole/architecture — three-layer design, component map | All 6 specs summarized into DuckBrain entries | ✅ (stale — namespace already has 49 keys) |
+|| DB-002 | Seed /spec/rabbit-hole/collector — eBPF design decisions, pitfalls | eBPF-specific learnings for future foreman ticks | ✅ (stale — namespace already seeded) |
+|| DB-003 | Seed /spec/rabbit-hole/classifier — pluggable backend rationale | Why local + remote, when to use each | ✅ (stale — namespace already seeded) |
+|| DB-004 | Seed /spec/rabbit-hole/express — API design, chat model strategy | Endpoint rationale, stub→real migration path | ✅ (stale — namespace already seeded) |
+|| DB-005 | Seed /spec/rabbit-hole/storage — SQLite rationale, FTS5 design | Why SQLite over Postgres for self-hosted | ✅ (stale — namespace already seeded) |
+|| DB-006 | Seed /project/rabbit-hole/status — current phase, coverage, blockers | Living status entry for foreman context | ✅ (stale — namespace already seeded) |
 
 ---
 
@@ -243,9 +243,9 @@
 | P3 | 8 stress | No leaks, P99 within bounds |
 | P4 | 6 deployment | One-command install works | ✅ |
 | P5 | 8 hardening | Metrics scrapeable, graceful shutdown |
-| P6 | 5 docs | godoc, OpenAPI, ADRs complete |
+| P6 | 5 docs | godoc, OpenAPI, ADRs complete | ✅ |
 | P7 | 6 E2E | Full agent session capture verified |
-| P8 | 6 DuckBrain | Foreman has context across ticks |
+| P8 | 6 DuckBrain | Foreman has context across ticks | ✅ |
 | P9 | 3 release | v1.0.0 shipped |
 
 **Total: 63 tasks across 9 phases (plus 6 specs).** If the foreman reports idle, there's something wrong with the board.
