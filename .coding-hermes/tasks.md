@@ -187,7 +187,7 @@
 | ID | Task | Description | Status |
 |---|---|---|---|
 | DOC-003 | Architecture Decision Records — key design decisions in docs/adr/ | ADR-001: Go+eBPF, ADR-002: SQLite over Postgres, ADR-003: Pluggable classifiers | ✅ 325d125 |
-| DOC-004 | API documentation — OpenAPI spec for expression server endpoints | openapi.yaml for all 9 endpoints | pending |
+| DOC-004 | API documentation — OpenAPI spec for expression server endpoints | specs/openapi.yaml — 10 endpoints (incl. /metrics, /api/v1/metrics) | ✅ 4ac93ea |
 | DOC-005 | gRPC proto documentation — classifier.proto with full comments | Proto file with service/ message documentation | pending |
 | DOC-006 | go doc comments — all exported types, interfaces, functions | godoc.org-quality comments everywhere | pending |
 | DOC-007 | CONTRIBUTING.md — development setup, testing, PR process | Standard OSS contributing guide | ✅ (tick 2026-07-20 00:37) |
@@ -261,7 +261,7 @@
   - AC2: `go build ./...` and `go vet ./...` still pass ✅
   - AC3: Comments follow Go convention (first line: `// Package <name> ...`) ✅
 
-## [x] NEVER-DONE — 11-point audit (2026-07-20 06:49)
+## [ ] NEVER-DONE — Run coding-hermes-never-done 11-point audit
 
 - **Audit run:** 2026-07-20 06:49 tick.
 - **Results:** 8/11 checks pass. 3 findings:
