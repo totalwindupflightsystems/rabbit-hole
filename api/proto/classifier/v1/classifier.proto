@@ -5,61 +5,171 @@ package classifier.v1;
 option go_package = "github.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1;classifierpb";
 
 // Classifier is a remote classification service for Rabbit-Hole trace groups.
+// It provides gRPC-based classification that can run as an alternative or
+// complement to the local Gemma classifier. The remote backend is selected
+// at startup via the --classifier-backend flag (see rabbit-hole serve --help).
 service Classifier {
-  // Classify turns trace groups into semantic flows.
+  // Classify turns raw trace groups into semantically meaningful flows.
+  //
+  // The server groups related traces (e.g. multiple syscalls from a single
+  // action), classifies each group by intent/phase/outcome, and returns
+  // the resulting Flow objects. This is the primary classification RPC.
   rpc Classify(ClassifyRequest) returns (ClassifyResponse);
 
-  // Ping is a lightweight health check.
+  // Ping is a lightweight health check for the gRPC classifier backend.
+  //
+  // Returns immediately with an empty response. Used by the serve command's
+  // health-check loop to verify the remote backend is reachable. The
+  // response time of this RPC is a proxy for overall classifier latency.
   rpc Ping(PingRequest) returns (PingResponse);
 
-  // Info returns model and runtime metadata.
+  // Info returns model and runtime metadata for the classification backend.
+  //
+  // Returns the model name/version, classification method (local Gemma vs
+  // remote), readiness status, memory usage, and device type. This is
+  // surfaced in the /health endpoint's classifier component status.
   rpc Info(InfoRequest) returns (InfoResponse);
 }
 
+// ClassifyRequest wraps a batch of trace groups for classification.
+// Each group contains traces collected from a single agent session
+// within a short time window (typically <100ms).
 message ClassifyRequest {
+  // groups is a batch of one or more TraceGroup objects to classify.
+  // The server processes each group independently and may parallelize
+  // across groups. Empty batches return an empty ClassifyResponse.
   repeated TraceGroup groups = 1;
 }
 
+// TraceGroup groups related traces from a single agent action.
+// Traces within a group share temporal proximity and are classified
+// together to produce one Flow. Grouping is done by the collector
+// layer before passing to the classifier.
 message TraceGroup {
+  // traces is the ordered list of raw syscall traces in this group.
+  // The order reflects the chronological sequence in which the
+  // collector captured them. Minimum 1 trace per group.
   repeated Trace traces = 1;
 }
 
+// Trace is a single raw syscall captured by the eBPF collector.
+// Each trace represents one kernel-level event observed from
+// the monitored agent process.
 message Trace {
+  // pid is the OS process ID that generated this syscall.
   int32 pid = 1;
+
+  // syscall is the system call name (e.g. "read", "write", "openat",
+  // "connect"). Values come from the eBPF tracepoint attachment.
   string syscall = 2;
+
+  // args is a comma-separated string representation of the syscall
+  // arguments. For file operations this includes the path; for
+  // network operations the address/port.
   string args = 3;
+
+  // return_value is the syscall's return value. Negative values
+  // indicate errors (errno-style). For read/write syscalls this is
+  // the byte count; for open/create the file descriptor.
   int64 return_value = 4;
+
+  // timestamp_ns is the monotonic clock value in nanoseconds when
+  // this trace was captured. Used for ordering and grouping traces
+  // into flows.
   int64 timestamp_ns = 5;
 }
 
+// ClassifyResponse wraps the results of a classification request.
+// Each input TraceGroup produces zero or one Flow depending on
+// whether the classifier could determine a meaningful action.
 message ClassifyResponse {
+  // flows is the list of classified flows, one per input trace
+  // group that produced a result. The order matches the input
+  // group order. Empty when no groups were successfully classified.
   repeated Flow flows = 1;
 }
 
+// Flow is a classified semantic action derived from a TraceGroup.
+// This is the wire format used by the gRPC classifier backend;
+// the internal types.Flow carries additional fields (session ID,
+// context window, metadata) populated by the collector pipeline.
 message Flow {
+  // id is the classifier-assigned UUIDv7 for this flow.
   string id = 1;
+
+  // intent is the inferred semantic action (e.g. "read_file",
+  // "patch_code", "search_web", "llm_api_call").
   string intent = 2;
+
+  // phase is the agent decision-cycle stage: "observation",
+  // "deliberation", "action", or "verification".
   string phase = 3;
+
+  // description is a human-readable summary of what happened.
+  // Example: "Read auth.go (74 lines, 2ms)".
   string description = 4;
+
+  // outcome is the result: "success", "failure", "timeout", or
+  // "unknown". Determined by return-value analysis of the traces.
   string outcome = 5;
+
+  // confidence is the classifier's confidence in this flow,
+  // ranging from 0.0 (uncertain) to 1.0 (certain).
   double confidence = 6;
+
+  // trace_ids lists the UUIDs of the traces that were grouped
+  // into this flow. Used for cross-referencing with the raw
+  // trace store.
   repeated string trace_ids = 7;
+
+  // start_time is the Unix nanosecond timestamp of the earliest
+  // trace in this flow.
   int64 start_time = 8;
+
+  // end_time is the Unix nanosecond timestamp of the latest
+  // trace in this flow.
   int64 end_time = 9;
+
+  // duration_ns is the total wall-clock duration in nanoseconds
+  // between the first and last trace in this flow.
   int64 duration_ns = 10;
 }
 
+// PingRequest is an empty health-check request. All fields are
+// reserved for future use (e.g. client version negotiation).
 message PingRequest {}
 
+// PingResponse is an empty health-check response. A successful
+// response indicates the gRPC classifier server is reachable and
+// can accept classification requests.
 message PingResponse {}
 
+// InfoRequest is an empty metadata request. The server ignores
+// any fields currently reserved for future extensibility.
 message InfoRequest {}
 
+// InfoResponse carries runtime metadata about the classifier backend.
+// This is cached by the calling server and refreshed periodically.
 message InfoResponse {
+  // name is the model or backend name (e.g. "gemma-3-4b", "remote-grpc").
   string name = 1;
+
+  // version is the model or backend version string.
   string version = 2;
+
+  // kind describes the classification method: "local" for on-device
+  // inference, "remote" for gRPC backend, "pattern" for rule-based.
   string kind = 3;
+
+  // ready indicates whether the backend has finished loading and is
+  // ready to accept classification requests.
   bool ready = 4;
+
+  // memory_mb is the approximate memory usage of the backend in
+  // megabytes. Zero when unknown or not applicable.
   int64 memory_mb = 5;
+
+  // device_type describes the compute device: "cpu", "cuda", "npu",
+  // or empty when unknown.
   string device_type = 6;
 }
