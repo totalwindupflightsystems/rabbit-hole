@@ -261,11 +261,31 @@
   - AC2: `go build ./...` and `go vet ./...` still pass ✅
   - AC3: Comments follow Go convention (first line: `// Package <name> ...`) ✅
 
+## [ ] DEPS-003 — upgrade prometheus/client_golang v1.22.0→v1.24.0
+
+- **Found by:** Never-done audit check 4 (package upgrades) at 2026-07-21 23:27.
+- **Direct dep:** `prometheus/client_golang` is imported by `internal/express/server.go` for `/metrics` and `/api/v1/metrics` endpoints.
+- **Risk:** Low — minor bump (v1.22.0→v1.24.0). Prometheus client follows semver, no breaking changes expected.
+- **Acceptance criteria:**
+  - AC1: `go get github.com/prometheus/client_golang@v1.24.0 && go mod tidy` succeeds
+  - AC2: `go build ./...` and `go vet ./...` pass
+  - AC3: `go test ./... -count=1 -short` passes
+  - AC4: `/metrics` endpoint still returns valid Prometheus metrics
+
 ## [ ] NEVER-DONE — Run coding-hermes-never-done 11-point audit
 
-- **Audit run:** 2026-07-20 06:49 tick.
-- **Results:** 8/11 checks pass. 3 findings:
-  - Check 2 (doc coverage): 29 files lack package doc comments → created DOC-PKG above
-  - Check 4 (deps): cilium/ebpf major bump intentionally skipped (known), indirect deps only
-  - Check 8 (CI/CD): Pipeline #507 FAILED, zero online runners — INFRA issue, not code
-- **Next audit:** After DOC-PKG and next phase gates cleared.
+- **Audit run:** 2026-07-21 23:27 tick.
+- **Results:** 9/11 checks PASS, 2 minor findings, 1 mechanical fix applied.
+  - **Check 1 (spec alignment):** ✅ 6 spec files exist, 10+ interfaces in code match spec architecture.
+  - **Check 2 (doc coverage):** ✅ Only generated protobuf files lack comments — expected. DOC-006 tracked.
+  - **Check 3 (test gaps):** ✅ Zero untested packages. All ≥60% coverage (classify 64.8%, config 75.3%, express 86.4%, storage 83.4%, types 100%).
+  - **Check 4 (package upgrades):** ⚠️ `prometheus/client_golang` v1.22.0→v1.24.0 minor bump available. `cilium/ebpf` major bump intentionally blocked (known).
+  - **Check 5 (pitfall hunt):** ⚙️ `.gitleaks.toml` allowlist narrowed — removed `specs/`, `docs/`, `.*\.md$` from allowlist. Gitleaks confirms 6.42MB clean in 677ms. Both `return nil, nil` hits are legitimate guard clauses. Zero TODO/FIXME/HACK.
+  - **Check 6 (performance):** ✅ 14 benchmarks across 3 packages. PERF tasks marked [x].
+  - **Check 7 (endpoint verification):** ✅ 10 HTTP endpoints, 10 CLI subcommands, all with real handlers. No stubs.
+  - **Check 8 (CI/CD health):** ⚠️ Pipeline #507 FAILED, zero online runners — INFRA, not code. No change since prior tick.
+  - **Check 9 (DuckBrain):** ✅ 49 keys in rabbit-hole namespace — architecture, decisions, pitfalls, phases, events, status all populated. DB-001 through DB-006 appear to have stale descriptions (namespace already seeded).
+  - **Check 10 (code quality):** ✅ Zero TODOs, no untracked files, .gitignore complete. Hilo: 532 edges, 90 files, healthy.
+  - **Check 11 (middle-out wiring):** ✅ `serve.go` imports all 5 internal packages, 10 CLIs via cobra, gRPC registration exists, config from env vars.
+- **New tasks created:** `## [ ] DEPS-003 — upgrade prometheus/client_golang v1.22.0→v1.24.0`
+- **Mechanical fixes applied:** `.gitleaks.toml` allowlist narrowed (removed `specs/`, `docs/`, `.*\.md$`).
