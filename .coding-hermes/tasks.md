@@ -701,3 +701,66 @@ Root cause: `ApplyFleetConfig` upsert overwrites API-set cooldown on daemon rest
 - **🔥 RE-ESCALATED TO BANE:** Idle tick #12. REL-001 (cut v1.0.0 release) + REL-003 (external dev verification) are human-gated. INFRA blocks: GitLab CI (zero online runners). Scheduler cooldown reverts on daemon restart (8 occurrences now — fleet TOML cooldown=1800s overwrites API-set 43200s on every daemon restart).
 
 **⚠️ 12th consecutive idle tick. This project should be disabled in the scheduler or moved to a 24h+ cooldown to stop burning PAYG tokens.**
+
+## Idle Tick #13 — 2026-07-23 17:14 UTC
+
+> 🔥 **RE-ESCALATED TO BANE (13th idle tick, 9th cooldown reversion).** Project complete — 63/63 tasks across 9 phases all ✅. Two human-gated release tasks remain. Cooldown re-applied.
+
+### Discovery Sweep
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Build (`go build ./...`) | ✅ | Clean. All packages compile. |
+| Vet (`go vet ./...`) | ✅ | Clean. |
+| Tests (`go test ./... -count=1 -short`) | ✅ | 9/9 packages pass. All ≥60% coverage. |
+| Stubs/TODOs (`grep`) | ✅ | Zero real stubs. All "stub" references are doc comments or type names. |
+| Binary (`./bin/rabbit-hole --help`) | ✅ | Works. 25 subcommands registered. v1.0.0-dev. |
+| CI (GitLab) | ⚠️ | INFRA-blocked — zero online runners (host thread exhaustion root cause). |
+| Remote (`git fetch`) | ✅ | Clean. No remote commits. |
+| Scheduler | ⚠️ | Cooldown reverted 43200s→1800s (9th reversion). Re-applied to 43200s. VERIFIED: CooldownS=43200, Enabled=True. |
+| Deps | ✅ | Direct deps current. 34 transitive bumps (noise). cilium/ebpf major intentionally blocked. |
+
+### Never-Done Audit (from prior verified tick data)
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| 1. Spec alignment | ✅ | 6 specs, architecture matches code |
+| 2. Doc coverage | ✅ | DOC-PKG done, OpenAPI spec exists |
+| 3. Test gaps | ✅ | 9/9 packages pass, all ≥60% coverage |
+| 4. Package upgrades | ✅ | Direct deps current. Transitive-only are noise. |
+| 5. Pitfall hunt | ✅ | Zero real stubs/TODOs/FIXMEs. gitleaks clean. |
+| 6. Performance | ✅ | 14 benchmarks across 3 packages |
+| 7. Endpoint verification | ✅ | 10 CLI + 10 HTTP, all real handlers. Binary works. |
+| 8. CI/CD health | ⚠️ | GitLab INFRA-blocked — zero online runners |
+| 9. DuckBrain | ✅ | 49 keys in rabbit-hole namespace, all populated |
+| 10. Code quality | ✅ | 0 TODO/FIXME/HACK, Hilo 532 edges/90 files |
+| 11. Middle-out wiring | ✅ | serve.go imports all 5 internal packages |
+
+### Actions
+- **Cooldown re-applied (9th time):** 1800s → 43200s (12h). VERIFIED via PUT+GET: `CooldownS=43200, Enabled=True`.
+- **0 new tasks created.** Project complete — 63/63 tasks across 9 phases all ✅.
+- **No worker spawned.**
+- **🔥 RE-ESCALATED TO BANE:** Idle tick #13. REL-001 (cut v1.0.0 release) + REL-003 (external dev verification) are human-gated. GitLab CI INFRA-blocked (zero online runners). Scheduler cooldown reverts on daemon restart (9 occurrences now — fleet TOML cooldown=1800s overwrites API-set 43200s on every daemon restart).
+
+### Graduated Slowdown Status
+
+| Tick | Date UTC | Cooldown | Action |
+|------|----------|----------|--------|
+| #1 | 2026-07-21 23:27 | 600s | Initial — never-done audit found DEPS-003 |
+| #2 | ~2026-07-22 00:00 | 1800s | Escalated — DEPS-003 completed |
+| #3 | 2026-07-22 01:00 | 14400s (4h) | Escalated — board sync (E2E, REL-002) |
+| #4 | 2026-07-22 04:10 | 14400s (4h) | Cooldown verified (prior tick fabricated) |
+| #5 | 2026-07-22 08:09 | 43200s (12h) | Escalated |
+| #6 | 2026-07-22 12:11 | 43200s (12h) | HOST EXHAUSTION, all checks blocked |
+| #7 | 2026-07-22 12:21 | 43200s (12h) | 🔥 ESCALATED TO BANE |
+| #8 | 2026-07-22 20:24 | 43200s (12h) | 🔥 RE-ESCALATED TO BANE |
+| #9 | 2026-07-23 00:16 | 43200s (12h) | 🔥 RE-ESCALATED TO BANE (5th cooldown reversion) |
+| #10 | 2026-07-23 00:52 | 43200s (12h) | 🔥 RE-ESCALATED TO BANE (6th cooldown reversion) |
+| #11 | 2026-07-23 04:16 | 43200s (12h) | 🔥 RE-ESCALATED TO BANE (7th cooldown reversion) |
+| #12 | 2026-07-23 08:13 | 43200s (12h) | 🔥 RE-ESCALATED TO BANE (8th cooldown reversion) |
+| **#13** | **2026-07-23 17:14** | **43200s (12h)** | **🔥 RE-ESCALATED TO BANE (9th cooldown reversion)** |
+
+**⚠️ COOLDOWN REVERSION HISTORY (9 occurrences):**
+- Tick #3→#4 through #12→#13: every tick found cooldown reverted to 1800s and re-applied 43200s. Root cause: `ApplyFleetConfig` upsert overwrites API-set cooldown on daemon restart. Fleet TOML cooldown is 1800s. Each tick must re-apply the cooldown. This is a scheduler-level bug — not fixable by foreman.
+
+**⚠️ 13th consecutive idle tick burning PAYG tokens on a completed project.** The cooldown mechanism is ineffective due to scheduler daemon restarts. Consider: (a) permanently disabling the rabbit-hole scheduler entry, (b) fixing the fleet TOML cooldown to respect API-set values, or (c) migrating to fleet TOML cooldown=43200s as source of truth.
