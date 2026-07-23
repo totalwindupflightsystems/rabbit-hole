@@ -501,10 +501,12 @@ All 11 checks identical to idle tick #4. No code changes, no spec changes, no de
 | #5 | 2026-07-22 08:09 | 43200s (12h) | Escalated |
 | #6 | 2026-07-22 12:11 | 43200s (12h) | HOST EXHAUSTION, all checks blocked |
 | **#7** | **2026-07-22 12:21** | **43200s (12h)** | **🔥 ESCALATED TO BANE** |
+| **#8** | **2026-07-22 20:24** | **43200s (12h)** | **🔥 RE-ESCALATED TO BANE** |
 
-**⚠️ COOLDOWN REVERSION HISTORY (3 occurrences):**
+**⚠️ COOLDOWN REVERSION HISTORY (4 occurrences):**
 - Tick #3→#4: tick claimed escalation → GET showed 1800s → re-applied 14400s
 - Tick #5→#6: set 43200s → tick #7 GET showed 1800s (scheduler daemon restart)
 - Tick #6→#7: re-applied 43200s
+- **Tick #7→#8: reverted 43200s→1800s → re-applied 43200s (VERIFIED: CooldownS=43200, Enabled=True)**
 
 Root cause: `ApplyFleetConfig` upsert overwrites API-set cooldown on daemon restart. Fleet TOML cooldown is 600s or 1800s.
