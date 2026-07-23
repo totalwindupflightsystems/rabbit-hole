@@ -550,3 +550,68 @@ All 11 checks identical to idle tick #4. No code changes, no spec changes, no de
 - **Tick #8→#9: reverted 43200s→1800s → re-applied 43200s (VERIFIED: CooldownS=43200, Enabled=True)**
 
 Root cause: `ApplyFleetConfig` upsert overwrites API-set cooldown on daemon restart. Fleet TOML cooldown is 600s or 1800s. Each tick must re-apply the cooldown.
+
+## Idle Tick #10 — 2026-07-23 00:52 UTC
+
+> 🔥 **RE-ESCALATED TO BANE (10th idle tick, 6th cooldown reversion).** Project complete — 63/63 tasks across 9 phases all ✅. Two human-gated release tasks remain. INFRA blocks persist.
+
+### Discovery Sweep
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Build (`go build ./...`) | ⚠️ SKIPPED | INFRA thread exhaustion (pids.max=512). Binary `./bin/rabbit-hole` works. |
+| Vet (`go vet ./...`) | ⚠️ SKIPPED | Same INFRA block. |
+| Tests | ⚠️ SKIPPED | Same INFRA block. 10/10 packages pass (verified prior ticks). |
+| Stubs/TODOs (`grep`) | ✅ | Zero real stubs. All "stub" references are documentation comments. |
+| Binary (`./bin/rabbit-hole --help`) | ✅ | All 10 CLI subcommands registered. |
+| CI (GitLab) | ⚠️ | INFRA-blocked — zero online runners (host thread exhaustion root cause). |
+| Remote (`git fetch`) | ✅ | Clean. No remote commits. |
+| Scheduler | ⚠️ | Cooldown reverted 43200s→1800s (6th reversion). Re-applied to 43200s. VERIFIED: CooldownS=43200, Enabled=True. |
+| Deps | ✅ | Direct deps current. Transitive bumps are noise. |
+
+### Never-Done Audit (from prior verified tick data)
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| 1. Spec alignment | ✅ | 6 specs, architecture matches code |
+| 2. Doc coverage | ✅ | DOC-PKG done, OpenAPI spec exists |
+| 3. Test gaps | ✅ | 10/10 packages pass, all ≥60% coverage |
+| 4. Package upgrades | ✅ | Direct deps current |
+| 5. Pitfall hunt | ✅ | Zero real stubs/TODOs/FIXMEs. gitleaks clean. |
+| 6. Performance | ✅ | 14 benchmarks across 3 packages |
+| 7. Endpoint verification | ✅ | 10 CLI + 10 HTTP, all real handlers. Binary works. |
+| 8. CI/CD health | ⚠️ | GitLab INFRA-blocked — zero online runners |
+| 9. DuckBrain | ✅ | 49 keys, all populated |
+| 10. Code quality | ✅ | 0 TODO/FIXME/HACK, Hilo 532 edges/90 files |
+| 11. Middle-out wiring | ✅ | serve.go imports all 5 internal packages |
+
+### Actions
+- **Cooldown re-applied (6th time):** 1800s → 43200s (12h). VERIFIED via GET: `CooldownS=43200, Enabled=True`.
+- **0 new tasks created.** Project complete — 63/63 tasks across 9 phases all ✅.
+- **No worker spawned.**
+- **🔥 RE-ESCALATED TO BANE:** Idle tick #10. REL-001 (cut v1.0.0 release) + REL-003 (external dev verification) are human-gated. Two INFRA blocks: host thread exhaustion (pids.max=512) and GitLab CI (zero runners). Both require host-level intervention. Scheduler cooldown reverts on daemon restart (6 occurrences now — fleet TOML cooldown=1800s overwrites API-set 43200s on every daemon restart).
+
+### Graduated Slowdown Status
+
+| Tick | Date UTC | Cooldown | Action |
+|------|----------|----------|--------|
+| #1 | 2026-07-21 23:27 | 600s | Initial — never-done audit found DEPS-003 |
+| #2 | ~2026-07-22 00:00 | 1800s | Escalated — DEPS-003 completed |
+| #3 | 2026-07-22 01:00 | 14400s (4h) | Escalated — board sync (E2E, REL-002) |
+| #4 | 2026-07-22 04:10 | 14400s (4h) | Cooldown verified (prior tick fabricated) |
+| #5 | 2026-07-22 08:09 | 43200s (12h) | Escalated |
+| #6 | 2026-07-22 12:11 | 43200s (12h) | HOST EXHAUSTION, all checks blocked |
+| #7 | 2026-07-22 12:21 | 43200s (12h) | 🔥 ESCALATED TO BANE |
+| #8 | 2026-07-22 20:24 | 43200s (12h) | 🔥 RE-ESCALATED TO BANE |
+| #9 | 2026-07-23 00:16 | 43200s (12h) | 🔥 RE-ESCALATED TO BANE (5th cooldown reversion) |
+| **#10** | **2026-07-23 00:52** | **43200s (12h)** | **🔥 RE-ESCALATED TO BANE (6th cooldown reversion)** |
+
+**⚠️ COOLDOWN REVERSION HISTORY (6 occurrences):**
+- Tick #3→#4: tick claimed escalation → GET showed 1800s → re-applied 14400s
+- Tick #5→#6: set 43200s → tick #7 GET showed 1800s (scheduler daemon restart)
+- Tick #6→#7: re-applied 43200s
+- Tick #7→#8: reverted 43200s→1800s → re-applied 43200s
+- Tick #8→#9: reverted 43200s→1800s → re-applied 43200s
+- **Tick #9→#10: reverted 43200s→1800s → re-applied 43200s (VERIFIED: CooldownS=43200, Enabled=True)**
+
+Root cause: `ApplyFleetConfig` upsert overwrites API-set cooldown on daemon restart. Fleet TOML cooldown is 1800s. Each tick must re-apply the cooldown. This is a scheduler-level bug — not fixable by foreman.
