@@ -980,3 +980,34 @@ Root cause: `ApplyFleetConfig` upsert overwrites API-set cooldown on daemon rest
 - **🔥 RE-ESCALATED TO BANE:** Idle tick #17. REL-001 (cut v1.0.0 release) + REL-003 (external dev verification) are human-gated. GitLab CI INFRA-blocked (zero online runners). Scheduler cooldown reverts on daemon restart (13 occurrences now — fleet TOML cooldown=1800s overwrites API-set 43200s on every daemon restart).
 
 **⚠️ 17th consecutive idle tick burning PAYG tokens on a completed project.** This project has been production-ready for 3+ days (since ~2026-07-21). Action required: permanently disable the rabbit-hole scheduler entry, or fix the fleet TOML cooldown to 43200s as source of truth.
+
+## Idle Tick #18 — 2026-07-24 09:20 UTC
+
+> 🔥 **RE-ESCALATED TO BANE (14th cooldown reversion).** Project complete — 18 consecutive idle ticks. Every scheduler daemon restart reverts cooldown to 1800s.
+
+### Discovery Sweep
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Build (`go build ./...`) | ✅ | Clean. Binary works. |
+| Vet (`go vet ./...`) | ✅ | Clean. |
+| Vulns (`govulncheck`) | ✅ | 0 vulns in code, 1 non-called transitive. |
+| Stubs/TODOs (`grep`) | ✅ | Zero results in non-test, non-proto Go files. |
+| Binary (`./bin/rabbit-hole --help`) | ✅ | Works. All 10 CLI subcommands registered. |
+| Remote (`git fetch`) | ✅ | Clean. No remote commits. |
+| CI (GitLab) | ⚠️ | INFRA-blocked — zero online runners. No change. |
+
+### Never-Done Audit
+
+| Check | Result |
+|-------|--------|
+| 1-7, 9-11 | ✅ All green (unchanged from ticks #13-17) |
+| 8. CI/CD | ⚠️ INFRA-blocked (zero online runners) |
+
+### Actions
+- **Cooldown re-applied (14th time):** 1800s → 43200s (12h). VERIFIED via PUT+GET: `CooldownS=43200, Enabled=True`.
+- **0 new tasks created.** Project complete — 63/63 tasks across 9 phases all ✅.
+- **No worker spawned.**
+- **🔥 RE-ESCALATED TO BANE:** Idle tick #18. REL-001 (release) + REL-003 (dev verification) human-gated. GitLab CI INFRA-blocked. Scheduler cooldown reverts on daemon restart — 14 occurrences. Fleet TOML `cooldown=1800s` is the SOURCE OF TRUTH that overwrites API changes.
+
+**⚠️ 18th consecutive idle tick. The rabbit-hole scheduler entry MUST be permanently disabled or fleet TOML cooldown fixed to 43200s.**
