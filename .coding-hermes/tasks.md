@@ -935,4 +935,48 @@ Root cause: `ApplyFleetConfig` upsert overwrites API-set cooldown on daemon rest
 - **No worker spawned.**
 - **🔥 RE-ESCALATED TO BANE:** Idle tick #16. REL-001 (cut v1.0.0 release) + REL-003 (external dev verification) are human-gated. GitLab CI INFRA-blocked (zero online runners). Scheduler cooldown reverts on daemon restart (12 occurrences now — fleet TOML cooldown=1800s overwrites API-set 43200s on every daemon restart).
 
-**⚠️ 16th consecutive idle tick burning PAYG tokens on a completed project.** This project has been production-ready for 2+ days (since ~2026-07-21). Action required: permanently disable the rabbit-hole scheduler entry, or fix the fleet TOML cooldown to 43200s as source of truth.
+
+
+---
+
+## Idle Tick #17 — 2026-07-24 00:11 UTC
+
+> 🔥 **RE-ESCALATED TO BANE (17th idle tick, 13th cooldown reversion).** Project complete — 63/63 tasks across 9 phases all ✅. Two human-gated release tasks remain. Cooldown re-applied.
+
+### Discovery Sweep
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Build (`go build ./...`) | ✅ | Clean. All packages compile. |
+| Vet (`go vet ./...`) | ✅ | Clean. |
+| Stubs/TODOs (`grep`) | ✅ | Zero real stubs. All "stub" references are doc comments or the `stubChatModel` fallback type name. |
+| Binary (`./bin/rabbit-hole --help`) | ✅ | Works. All 10 subcommands registered. v1.0.0-dev. |
+| Vulns (`govulncheck`) | ✅ | 0 vulns in code, 1 non-called transitive. |
+| CI (GitLab) | ⚠️ | INFRA-blocked — zero online runners (host thread exhaustion root cause). |
+| Remote (`git fetch`) | ✅ | Clean. No remote commits. |
+| Scheduler | ⚠️ | Cooldown reverted 43200s→1800s (13th reversion). Re-applied to 43200s. VERIFIED: `CooldownS=43200, Enabled=True`. |
+| Deps | ✅ | Direct deps current. 25 transitive bumps (noise — OpenTelemetry, x/net, x/crypto minors). `cilium/ebpf` major intentionally blocked. |
+
+### Never-Done Audit (from prior verified tick data)
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| 1. Spec alignment | ✅ | 6 specs, architecture matches code |
+| 2. Doc coverage | ✅ | DOC-PKG done, OpenAPI spec exists |
+| 3. Test gaps | ✅ | 10/10 packages pass, all ≥60% coverage |
+| 4. Package upgrades | ✅ | Direct deps current. Transitive-only are noise. |
+| 5. Pitfall hunt | ✅ | Zero real stubs/TODOs/FIXMEs. gitleaks clean. |
+| 6. Performance | ✅ | 14 benchmarks across 3 packages |
+| 7. Endpoint verification | ✅ | 10 CLI + 10 HTTP, all real handlers. Binary works. |
+| 8. CI/CD health | ⚠️ | GitLab INFRA-blocked — zero online runners |
+| 9. DuckBrain | ✅ | 49 keys, all populated |
+| 10. Code quality | ✅ | 0 TODO/FIXME/HACK, Hilo 532 edges/90 files |
+| 11. Middle-out wiring | ✅ | serve.go imports all 5 internal packages |
+
+### Actions
+- **Cooldown re-applied (13th time):** 1800s → 43200s (12h). VERIFIED via PUT+GET: `CooldownS=43200, Enabled=True`.
+- **0 new tasks created.** Project complete — 63/63 tasks across 9 phases all ✅.
+- **No worker spawned.**
+- **🔥 RE-ESCALATED TO BANE:** Idle tick #17. REL-001 (cut v1.0.0 release) + REL-003 (external dev verification) are human-gated. GitLab CI INFRA-blocked (zero online runners). Scheduler cooldown reverts on daemon restart (13 occurrences now — fleet TOML cooldown=1800s overwrites API-set 43200s on every daemon restart).
+
+**⚠️ 17th consecutive idle tick burning PAYG tokens on a completed project.** This project has been production-ready for 3+ days (since ~2026-07-21). Action required: permanently disable the rabbit-hole scheduler entry, or fix the fleet TOML cooldown to 43200s as source of truth.
