@@ -28,6 +28,8 @@
 > **Core purpose:** eBPF-based agent observability — attach to AI agent processes, capture LLM call flows, classify with Gemma, search with FTS5, chat about what the agent did.
 > **Language:** Go (eBPF + SQLite + gRPC) | **CI:** GitLab | **Host:** karaHermes-mde-7840hs
 > **Status:** ALL PHASES COMPLETE (63 tasks + 6 DuckBrain entries, 9 phases). Zombie — maintenance only.
+> **Last tick:** #22 (2026-07-25). Build ✅ Vet ✅ Test ✅ (77.1% cov) Hilo ✅ (532 edges) GitReins ✅ Lint ⚠️ (58 pre-existing). Self-fix: SECURITY.md + LICENSE created. Docs now complete.
+> **Verdict:** idle — maintenance mode (11 idle ticks, self-fixed 2 doc gaps)
 
 ## Active Tasks
 
