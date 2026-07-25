@@ -9,13 +9,17 @@ guards:
     tests: true
 evaluator:
   max_iterations: 50
-  max_time: "10m"
-  max_input_tokens: "0.5M"
-  max_output_tokens: "0.2M"
+  max_time: 10m
+  max_input_tokens: 0.2M
+  max_output_tokens: 0.4M
   tool_call_weight: 0.1
-  compaction_threshold: 0.90
-  code_context_budget: 0.70
-  static_analysis_diagnostics: false
+  fast_track: auto
+
+defaults:
+  model: deepseek-v4-flash
+  provider: deepseek-foreman
+  api_key_env: GITREINS_LLM_API_KEY
+
 history:
   enabled: true
   storage: git
@@ -38,6 +42,3 @@ pipeline:
       max_iterations: 50
       tools: [read_file, run_command, search_pattern, read_diff, sandbox, detect_dead_code]
 
-defaults:
-  model: deepseek-v4-flash
-  check_for_updates: true
