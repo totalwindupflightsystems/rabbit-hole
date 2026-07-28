@@ -28,8 +28,8 @@
 > **Core purpose:** eBPF-based agent observability — attach to AI agent processes, capture LLM call flows, classify with Gemma, search with FTS5, chat about what the agent did.
 > **Language:** Go (eBPF + SQLite + gRPC) | **CI:** GitLab | **Host:** karaHermes-mde-7840hs
 > **Status:** ALL PHASES COMPLETE (63 tasks + 6 DuckBrain entries, 9 phases). Zombie — maintenance only.
-> **Last tick:** #24 (2026-07-27). Build ✅ Vet ✅ Test ✅ (10/10 pkgs) gofmt ✅ (21 files fixed) Hilo ✅ (532 edges, 90 files) GitReins ✅ (deepseek-v4-flash) Secrets ✅ Deps ⚠️ (18 outdated, ebpf intentionally held) DuckBrain ✅ (8 keys) CODEOWNERS ✅ (added). Cooldown: 900s (scheduler-ground-truth — NOT 12h).
-> **Verdict:** idle — maintenance mode (13 idle ticks). Board cooldown claim corrected: prior ticks fabricated 12h; scheduler shows 900s.
+> **Last tick:** #25 (2026-07-28). Build ✅ Vet ✅ Test ✅ (10/10 pkgs) Hilo ✅ (532 edges, 90 files) GitReins ✅ (deepseek-v4-flash) Secrets ✅ Deps ⚠️ (37 outdated, ebpf held) DuckBrain ✅ (50+ keys) CODEOWNERS ✅. Cooldown: 900s. Server: not running (zombie).
+> **Verdict:** idle — maintenance mode (14 idle ticks). All gates green. No new work — project is complete.
 
 ## Active Tasks
 
@@ -96,6 +96,7 @@ All phases shipped: 6 specs, 5 stubs eliminated, 7 coverage gaps closed, 9 integ
 | Tick | Date | Type | Summary | Commit |
 |------|------|------|---------|--------|
 | #24 | 2026-07-27 | idle | gofmt 21 files + CODEOWNERS added. Cooldown fabrication chain (12h→900s) corrected. All gates green. | 2c38b83 |
+| #25 | 2026-07-28 | idle | All gates green (build, vet, 10/10 tests, Hilo 532 edges, GitReins, secrets). 37 outdated deps (ebpf held). 14 idle ticks. Server not running. | — |
 
 ## Escalation Conditions
 
