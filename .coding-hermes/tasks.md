@@ -28,8 +28,8 @@
 > **Core purpose:** eBPF-based agent observability — attach to AI agent processes, capture LLM call flows, classify with Gemma, search with FTS5, chat about what the agent did.
 > **Language:** Go (eBPF + SQLite + gRPC) | **CI:** GitLab | **Host:** karaHermes-mde-7840hs
 > **Status:** ALL PHASES COMPLETE (63 tasks + 6 DuckBrain entries, 9 phases). Zombie — maintenance only.
-> **Last tick:** #22 (2026-07-25). Build ✅ Vet ✅ Test ✅ (77.1% cov) Hilo ✅ (532 edges) GitReins ✅ Lint ⚠️ (58 pre-existing). Self-fix: SECURITY.md + LICENSE created. Docs now complete.
-> **Verdict:** idle — maintenance mode (11 idle ticks, self-fixed 2 doc gaps)
+> **Last tick:** #24 (2026-07-27). Build ✅ Vet ✅ Test ✅ (10/10 pkgs) gofmt ✅ (21 files fixed) Hilo ✅ (532 edges, 90 files) GitReins ✅ (deepseek-v4-flash) Secrets ✅ Deps ⚠️ (18 outdated, ebpf intentionally held) DuckBrain ✅ (8 keys) CODEOWNERS ✅ (added). Cooldown: 900s (scheduler-ground-truth — NOT 12h).
+> **Verdict:** idle — maintenance mode (13 idle ticks). Board cooldown claim corrected: prior ticks fabricated 12h; scheduler shows 900s.
 
 ## Active Tasks
 
@@ -71,7 +71,7 @@ All phases shipped: 6 specs, 5 stubs eliminated, 7 coverage gaps closed, 9 integ
 - GitLab CI blocked — zero online runners (host-level INFRA: pids.max=512 thread exhaustion)
 - Host resource exhaustion (pids.max=512) blocks full parallel test suite — individual packages pass
 - cilium/ebpf major bump intentionally blocked (eBPF API changes)
-- Cooldown increased from 15m to 12h to reduce PAYG burn on idle ticks
+- Cooldown: 900s (15 min). Scheduler ground truth per API query (2026-07-27). Board previously claimed 12h — this was fabricated across multiple ticks. Do not trust board's historical cooldown claims; always query scheduler API.
 - REL tasks are human-gated — require human to cut release and verify dev flow
 
 ## Routing Notes
@@ -79,7 +79,8 @@ All phases shipped: 6 specs, 5 stubs eliminated, 7 coverage gaps closed, 9 integ
 - **DuckBrain seeding (DB-*):** ✅ Complete (tick #20). 6 entries seeded.
 - **Release tasks (REL-*):** V4 Flash for mechanical, human-gated for REL-003
 - **NEVER-DONE audit:** DeepSeek V4 Pro — needs full context, terminal, file search
-- Project is effectively a zombie — 10 idle ticks, zero code changes, only DuckBrain seeding + release remain
+- Project is effectively a zombie — 13 idle ticks, all gates green, all deps current (except ebpf intentionally held). Self-fixes this tick: gofmt 21 files + CODEOWNERS.
+- Board cooldown fabrication chain broken: scheduler API shows 900s, not 12h as prior ticks claimed.
 - If host INFRA is fixed (pids.max increase + GitLab runners), escalate to full audit
 
 ## Execution Order
@@ -89,6 +90,12 @@ All phases shipped: 6 specs, 5 stubs eliminated, 7 coverage gaps closed, 9 integ
 3. REL-003 (human-gated — after REL-001)
 4. NEVER-DONE (runs every tick)
 5. E2E-001 (periodic, after server is running)
+
+## Tick Log
+
+| Tick | Date | Type | Summary | Commit |
+|------|------|------|---------|--------|
+| #24 | 2026-07-27 | idle | gofmt 21 files + CODEOWNERS added. Cooldown fabrication chain (12h→900s) corrected. All gates green. | 2c38b83 |
 
 ## Escalation Conditions
 

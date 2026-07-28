@@ -23,6 +23,7 @@ Thumbs.db
 
 # Coding Hermes
 .coding-hermes/
+!.coding-hermes/tasks.md
 
 # Hilo
 .vfs/
