@@ -28,9 +28,9 @@
 > **Core purpose:** eBPF-based agent observability — attach to AI agent processes, capture LLM call flows, classify with Gemma, search with FTS5, chat about what the agent did.
 > **Language:** Go (eBPF + SQLite + gRPC) | **CI:** GitLab | **Host:** karaHermes-mde-7840hs
 > **Status:** ALL PHASES COMPLETE (63 tasks, 9 phases). Zombie — maintenance only.
-> **Last tick:** #29 (2026-07-27). Build ✅ Vet ✅ Test ✅ (10/10 pkgs, 77.1% cov, one flaky WebSocket test — passes on retry) Hilo ✅ (532 edges, 90 files, REAL) GitReins ✅ (deepseek-v4-flash, guards PASS) Secrets ✅ Deps ⚠️ (37 outdated, ebpf held) DuckBrain ✅ (10+ keys, recall-verified) CODEOWNERS ✅ go.mod `go 1.25.0` (toolchain 1.26.5 — fine). Cooldown: 900s. Server: not running (zombie).
-> **Verdict:** idle — maintenance mode (17 idle ticks). All gates green. No new work — project is complete.
-> **⚠️ DuckBrain verified:** 10 project-specific keys (architecture, pitfalls, patterns, status). Recall confirmed — no fabrication. Prior correction chain ended tick #28.
+> **Last tick:** #30 (2026-07-28). Build ✅ Vet ✅ Test ✅ (10/10 pkgs, coverage 63-100%) Hilo ✅ (532 edges, 90 files, REAL) GitReins ✅ (deepseek-v4-flash, guards PASS) Secrets ✅ Deps ⚠️ (37 outdated, ebpf held at v0.17.3) DuckBrain ✅ (recall-verified, ID 2e691f07) CODEOWNERS ✅ go.mod `go 1.25.0` (toolchain 1.26.5). Cooldown: 900s. Server: not running (zombie).
+> **Verdict:** idle — maintenance mode (18 idle ticks). All gates green. No new work — project is complete.
+> **⚠️ DuckBrain verified:** status key persisted (ID 2e691f07), recall confirmed. 1 project key (status).
 
 ## Active Tasks
 
@@ -111,3 +111,5 @@ All phases shipped: 6 specs, 5 stubs eliminated, 7 coverage gaps closed, 9 integ
 | #27 | 2026-07-28 | idle | All gates green (build, vet, 10/10 tests, Hilo 532e/90f, GitReins, secrets). 37 outdated deps (ebpf held). 0 TODOs. 15 idle ticks. Zombie. | 5b38e11 |
 | #28 | 2026-07-28 | idle | All gates green. DuckBrain: 0 keys on arrival (prior 50+ key claim fabricated). Rewrote state (ID 44a0b6c4), recall verified. 229 tests / 37 files, 77.1% cov. 16 idle ticks. Zombie. | — |
 | #29 | 2026-07-27 | idle | All gates green. Build+vvet+test PASS (10/10 pkgs, one flaky WebSocket — passes retry). Hilo 532e/90f REAL. DuckBrain 10+ project keys, recall-verified. 37 outdated deps (ebpf held). 0 TODOs. 17 idle ticks. Zombie. | — |
+
+| #30 | 2026-07-28 | idle | All gates green (build, vet, 10/10 tests, Hilo 532e/90f, GitReins, secrets, 0 TODOs). 37 outdated deps (ebpf held). 18 idle ticks. DuckBrain recall-verified (ID 2e691f07). Zombie — no new work. | — |
