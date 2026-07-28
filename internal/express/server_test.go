@@ -399,7 +399,7 @@ func TestFullServerLifecycle(t *testing.T) {
 		ID: "0191b000-0000-7000-8000-000000000003", SessionID: sess.ID,
 		Intent: "execute_code", Phase: types.FlowPhaseAction,
 		Description: "Ran sql query against billing database",
-		Outcome: types.FlowOutcomeSuccess, Confidence: 0.97,
+		Outcome:     types.FlowOutcomeSuccess, Confidence: 0.97,
 		StartTime: time.Now().UTC(), EndTime: time.Now().UTC().Add(3 * time.Millisecond),
 	}
 	if err := srv.store.StoreFlows(context.Background(), []types.Flow{f3}); err != nil {

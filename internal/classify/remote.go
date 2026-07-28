@@ -118,11 +118,11 @@ func (b *RemoteBackend) marshalClassifyRequest(groups [][]types.Trace) (*classif
 		}
 		for _, t := range group {
 			pbGroup.Traces = append(pbGroup.Traces, &classifierpb.Trace{
-				Pid:          t.PID,
-				Syscall:      t.Syscall,
-				Args:         strings.Join(t.Args, " "),
-				ReturnValue:  t.ReturnValue,
-				TimestampNs:  t.Timestamp.UnixNano(),
+				Pid:         t.PID,
+				Syscall:     t.Syscall,
+				Args:        strings.Join(t.Args, " "),
+				ReturnValue: t.ReturnValue,
+				TimestampNs: t.Timestamp.UnixNano(),
 			})
 		}
 		req.Groups = append(req.Groups, pbGroup)

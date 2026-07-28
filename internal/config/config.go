@@ -16,45 +16,45 @@ import (
 // Config holds all Rabbit-Hole configuration, parsed from environment variables.
 type Config struct {
 	// Data
-	DataDir         string        // RABBITHOLE_DATA_DIR — default: ~/.rabbit-hole/
-	DBPath          string        // RABBITHOLE_DB_PATH — default: $DATA_DIR/rabbit-hole.db
-	ModelPath       string        // RABBITHOLE_MODEL_PATH — default: $DATA_DIR/models/gemma-3-4b.gguf
-	ModelName       string        // RABBITHOLE_MODEL_NAME — default: gemma-3-4b
+	DataDir   string // RABBITHOLE_DATA_DIR — default: ~/.rabbit-hole/
+	DBPath    string // RABBITHOLE_DB_PATH — default: $DATA_DIR/rabbit-hole.db
+	ModelPath string // RABBITHOLE_MODEL_PATH — default: $DATA_DIR/models/gemma-3-4b.gguf
+	ModelName string // RABBITHOLE_MODEL_NAME — default: gemma-3-4b
 
 	// Server
-	ListenAddr      string        // RABBITHOLE_LISTEN_ADDR — default: 127.0.0.1:9734
-	ReadTimeout     time.Duration // RABBITHOLE_READ_TIMEOUT — default: 30s
-	WriteTimeout    time.Duration // RABBITHOLE_WRITE_TIMEOUT — default: 30s
-	CORSOrigins     string        // RABBITHOLE_CORS_ORIGINS — default: *
+	ListenAddr   string        // RABBITHOLE_LISTEN_ADDR — default: 127.0.0.1:9734
+	ReadTimeout  time.Duration // RABBITHOLE_READ_TIMEOUT — default: 30s
+	WriteTimeout time.Duration // RABBITHOLE_WRITE_TIMEOUT — default: 30s
+	CORSOrigins  string        // RABBITHOLE_CORS_ORIGINS — default: *
 
 	// WebSocket
-	WSPingInterval  time.Duration // RABBITHOLE_WS_PING_INTERVAL — default: 30s
-	WSReadTimeout   time.Duration // RABBITHOLE_WS_READ_TIMEOUT — default: 60s
+	WSPingInterval time.Duration // RABBITHOLE_WS_PING_INTERVAL — default: 30s
+	WSReadTimeout  time.Duration // RABBITHOLE_WS_READ_TIMEOUT — default: 60s
 
 	// Collection
-	BufferSize      int           // RABBITHOLE_BUFFER_SIZE — default: 100000
-	TLSIntercept    bool          // RABBITHOLE_TLS_INTERCEPT — default: true
-	MaxSessions     int           // RABBITHOLE_MAX_SESSIONS — default: 50
+	BufferSize   int  // RABBITHOLE_BUFFER_SIZE — default: 100000
+	TLSIntercept bool // RABBITHOLE_TLS_INTERCEPT — default: true
+	MaxSessions  int  // RABBITHOLE_MAX_SESSIONS — default: 50
 
 	// Classification
-	BatchInterval   time.Duration // RABBITHOLE_BATCH_INTERVAL — default: 500ms
-	BatchSize       int           // RABBITHOLE_BATCH_SIZE — default: 100
-	BatchTimeout    time.Duration // RABBITHOLE_BATCH_TIMEOUT — default: 500ms
-	ModelThreads    int           // RABBITHOLE_MODEL_THREADS — default: 4
-	ModelGPULayers  int           // RABBITHOLE_MODEL_GPU_LAYERS — default: 0
+	BatchInterval    time.Duration // RABBITHOLE_BATCH_INTERVAL — default: 500ms
+	BatchSize        int           // RABBITHOLE_BATCH_SIZE — default: 100
+	BatchTimeout     time.Duration // RABBITHOLE_BATCH_TIMEOUT — default: 500ms
+	ModelThreads     int           // RABBITHOLE_MODEL_THREADS — default: 4
+	ModelGPULayers   int           // RABBITHOLE_MODEL_GPU_LAYERS — default: 0
 	InferenceTimeout time.Duration // RABBITHOLE_INFERENCE_TIMEOUT — default: 5s
-	ContextWindows  bool          // RABBITHOLE_CONTEXT_WINDOWS — default: false
+	ContextWindows   bool          // RABBITHOLE_CONTEXT_WINDOWS — default: false
 
 	// Chat
-	ChatEnabled     bool          // RABBITHOLE_CHAT_ENABLED — default: true
+	ChatEnabled bool // RABBITHOLE_CHAT_ENABLED — default: true
 
 	// Maintenance
 	RetentionDays   int           // RABBITHOLE_RETENTION_DAYS — default: 30
 	CompactInterval time.Duration // RABBITHOLE_COMPACT_INTERVAL — default: 1h
 
 	// Logging
-	LogLevel        string        // RABBITHOLE_LOG_LEVEL — default: info
-	LogFormat       string        // RABBITHOLE_LOG_FORMAT — default: text (text|json)
+	LogLevel  string // RABBITHOLE_LOG_LEVEL — default: info
+	LogFormat string // RABBITHOLE_LOG_FORMAT — default: text (text|json)
 
 	// Rate Limiting
 	RateLimitEnabled   bool // RABBITHOLE_RATE_LIMIT_ENABLED — default: true
@@ -63,7 +63,7 @@ type Config struct {
 	RateLimitWSRPS     int  // RABBITHOLE_RATE_LIMIT_WS_RPS — default: 20
 
 	// Debug
-	BPFDebug        bool          // RABBITHOLE_BPF_DEBUG — default: false
+	BPFDebug bool // RABBITHOLE_BPF_DEBUG — default: false
 }
 
 // Defaults returns a Config with all default values populated.
@@ -73,36 +73,36 @@ func Defaults() Config {
 	dataDir := filepath.Join(home, ".rabbit-hole")
 
 	return Config{
-		DataDir:          dataDir,
-		DBPath:           filepath.Join(dataDir, "rabbit-hole.db"),
-		ModelPath:        filepath.Join(dataDir, "models", "gemma-3-4b.gguf"),
-		ModelName:        "gemma-3-4b",
-		ListenAddr:       "127.0.0.1:9734",
-		ReadTimeout:      30 * time.Second,
-		WriteTimeout:     30 * time.Second,
-		CORSOrigins:      "*",
-		WSPingInterval:   30 * time.Second,
-		WSReadTimeout:    60 * time.Second,
-		BufferSize:       100000,
-		TLSIntercept:     true,
-		MaxSessions:      50,
-		BatchInterval:    500 * time.Millisecond,
-		BatchSize:        100,
-		BatchTimeout:     500 * time.Millisecond,
-		ModelThreads:     4,
-		ModelGPULayers:   0,
-		InferenceTimeout: 5 * time.Second,
-		ContextWindows:   false,
-		ChatEnabled:      true,
-		RetentionDays:    30,
-		CompactInterval:  1 * time.Hour,
-		LogLevel:         "info",
-		LogFormat:        "text",
+		DataDir:            dataDir,
+		DBPath:             filepath.Join(dataDir, "rabbit-hole.db"),
+		ModelPath:          filepath.Join(dataDir, "models", "gemma-3-4b.gguf"),
+		ModelName:          "gemma-3-4b",
+		ListenAddr:         "127.0.0.1:9734",
+		ReadTimeout:        30 * time.Second,
+		WriteTimeout:       30 * time.Second,
+		CORSOrigins:        "*",
+		WSPingInterval:     30 * time.Second,
+		WSReadTimeout:      60 * time.Second,
+		BufferSize:         100000,
+		TLSIntercept:       true,
+		MaxSessions:        50,
+		BatchInterval:      500 * time.Millisecond,
+		BatchSize:          100,
+		BatchTimeout:       500 * time.Millisecond,
+		ModelThreads:       4,
+		ModelGPULayers:     0,
+		InferenceTimeout:   5 * time.Second,
+		ContextWindows:     false,
+		ChatEnabled:        true,
+		RetentionDays:      30,
+		CompactInterval:    1 * time.Hour,
+		LogLevel:           "info",
+		LogFormat:          "text",
 		RateLimitEnabled:   true,
 		RateLimitSearchRPS: 10,
 		RateLimitChatRPS:   5,
 		RateLimitWSRPS:     20,
-		BPFDebug:         false,
+		BPFDebug:           false,
 	}
 }
 

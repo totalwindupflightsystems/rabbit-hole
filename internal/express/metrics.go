@@ -42,8 +42,8 @@ type MetricsCollector struct {
 	startTime time.Time
 
 	// Gauges refreshed by the background goroutine.
-	goroutines    prometheus.Gauge
-	uptimeSeconds prometheus.Gauge
+	goroutines     prometheus.Gauge
+	uptimeSeconds  prometheus.Gauge
 	sessionsActive prometheus.Gauge
 
 	// Counters.

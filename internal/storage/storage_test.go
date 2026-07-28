@@ -1723,7 +1723,7 @@ func TestStress_ConcurrentSessionIsolation(t *testing.T) {
 	}
 
 	// Collect results
-	seen := make(map[string]bool)     // track all flow IDs received
+	seen := make(map[string]bool) // track all flow IDs received
 	sessionCounts := make([]int, numSessions)
 
 	for flows := range results {

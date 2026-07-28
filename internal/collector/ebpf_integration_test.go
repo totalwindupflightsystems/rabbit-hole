@@ -8,7 +8,8 @@
 // that at least one syscall trace is captured within 5 seconds.
 //
 // Run with:
-//   sudo -E go test -v -run TestEBPFIntegration -count=1 ./internal/collector/
+//
+//	sudo -E go test -v -run TestEBPFIntegration -count=1 ./internal/collector/
 //
 // Skipped (not failed) when:
 //   - testing.Short() is true

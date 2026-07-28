@@ -365,7 +365,7 @@ func stripCodeFences(s string) string {
 	// Pattern: ```json\n...\n``` or ```\n...\n```
 	const fence = "```"
 	if strings.HasPrefix(s, fence) {
-		s = s[len(fence):]            // strip opening ```
+		s = s[len(fence):] // strip opening ```
 		if idx := strings.IndexByte(s, '\n'); idx >= 0 {
 			s = s[idx+1:] // strip language tag (json) and newline
 		}

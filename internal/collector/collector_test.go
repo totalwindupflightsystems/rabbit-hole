@@ -3,11 +3,11 @@ package collector
 import (
 	"context"
 	"fmt"
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 	"os"
 	"sync"
 	"testing"
 	"time"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 // ---- Ring Buffer Tests ----

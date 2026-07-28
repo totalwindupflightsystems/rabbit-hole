@@ -219,8 +219,8 @@ func TestIsNoAuthPath(t *testing.T) {
 	}{
 		{"/metrics", true},
 		{"/api/v1/metrics", true},
-		{"/metrics/", true},     // trailing slash still matches
-		{"/metrics/foo", true},  // sub-path still matches (segment-aware)
+		{"/metrics/", true},    // trailing slash still matches
+		{"/metrics/foo", true}, // sub-path still matches (segment-aware)
 		{"/health", false},
 		{"/api/v1/sessions", false},
 		{"/metrics_extra", false}, // NOT a bypass — exact-prefix-only
@@ -285,6 +285,6 @@ func newRecordingResponseWriter() *recordingResponseWriter {
 	}
 }
 
-func (r *recordingResponseWriter) Header() http.Header        { return r.header }
+func (r *recordingResponseWriter) Header() http.Header         { return r.header }
 func (r *recordingResponseWriter) Write(b []byte) (int, error) { return r.body.Write(b) }
 func (r *recordingResponseWriter) WriteHeader(code int)        { r.code = code }

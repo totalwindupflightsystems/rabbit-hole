@@ -84,7 +84,7 @@ func (e ErrModelNotLoaded) Error() string {
 // ErrModelOOM is returned when the model fails to load due to
 // insufficient memory.
 type ErrModelOOM struct {
-	RequiredMB int64
+	RequiredMB  int64
 	AvailableMB int64
 }
 

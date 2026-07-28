@@ -44,7 +44,7 @@ func newAttachCmd() *cobra.Command {
 			session, err := coll.Attach(cobraCmd.Context(), pid, collector.CollectOptions{
 				ContextWindows:  contextWindows,
 				TraceCategories: cats,
-				TLSInterception:  !noTLSIntercept,
+				TLSInterception: !noTLSIntercept,
 			})
 			if err != nil {
 				return err

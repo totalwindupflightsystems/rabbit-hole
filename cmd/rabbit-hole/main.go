@@ -11,9 +11,9 @@ import (
 
 var (
 	// Build metadata — set via ldflags at build time.
-	Version    = "v1.0.0-dev"
-	Commit     = "unknown"
-	BuildTime  = "unknown"
+	Version   = "v1.0.0-dev"
+	Commit    = "unknown"
+	BuildTime = "unknown"
 )
 
 func main() {

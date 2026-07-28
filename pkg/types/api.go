@@ -7,14 +7,14 @@ import "time"
 // SearchRequest is a structured query for finding flows.
 // Supports natural language and structured filters.
 type SearchRequest struct {
-	Query                  string      // natural language or structured
-	SessionID              string      // filter to specific session
-	TimeRange              TimeRange   // time window
-	Categories             []FlowPhase // filter by phase
-	Outcomes               []FlowOutcome // filter by outcome
-	Limit                  int         // max results (default: 50)
-	Cursor                 string      // pagination cursor
-	IncludeContextWindows  bool
+	Query                 string        // natural language or structured
+	SessionID             string        // filter to specific session
+	TimeRange             TimeRange     // time window
+	Categories            []FlowPhase   // filter by phase
+	Outcomes              []FlowOutcome // filter by outcome
+	Limit                 int           // max results (default: 50)
+	Cursor                string        // pagination cursor
+	IncludeContextWindows bool
 }
 
 // SearchResponse contains the results of a search query.

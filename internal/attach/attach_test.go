@@ -14,9 +14,9 @@ import (
 // --- Mock Implementations ---
 
 type mockCollector struct {
-	mu       sync.Mutex
-	sessions map[string]*types.Session
-	traceCh  map[string]chan types.Trace
+	mu        sync.Mutex
+	sessions  map[string]*types.Session
+	traceCh   map[string]chan types.Trace
 	attachErr error
 	detachErr error
 	listErr   error
@@ -146,10 +146,10 @@ func (m *mockClassifier) ModelInfo(ctx context.Context) (classify.ModelInfo, err
 }
 
 type mockStorage struct {
-	mu      sync.Mutex
-	flows   []types.Flow
+	mu       sync.Mutex
+	flows    []types.Flow
 	sessions []*types.Session
-	err     error
+	err      error
 }
 
 func newMockStorage() *mockStorage {

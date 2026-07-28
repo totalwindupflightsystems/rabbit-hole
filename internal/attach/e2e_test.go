@@ -95,9 +95,9 @@ func (m *e2eMockCollector) Health(_ context.Context) error { return nil }
 
 // TestE2E_ServeAttachSearchDetach exercises the full pipeline end-to-end:
 //
-//   server.Start  →  collector.Attach  →  push traces  →
-//   pipeline processes  →  POST /api/v1/search  →  verify flow  →
-//   collector.Detach  →  verify session Completed  →  shutdown.
+//	server.Start  →  collector.Attach  →  push traces  →
+//	pipeline processes  →  POST /api/v1/search  →  verify flow  →
+//	collector.Detach  →  verify session Completed  →  shutdown.
 //
 // Critical: this uses real net/http against a real :0-bound TCP listener,
 // not httptest.

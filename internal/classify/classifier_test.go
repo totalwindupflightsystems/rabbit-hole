@@ -10,10 +10,10 @@ import (
 // --- helper: make traces with explicit timestamps ---
 
 func makeTimedTraces(items ...struct {
-	Syscall   string
-	Category  types.TraceCategory
-	OffsetMs  int64
-	Args      []string
+	Syscall  string
+	Category types.TraceCategory
+	OffsetMs int64
+	Args     []string
 }) []types.Trace {
 	base := time.Now()
 	traces := make([]types.Trace, len(items))
@@ -30,10 +30,10 @@ func makeTimedTraces(items ...struct {
 }
 
 type traceItem struct {
-	Syscall   string
-	Category  types.TraceCategory
-	OffsetMs  int64
-	Args      []string
+	Syscall  string
+	Category types.TraceCategory
+	OffsetMs int64
+	Args     []string
 }
 
 func traceID(i int) string {

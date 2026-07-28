@@ -365,5 +365,3 @@ func syscallName(nr uint64) string {
 		return fmt.Sprintf("syscall_%d", nr)
 	}
 }
-
-

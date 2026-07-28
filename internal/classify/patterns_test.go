@@ -329,8 +329,8 @@ func TestPatternDescriptions(t *testing.T) {
 	pc := NewPatternCatalog()
 
 	tests := []struct {
-		name     string
-		traces   []types.Trace
+		name         string
+		traces       []types.Trace
 		wantContains string
 	}{
 		{
