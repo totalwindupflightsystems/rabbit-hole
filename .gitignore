@@ -41,3 +41,8 @@ internal/collector/bpf/vmlinux.h
 
 # Root binary (compiled output)
 /rabbit-hole
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
