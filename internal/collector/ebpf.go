@@ -6,6 +6,7 @@ package collector
 
 //go:generate sh -c "bpftool btf dump file /sys/kernel/btf/vmlinux format c > bpf/vmlinux.h"
 //go:generate bpf2go -cc clang -cflags "-O2 -g -Wall -Werror -Wno-missing-declarations" -target amd64 bpf bpf/collector.bpf.c -- -I/usr/include/x86_64-linux-gnu
+//go:generate bpf2go -cc clang -cflags "-O2 -g -Wall -Wno-missing-declarations" -target arm64 bpf bpf/collector.bpf.c
 
 import (
 	"encoding/binary"

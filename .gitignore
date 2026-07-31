@@ -6,6 +6,10 @@ bin/
 
 # But track compiled eBPF objects (needed for //go:embed on fresh clones)
 !internal/collector/bpf_x86_bpfel.o
+!internal/collector/bpf_arm64_bpfel.o
+
+# Release binaries (attached to GitLab releases, not committed)
+dist/
 
 # Data
 .rabbit-hole/

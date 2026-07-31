@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-31
+
 ### Added
 
 - Three-layer agent legibility platform: COLLECT (eBPF) → CLASSIFY (pluggable) → EXPRESS (chat)
@@ -25,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deployment: systemd unit file with eBPF capabilities, install.sh one-command installer, multi-stage Dockerfile
 - Makefile targets: bench, stress, integration, e2e
 - Shell completion for bash, zsh, and fish
+- Release binaries for linux/amd64 and linux/arm64 (arm64 eBPF bindings via bpf2go -target arm64)
 - CONTRIBUTING.md with development setup and PR guide
 - Package doc comments on all Go source files
 - Benchmark suite: parseTraceEvent, ring buffer ops, pattern matching, classification pipeline, FTS5 search, batch inserts
