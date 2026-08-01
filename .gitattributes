@@ -1,0 +1,26 @@
+# Go
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# Protobuf
+*.proto text eol=lf
+
+# Generated code
+*_grpc.pb.go text eol=lf
+*.pb.go text eol=lf
+
+# Shell
+*.sh text eol=lf
+
+# Binaries
+*.bin binary
+*.tar.gz binary
+*.zip binary
+
+# Git
+.gitattributes text eol=lf
+.gitignore text eol=lf
