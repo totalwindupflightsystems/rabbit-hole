@@ -473,9 +473,32 @@ func TestWebSocket(t *testing.T) {
 	}
 	defer conn.Close()
 
+	// Wait for the server to register this connection's subscriber channel.
+	// The WebSocket upgrade handshake completes BEFORE handleWebSocket appends
+	// the subscriber (websocket.go:30), so publishing immediately after Dial
+	// races registration — PublishFlow hits zero subscribers and the flow is
+	// silently dropped. Deterministic synchronization, not a sleep.
+	// Proven flake: rabbit-hole tick #51 — intermittent under full-suite load.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		srv.subMu.Lock()
+		n := len(srv.subscribers[sess.ID])
+		srv.subMu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("websocket subscriber never registered")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
 	srv.PublishFlow(sess.ID, types.Flow{ID: "ws-flow-1", SessionID: sess.ID, Intent: "test", Outcome: types.FlowOutcomeSuccess})
 
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	// Generous read deadline: the flow is published AFTER registration, so the
+	// bound only guards against a genuine delivery failure, never scheduling
+	// delays.
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("read: %v", err)
