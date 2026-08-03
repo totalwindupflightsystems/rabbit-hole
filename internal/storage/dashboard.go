@@ -12,16 +12,16 @@ import (
 // overview page: totals, error rate, activity by hour, phase and outcome
 // breakdowns, and the most common intents.
 type DashboardSummary struct {
-	TotalFlows    int64              `json:"total_flows"`
-	TotalSessions int64              `json:"total_sessions"`
-	TotalTraces   int64              `json:"total_traces"`
-	ErrorCount    int64              `json:"error_count"`  // failure + timeout
-	AvgDurationNS int64              `json:"avg_duration_ns"`
-	ByPhase       map[string]int64   `json:"by_phase"`
-	ByOutcome     map[string]int64   `json:"by_outcome"`
-	TopIntents    []IntentCount      `json:"top_intents"`
-	Hourly        []HourlyCount      `json:"hourly"` // last 24h, oldest first
-	RecentFlows   []types.Flow       `json:"recent_flows"`
+	TotalFlows    int64            `json:"total_flows"`
+	TotalSessions int64            `json:"total_sessions"`
+	TotalTraces   int64            `json:"total_traces"`
+	ErrorCount    int64            `json:"error_count"` // failure + timeout
+	AvgDurationNS int64            `json:"avg_duration_ns"`
+	ByPhase       map[string]int64 `json:"by_phase"`
+	ByOutcome     map[string]int64 `json:"by_outcome"`
+	TopIntents    []IntentCount    `json:"top_intents"`
+	Hourly        []HourlyCount    `json:"hourly"` // last 24h, oldest first
+	RecentFlows   []types.Flow     `json:"recent_flows"`
 }
 
 // IntentCount is a single (intent, count) pair for the top-intents list.
