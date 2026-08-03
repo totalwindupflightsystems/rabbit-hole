@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rabbit-Hole — Trace Dashboard</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#111722; --panel2:#161e2c; --border:#1e2a3d;
+    --text:#dce6f2; --muted:#7d8ea6; --dim:#4a5a72;
+    --accent:#00c8b3; --accent2:#4aa8ff; --purple:#8b7cf6; --pink:#f06292;
+    --warn:#ffb020; --err:#ff5d5d; --ok:#2fd57b;
+    --mono:ui-monospace,'SF Mono','Cascadia Code',Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5}
+  .app{display:flex;min-height:100vh}
+  /* ── Sidebar ─────────────────────────── */
+  .side{width:220px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;padding:0 8px 16px;border-bottom:1px solid var(--border);margin-bottom:14px}
+  .logo .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .logo b{color:var(--accent)}
+  .nav a{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:2px;cursor:pointer}
+  .nav a:hover{background:var(--panel2);color:var(--text)}
+  .nav a.on{background:rgba(0,200,179,.1);color:var(--accent)}
+  .side .meta{margin-top:18px;padding:10px;border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .side .meta .row{display:flex;justify-content:space-between;margin:3px 0}
+  .live-dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--dim)}
+  .live-dot.on{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{opacity:.4}}
+  /* ── Main ────────────────────────────── */
+  .main{flex:1;padding:22px 28px;max-width:1400px;min-width:0}
+  .top{display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+  .top h1{font-size:21px;font-weight:700;letter-spacing:-.3px}
+  .top h1 span{color:var(--accent)}
+  .top .spacer{flex:1}
+  .seg{display:flex;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{background:none;border:none;color:var(--muted);padding:7px 14px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .seg button.on{background:var(--panel2);color:var(--accent)}
+  .btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12.5px;font-family:inherit}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.live{background:rgba(47,213,123,.08);border-color:rgba(47,213,123,.35);color:var(--ok)}
+  /* Stat cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .card .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px}
+  .card .v{font-size:26px;font-weight:700;font-family:var(--mono);margin-top:4px}
+  .card .s{font-size:11.5px;color:var(--dim);margin-top:2px}
+  .card .v.ok{color:var(--ok)} .card .v.err{color:var(--err)} .card .v.warn{color:var(--warn)}
+  /* Panels */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+  @media(max-width:1000px){.grid2{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .panel h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .panel h3 .n{color:var(--accent);font-family:var(--mono)}
+  /* Bar chart */
+  .bars{display:flex;align-items:flex-end;gap:3px;height:110px;padding-top:6px}
+  .bars .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+  .bars .bar{width:100%;background:linear-gradient(180deg,var(--accent2),var(--purple));border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+  .bars .bar:hover{opacity:1}
+  .bars .lbl{font-size:9px;color:var(--dim);font-family:var(--mono);white-space:nowrap;overflow:hidden}
+  /* Donut-ish breakdown */
+  .break{display:flex;flex-direction:column;gap:8px}
+  .bk{display:flex;align-items:center;gap:10px;font-size:12.5px}
+  .bk .nm{width:110px;color:var(--muted)}
+  .bk .bar{flex:1;height:8px;background:var(--panel2);border-radius:99px;overflow:hidden}
+  .bk .bar i{display:block;height:100%;border-radius:99px}
+  .bk .ct{width:52px;text-align:right;font-family:var(--mono);color:var(--text)}
+  .c-obs{background:#4aa8ff}.c-del{background:#8b7cf6}.c-act{background:#00c8b3}.c-ver{background:#f06292}
+  .o-ok{background:#2fd57b}.o-fail{background:#ff5d5d}.o-time{background:#ffb020}.o-unk{background:#4a5a72}
+  /* Intents */
+  .intents{display:flex;flex-wrap:wrap;gap:6px}
+  .intent{background:var(--panel2);border:1px solid var(--border);border-radius:99px;padding:4px 12px;font-size:12px;font-family:var(--mono)}
+  .intent b{color:var(--accent);margin-right:5px}
+  /* Filters */
+  .filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  .filters input,.filters select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:inherit}
+  .filters input:focus,.filters select:focus{outline:none;border-color:var(--accent)}
+  .filters input{flex:1;min-width:180px}
+  /* Table */
+  .tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .tbl th{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel)}
+  .tbl td{padding:8px 10px;border-bottom:1px solid rgba(30,42,61,.6);vertical-align:middle}
+  .tbl tbody tr{cursor:pointer}
+  .tbl tbody tr:hover{background:var(--panel2)}
+  .tbl tbody tr.sel{background:rgba(0,200,179,.07)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:10.5px;font-family:var(--mono);font-weight:600}
+  .pill.obs{background:rgba(74,168,255,.15);color:#4aa8ff}.pill.del{background:rgba(139,124,246,.15);color:#8b7cf6}
+  .pill.act{background:rgba(0,200,179,.15);color:#00c8b3}.pill.ver{background:rgba(240,98,146,.15);color:#f06292}
+  .pill.ok{background:rgba(47,213,123,.12);color:#2fd57b}.pill.fail{background:rgba(255,93,93,.12);color:#ff5d5d}
+  .pill.time{background:rgba(255,176,32,.12);color:#ffb020}.pill.unk{background:rgba(74,90,114,.2);color:#7d8ea6}
+  .dur{font-family:var(--mono);color:var(--muted);font-size:11.5px}
+  .time{font-family:var(--mono);color:var(--dim);font-size:11px;white-space:nowrap}
+  .desc{color:var(--text);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .conf{font-family:var(--mono);font-size:11px}
+  .empty{text-align:center;color:var(--dim);padding:40px 0;font-size:13px}
+  /* Detail drawer */
+  #detail{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100vw;background:var(--panel);border-left:1px solid var(--border);transform:translateX(105%);transition:transform .18s ease;z-index:50;overflow-y:auto;padding:20px}
+  #detail.open{transform:translateX(0)}
+  #detail .head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  #detail .head h2{font-size:16px;flex:1}
+  #detail .x{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
+  .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:12.5px;margin-bottom:16px}
+  .kv .k{color:var(--dim);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.8px;padding-top:2px}
+  .kv .v{word-break:break-all}
+  .waterfall{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px}
+  .waterfall h4{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .wf-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11.5px}
+  .wf-row .lbl{width:120px;color:var(--muted);font-family:var(--mono);font-size:10.5px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wf-track{flex:1;height:14px;background:var(--panel2);border-radius:3px;position:relative;overflow:hidden}
+  .wf-track i{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--accent2)}
+  .wf-row .t{width:70px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .cw{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px}
+  .cw h4{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+  .cw pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:11px;color:#9db3cc;max-height:260px;overflow-y:auto}
+  /* Live ticker */
+  #ticker{position:fixed;bottom:14px;right:14px;background:rgba(17,23,34,.95);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:11.5px;color:var(--accent);display:none;max-width:420px;z-index:60;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+  #ticker.show{display:block}
+  .toast{display:flex;gap:8px;align-items:baseline}
+  .toast .i{color:var(--purple)}
+  .hide{display:none!important}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-3px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo"><span class="dot"></span> Rabbit<b>Hole</b></div>
+    <nav class="nav">
+      <a class="on" data-v="overview">◎ Overview</a>
+      <a data-v="flows">≋ Traces &amp; Flows</a>
+      <a data-v="live">⚡ Live Stream</a>
+    </nav>
+    <div class="meta" id="meta">
+      <div class="row"><span>server</span><span id="m-ver">—</span></div>
+      <div class="row"><span>uptime</span><span id="m-up">—</span></div>
+      <div class="row"><span>ws</span><span id="m-ws" class="live-dot"></span></div>
+      <div class="row"><span>db</span><span id="m-db">—</span></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <h1><span>Rabbit</span>Hole — Trace Dashboard</h1>
+      <div class="spacer"></div>
+      <div class="seg">
+        <button data-r="1h">1h</button>
+        <button data-r="6h">6h</button>
+        <button class="on" data-r="24h">24h</button>
+        <button data-r="7d">7d</button>
+        <button data-r="all">All</button>
+      </div>
+      <button class="btn" id="btn-refresh">⟳ Refresh</button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <section id="v-overview">
+      <div class="cards" id="stat-cards"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h3>Flows per hour <span class="n" id="h-total"></span></h3>
+          <div class="bars" id="h-chart"></div>
+        </div>
+        <div class="panel">
+          <h3>Phase breakdown</h3>
+          <div class="break" id="ph-break"></div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="panel">
+          <h3>Outcomes</h3>
+          <div class="break" id="out-break"></div>
+        </div>
+        <div class="panel">
+          <h3>Top intents</h3>
+          <div class="intents" id="intents"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Recent flows</h3>
+        <div id="recent"></div>
+      </div>
+    </section>
+
+    <!-- FLOWS -->
+    <section id="v-flows" class="hide">
+      <div class="filters">
+        <input id="f-q" placeholder="Search intents, descriptions… (FTS)">
+        <select id="f-session"><option value="">All sessions</option></select>
+        <select id="f-phase"><option value="">All phases</option><option>observation</option><option>deliberation</option><option>action</option><option>verification</option></select>
+        <select id="f-outcome"><option value="">All outcomes</option><option>success</option><option>failure</option><option>timeout</option><option>unknown</option></select>
+        <button class="btn" id="f-go">Filter</button>
+      </div>
+      <div class="panel" style="padding:0;overflow:auto;max-height:calc(100vh - 190px)">
+        <table class="tbl">
+          <thead><tr><th>Time</th><th>Intent</th><th>Phase</th><th>Outcome</th><th>Duration</th><th>Conf</th><th>Description</th></tr></thead>
+          <tbody id="flow-rows"></tbody>
+        </table>
+        <div class="empty hide" id="flow-empty">No flows match the current filters.</div>
+      </div>
+    </section>
+
+    <!-- LIVE -->
+    <section id="v-live" class="hide">
+      <div class="filters">
+        <select id="l-session"></select>
+        <button class="btn live" id="l-go">◉ Connect</button>
+        <span style="color:var(--dim);font-size:12px" id="l-state">Not connected</span>
+      </div>
+      <div class="panel" style="padding:0;overflow:auto;max-height:calc(100vh - 190px)">
+        <table class="tbl">
+          <thead><tr><th>Time</th><th>Intent</th><th>Phase</th><th>Outcome</th><th>Duration</th><th>Description</th></tr></thead>
+          <tbody id="live-rows"></tbody>
+        </table>
+        <div class="empty" id="live-empty">Connect to a session to watch flows stream in.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Detail drawer -->
+<div id="detail">
+  <div class="head"><h2>Flow detail</h2><button class="x" id="d-close">×</button></div>
+  <div class="kv" id="d-kv"></div>
+  <div class="waterfall" id="d-wf"><h4>Waterfall</h4><div id="d-wf-body"></div></div>
+  <div class="cw" id="d-cw"><h4>Context window</h4><pre id="d-cw-body">None captured for this flow.</pre></div>
+</div>
+
+<div id="ticker"></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let SUMMARY=null, WS=null, RANGE='24h', LIVE_SESSION='', LIVE_ROWS=[];
+
+/* ── helpers ─────────────────────────── */
+function fmtDur(ns){
+  if(ns===0||ns==null) return '—';
+  if(ns<1e3) return Math.round(ns)+'ns';
+  if(ns<1e6) return (ns/1e3).toFixed(1)+'µs';
+  if(ns<1e9) return (ns/1e6).toFixed(1)+'ms';
+  return (ns/1e9).toFixed(2)+'s';
+}
+function fmtT(iso){ if(!iso) return '—'; const d=new Date(iso); return d.toISOString().slice(11,19); }
+function fmtDay(iso){ if(!iso) return '—'; return new Date(iso).toISOString().slice(5,16).replace('T',' '); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function phasePill(p){ return `<span class="pill ${p}">${p}</span>`; }
+function outPill(o){ const c={success:'ok',failure:'fail',timeout:'time',unknown:'unk'}[o]||'unk'; return `<span class="pill ${c}">${o}</span>`; }
+function fmtBytes(n){ if(n==null) return '—'; if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; return (n/1048576).toFixed(2)+' MB'; }
+
+/* ── API ─────────────────────────────── */
+async function api(path,opts){
+  const r=await fetch(path,opts);
+  if(!r.ok) throw new Error(path+' → '+r.status);
+  return r.json();
+}
+async function loadSummary(){
+  try{
+    SUMMARY=await api('/api/v1/dashboard/summary');
+    renderOverview(); renderMeta();
+  }catch(e){ console.error(e); }
+}
+async function loadSessions(){
+  try{
+    const d=await api('/api/v1/sessions?limit=100');
+    const opts=['<option value="">All sessions</option>'];
+    (d.sessions||[]).forEach(s=>opts.push(`<option value="${esc(s.ID)}">${esc(s.Name||s.ID)}</option>`));
+    $('#f-session').innerHTML=opts.join('');
+    $('#l-session').innerHTML=opts.slice(1).join('');
+  }catch(e){ console.error(e); }
+}
+async function loadFlows(){
+  const q=$('#f-q').value.trim(), sess=$('#f-session').value, ph=$('#f-phase').value, oc=$('#f-outcome').value;
+  const body={limit:200};
+  if(q) body.query=q;
+  if(sess) body.session_id=sess;
+  if(ph) body.phases=[ph];
+  if(oc) body.outcomes=[oc];
+  if(RANGE!=='all'){ const [s,e]=rangeWindow(); body.time_range={start:s.toISOString(),end:e.toISOString()}; }
+  try{
+    const d=await api('/api/v1/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    renderFlowRows(d.flows||[]);
+  }catch(e){ console.error(e); $('#flow-empty').classList.remove('hide'); }
+}
+function rangeWindow(){
+  const e=new Date(), s=new Date();
+  const m={'1h':1,'6h':6,'24h':24,'7d':7*24}[RANGE]||24;
+  s.setHours(s.getHours()-m);
+  return [s,e];
+}
+
+/* ── render overview ─────────────────── */
+function renderOverview(){
+  const S=SUMMARY;
+  const errRate=S.total_flows? (S.error_count/S.total_flows*100):0;
+  const cards=[
+    ['Flows',S.total_flows,`${errRate.toFixed(1)}% error rate`,''],
+    ['Traces',S.total_traces,'raw syscalls captured',''],
+    ['Sessions',S.total_sessions,'agent sessions',''],
+    ['Avg duration',fmtDur(S.avg_duration_ns),'per flow',''],
+  ];
+  $('#stat-cards').innerHTML=cards.map(c=>`<div class="card"><div class="k">${c[0]}</div><div class="v ${c[3]}">${c[1]}</div><div class="s">${c[2]}</div></div>`).join('');
+  // hourly bars
+  const h=S.hourly||[];
+  $('#h-total').textContent=h.reduce((a,b)=>a+b.count,0)+' flows';
+  if(!h.length){ $('#h-chart').innerHTML='<div class="empty" style="padding:20px">No activity in the last 24h.</div>'; }
+  else{
+    const mx=Math.max(...h.map(x=>x.count),1);
+    $('#h-chart').innerHTML=h.map(x=>{
+      const ht=new Date(x.hour);
+      const lbl=ht.getHours()===0?'00':String(ht.getHours()).padStart(2,'0');
+      const pct=Math.max(x.count/mx*100,3);
+      return `<div class="col" title="${x.count} flows at ${ht.toISOString().slice(11,16)}"><div class="bar" style="height:${pct}%"></div><div class="lbl">${lbl}</div></div>`;
+    }).join('');
+  }
+  // phase breakdown
+  const phTot=Object.values(S.by_phase||{}).reduce((a,b)=>a+b,0)||1;
+  const phColor={observation:'c-obs',deliberation:'c-del',action:'c-act',verification:'c-ver'};
+  const phOrder=['observation','deliberation','action','verification'];
+  $('#ph-break').innerHTML=phOrder.map(p=>{
+    const n=S.by_phase[p]||0;
+    return `<div class="bk"><span class="nm">${p}</span><span class="bar"><i class="${phColor[p]}" style="width:${n/phTot*100}%"></i></span><span class="ct">${n}</span></div>`;
+  }).join('');
+  // outcome breakdown
+  const ocTot=Object.values(S.by_outcome||{}).reduce((a,b)=>a+b,0)||1;
+  const ocColor={success:'o-ok',failure:'o-fail',timeout:'o-time',unknown:'o-unk'};
+  $('#out-break').innerHTML=Object.entries(S.by_outcome||{}).map(([o,n])=>{
+    return `<div class="bk"><span class="nm">${o}</span><span class="bar"><i class="${ocColor[o]||'o-unk'}" style="width:${n/ocTot*100}%"></i></span><span class="ct">${n}</span></div>`;
+  }).join('')||'<div class="empty" style="padding:10px">No data yet.</div>';
+  // intents
+  $('#intents').innerHTML=(S.top_intents||[]).map(i=>`<span class="intent"><b>${i.count}</b>${esc(i.intent)}</span>`).join('')||'<span style="color:var(--dim)">No flows yet.</span>';
+  // recent
+  renderFlowTable(S.recent_flows||[],'#recent');
+}
+function renderMeta(){
+  fetch('/health').then(r=>r.json()).then(h=>{
+    $('#m-ver').textContent = 'v'+h.version;
+    $('#m-up').textContent = h.uptime||'—';
+  }).catch(()=>{ $('#m-ver').textContent='—'; });
+  if(SUMMARY){
+    $('#m-db').textContent=`${SUMMARY.total_flows} flows`;
+  }
+}
+function flowRowHtml(f){
+  return `<tr data-id="${esc(f.ID)}">
+    <td class="time" title="${fmtDay(f.StartTime)}">${fmtT(f.StartTime)}</td>
+    <td style="font-family:var(--mono);font-size:11.5px">${esc(f.Intent)}</td>
+    <td>${phasePill(f.Phase)}</td>
+    <td>${outPill(f.Outcome)}</td>
+    <td class="dur">${fmtDur(f.Duration)}</td>
+    <td class="conf" style="color:${f.Confidence>0.8?'var(--ok)':f.Confidence>0.5?'var(--warn)':'var(--dim)'}">${(f.Confidence*100).toFixed(0)}%</td>
+    <td class="desc" title="${esc(f.Description)}">${esc(f.Description)}</td>
+  </tr>`;
+}
+function renderFlowRows(flows){
+  const t=$('#flow-rows');
+  if(!flows.length){ t.innerHTML=''; $('#flow-empty').classList.remove('hide'); return; }
+  $('#flow-empty').classList.add('hide');
+  t.innerHTML=flows.map(flowRowHtml).join('');
+}
+function renderFlowTable(flows,sel){
+  const wrap=$(sel);
+  if(!flows.length){ wrap.innerHTML='<div class="empty">No flows yet — run <b style="color:var(--accent)">rabbit-hole demo</b> to seed a dogfood session.</div>'; return; }
+  wrap.innerHTML=`<table class="tbl"><thead><tr><th>Time</th><th>Intent</th><th>Phase</th><th>Outcome</th><th>Duration</th><th>Conf</th><th>Description</th></tr></thead><tbody>${flows.map(flowRowHtml).join('')}</tbody></table>`;
+}
+
+/* ── detail drawer ───────────────────── */
+async function openFlow(id){
+  try{
+    const f=await api('/api/v1/flows/'+id);
+    $('#d-kv').innerHTML=`
+      <span class="k">id</span><span class="v">${esc(f.ID)}</span>
+      <span class="k">session</span><span class="v">${esc(f.SessionID)}</span>
+      <span class="k">intent</span><span class="v">${esc(f.Intent)}</span>
+      <span class="k">phase</span><span class="v">${phasePill(f.Phase)}</span>
+      <span class="k">outcome</span><span class="v">${outPill(f.Outcome)}</span>
+      <span class="k">confidence</span><span class="v">${(f.Confidence*100).toFixed(1)}%</span>
+      <span class="k">start</span><span class="v">${fmtDay(f.StartTime)} UTC</span>
+      <span class="k">duration</span><span class="v">${fmtDur(f.Duration)}</span>
+      <span class="k">traces</span><span class="v">${(f.TraceIDs||[]).length}</span>
+      <span class="k">description</span><span class="v">${esc(f.Description)}</span>`;
+    // synthetic waterfall from metadata if present
+    const wf=$('#d-wf-body');
+    const md=f.Metadata||{};
+    let steps=md.steps||null;
+    if(!steps && f.Duration){
+      steps=[{label:'flow',dur:f.Duration,start:0}];
+    }
+    if(steps&&steps.length){
+      const max=Math.max(...steps.map(s=>s.dur||1));
+      wf.innerHTML=steps.map(s=>`
+        <div class="wf-row"><span class="lbl" title="${esc(s.label)}">${esc(s.label)}</span>
+        <span class="wf-track"><i style="left:${s.start?((s.start/f.Duration)*100).toFixed(1):0}%;width:${Math.max(((s.dur||1)/max)*100,4).toFixed(1)}%"></i></span>
+        <span class="t">${fmtDur(s.dur)}</span></div>`).join('');
+    } else { wf.innerHTML='<div style="color:var(--dim);font-size:12px">No step metadata.</div>'; }
+    $('#detail').classList.add('open');
+    try{
+      const cw=await api('/api/v1/flows/'+id+'/context-window');
+      $('#d-cw-body').textContent=JSON.stringify(cw,null,2);
+    }catch(e){ $('#d-cw-body').textContent='None captured for this flow.'; }
+  }catch(e){ console.error(e); }
+}
+
+/* ── live stream ─────────────────────── */
+function connectLive(){
+  LIVE_SESSION=$('#l-session').value;
+  if(!LIVE_SESSION){ $('#l-state').textContent='Pick a session first.'; return; }
+  if(WS) WS.close();
+  LIVE_ROWS=[]; $('#live-rows').innerHTML=''; $('#live-empty').classList.add('hide');
+  const proto=location.protocol==='https:'?'wss':'ws';
+  WS=new WebSocket(`${proto}://${location.host}/api/v1/ws/sessions/${LIVE_SESSION}`);
+  WS.onopen=()=>{ $('#l-state').textContent=`Live · ${LIVE_SESSION}`; $('#m-ws').classList.add('on'); };
+  WS.onmessage=(ev)=>{
+    let f; try{ f=JSON.parse(ev.data); }catch(e){ return; }
+    LIVE_ROWS.unshift(f); if(LIVE_ROWS.length>200) LIVE_ROWS.pop();
+    $('#live-rows').innerHTML=LIVE_ROWS.map(x=>`<tr data-id="${esc(x.ID)}">
+      <td class="time">${fmtT(x.StartTime)}</td><td style="font-family:var(--mono);font-size:11.5px">${esc(x.Intent)}</td>
+      <td>${phasePill(x.Phase)}</td><td>${outPill(x.Outcome)}</td><td class="dur">${fmtDur(x.Duration)}</td>
+      <td class="desc">${esc(x.Description)}</td></tr>`).join('');
+    toast(f);
+  };
+  WS.onclose=()=>{ $('#l-state').textContent='Disconnected'; $('#m-ws').classList.remove('on'); };
+  WS.onerror=()=>{ $('#l-state').textContent='Connection error'; };
+}
+function toast(f){
+  const t=$('#ticker');
+  t.innerHTML=`<div class="toast"><span class="i">⚡</span><span>${esc(f.Intent)}</span><span style="color:var(--dim)">·</span><span>${fmtDur(f.Duration)}</span></div>`;
+  t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+/* ── nav ─────────────────────────────── */
+function showView(v){
+  $$('.nav a').forEach(x=>x.classList.toggle('on', x.dataset.v===v));
+  $('#v-overview').classList.toggle('hide',v!=='overview');
+  $('#v-flows').classList.toggle('hide',v!=='flows');
+  $('#v-live').classList.toggle('hide',v!=='live');
+  if(v==='flows') loadFlows();
+  if(v==='live') loadSessions();
+}
+$$('.nav a').forEach(a=>a.onclick=()=>{ showView(a.dataset.v); location.hash=a.dataset.v; });
+$$('.seg button').forEach(b=>b.onclick=()=>{
+  $$('.seg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  RANGE=b.dataset.r; loadSummary(); if(!$('#v-flows').classList.contains('hide')) loadFlows();
+});
+$('#btn-refresh').onclick=()=>{ loadSummary(); if(!$('#v-flows').classList.contains('hide')) loadFlows(); };
+$('#f-go').onclick=loadFlows;
+$('#f-q').addEventListener('keydown',e=>{ if(e.key==='Enter') loadFlows(); });
+$('#l-go').onclick=connectLive;
+$('#d-close').onclick=()=>$('#detail').classList.remove('open');
+document.addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-id]');
+  if(tr) openFlow(tr.dataset.id);
+});
+$('#detail').addEventListener('click',e=>{ if(e.target.id==='detail') e.target.classList.remove('open'); });
+
+/* ── boot ────────────────────────────── */
+(async()=>{
+  await Promise.all([loadSummary(),loadSessions()]);
+  const h=(location.hash||'').replace('#','');
+  if(h==='flows'||h==='live') showView(h);
+  setInterval(loadSummary,30000);
+})();
+</script>
+</body>
+</html>

@@ -155,6 +155,9 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 	// Real-time WebSocket
 	s.mux.HandleFunc("GET /api/v1/ws/sessions/{id}", s.handleWebSocket)
 
+	// Embedded web dashboard (New Relic-style trace explorer)
+	s.dashboardRoutes()
+
 	s.srv = &http.Server{
 		Addr:    addr,
 		Handler: withMetrics(apiKeyMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger)), s.metrics, s.logger),

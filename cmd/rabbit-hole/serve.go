@@ -10,14 +10,17 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/attach"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/classify"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
+	"github.com/totalwindupflightsystems/rabbit-hole/internal/demo"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/express"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 func newServeCmd() *cobra.Command {
@@ -25,6 +28,8 @@ func newServeCmd() *cobra.Command {
 		addr         string
 		noClassifier bool
 		remote       string
+		demoStream   bool
+		demoEveryS   int
 	)
 
 	cmd := &cobra.Command{
@@ -33,7 +38,12 @@ func newServeCmd() *cobra.Command {
 		Long: `Start the full Rabbit-Hole daemon: open the database, load the classification
 model, initialise the eBPF collector, and start the HTTP/WebSocket server.
 
-The daemon blocks until it receives SIGINT or SIGTERM.`,
+The daemon blocks until it receives SIGINT or SIGTERM.
+
+Dogfood mode (--demo-stream): with no root/eBPF available, generate one
+realistic flow every N seconds into a demo session and publish it to the
+dashboard's Live tab over WebSocket. This is how Rabbit-Hole eats its own
+dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
@@ -133,6 +143,39 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 				return fmt.Errorf("server: %w", err)
 			}
 
+			// Dogfood live stream: generate + store + publish one flow every N
+			// seconds into a dedicated demo session. The dashboard's Live tab
+			// subscribes via WebSocket and shows flows arriving in real time.
+			if demoStream {
+				sc := demo.Generate(1, time.Now(), time.Now().UnixNano())
+				sessionID := sc.Session.ID
+				_ = store.StoreSession(cobraCmd.Context(), &sc.Session)
+				streamCtx, streamCancel := context.WithCancel(cobraCmd.Context())
+				defer streamCancel()
+				go func() {
+					ticker := time.NewTicker(time.Duration(demoEveryS) * time.Second)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-streamCtx.Done():
+							return
+						case <-ticker.C:
+							sc := demo.Generate(1, time.Now(), time.Now().UnixNano())
+							f := sc.Flows[0]
+							f.SessionID = sessionID
+							f.ID = fmt.Sprintf("fl-live-%d", time.Now().UnixNano())
+							if err := store.StoreFlows(streamCtx, []types.Flow{f}); err != nil {
+								logger.Error("demo stream: store", "err", err)
+								continue
+							}
+							server.PublishFlow(sessionID, f)
+							logger.Info("demo stream: flow published", "intent", f.Intent)
+						}
+					}
+				}()
+				logger.Info("dogfood live stream enabled", "session", sessionID, "every_s", demoEveryS)
+			}
+
 			logger.Info("rabbit-hole is running", "addr", cfg.ListenAddr, "pid", os.Getpid())
 
 			// Wait for signal
@@ -149,6 +192,8 @@ The daemon blocks until it receives SIGINT or SIGTERM.`,
 	cmd.Flags().StringVar(&addr, "addr", "", "Listen address (default: 127.0.0.1:9734)")
 	cmd.Flags().BoolVar(&noClassifier, "no-classifier", false, "Disable classification (pattern matching only)")
 	cmd.Flags().StringVar(&remote, "remote", "", "Remote classifier endpoint[::token] (e.g. localhost:50051 or host:443@token)")
+	cmd.Flags().BoolVar(&demoStream, "demo-stream", false, "Dogfood mode: publish a demo flow every N seconds (no root needed)")
+	cmd.Flags().IntVar(&demoEveryS, "demo-every", 3, "Seconds between demo-stream flows")
 
 	return cmd
 }

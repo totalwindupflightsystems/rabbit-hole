@@ -30,6 +30,7 @@ Self-hosted. One binary. Zero SDK.`,
 	rootCmd.AddCommand(
 		newAttachCmd(),
 		newDetachCmd(),
+		newDemoCmd(),
 		newListCmd(),
 		newServeCmd(),
 		newChatCmd(),
