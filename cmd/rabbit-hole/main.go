@@ -6,6 +6,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
@@ -41,5 +43,10 @@ Self-hosted. One binary. Zero SDK.`,
 		newCompletionCmd(),
 	)
 
-	rootCmd.Execute()
+	// Cobra's Execute prints "Error: ..." for RunE failures but returns the
+	// error instead of exiting non-zero — propagate it so scripts can tell
+	// a hard failure (e.g. eBPF preflight) apart from a clean exit.
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

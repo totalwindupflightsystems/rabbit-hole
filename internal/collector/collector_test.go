@@ -1,13 +1,17 @@
 package collector
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 // ---- Ring Buffer Tests ----
@@ -272,6 +276,80 @@ func TestCollector_Defaults(t *testing.T) {
 	bs := c.BufferStats()
 	if bs.Size != 100000 {
 		t.Errorf("expected default buffer size 100000, got %d", bs.Size)
+	}
+}
+
+// TestCollector_PreflightEBPF_Degraded simulates an unprivileged host (no
+// CAP_SYS_RESOURCE) by injecting a failing removeMemlock hook, then verifies
+// the collector reports degraded state and the preflight error carries the
+// explicit "telemetry DISABLED" message. Runs in CI without needing to drop
+// real privileges.
+func TestCollector_PreflightEBPF_Degraded(t *testing.T) {
+	old := removeMemlock
+	removeMemlock = func() error {
+		return fmt.Errorf("failed to set memlock rlimit: operation not permitted")
+	}
+	defer func() { removeMemlock = old }()
+
+	logBuf := &bytes.Buffer{}
+	logger := slog.New(slog.NewTextHandler(logBuf, nil))
+
+	c, err := NewEBPFCollector(1000, 10, logger)
+	if err != nil {
+		t.Fatalf("NewEBPFCollector: %v", err)
+	}
+	defer c.Close()
+
+	// Degraded state must be observable.
+	if c.EBPFEnabled() {
+		t.Error("EBPFEnabled() = true, want false on unprivileged host")
+	}
+
+	// Preflight must fail with the explicit message + privilege hint.
+	err = c.PreflightEBPF()
+	if err == nil {
+		t.Fatal("PreflightEBPF() = nil, want error on unprivileged host")
+	}
+	for _, want := range []string{
+		"eBPF unavailable — telemetry DISABLED",
+		"CAP_SYS_RESOURCE",
+		"kernel 5.11",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("PreflightEBPF() error %q missing %q", err.Error(), want)
+		}
+	}
+
+	// The existing degraded-mode WARN must still be emitted so the
+	// integration battery's load-failure detection stays consistent.
+	if !strings.Contains(logBuf.String(), "kernel probes unavailable") {
+		t.Errorf("expected degraded WARN log, got: %s", logBuf.String())
+	}
+
+	// Session management must still work in degraded mode.
+	session, err := c.Attach(context.Background(), int32(os.Getpid()), DefaultCollectOptions())
+	if err != nil {
+		t.Fatalf("Attach in degraded mode: %v", err)
+	}
+	if session == nil || session.ID == "" {
+		t.Fatal("Attach returned empty session in degraded mode")
+	}
+	if err := c.Detach(context.Background(), session.ID); err != nil {
+		t.Fatalf("Detach in degraded mode: %v", err)
+	}
+}
+
+// TestCollector_PreflightEBPF_Enabled verifies the loaded-state decision
+// path without touching real eBPF: a collector with no load error reports
+// enabled and passes preflight.
+func TestCollector_PreflightEBPF_Enabled(t *testing.T) {
+	c := &eBPFCollector{ebpfErr: nil}
+
+	if !c.EBPFEnabled() {
+		t.Error("EBPFEnabled() = false, want true when eBPF loaded")
+	}
+	if err := c.PreflightEBPF(); err != nil {
+		t.Errorf("PreflightEBPF() = %v, want nil when eBPF loaded", err)
 	}
 }
 

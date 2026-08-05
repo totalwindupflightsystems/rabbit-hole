@@ -33,6 +33,7 @@ func TestNewAttachCmd_Flags(t *testing.T) {
 		{"context windows", "context-windows", "false"},
 		{"categories", "categories", "[]"},
 		{"no tls intercept", "no-tls-intercept", "false"},
+		{"no ebpf", "no-ebpf", "false"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

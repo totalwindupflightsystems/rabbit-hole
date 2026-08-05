@@ -37,8 +37,39 @@ make build
 ## Requirements
 
 - **Go 1.26+** (uses `go tool` and `testing/synctest`)
-- **Linux** with eBPF support (kernel 5.8+)
+- **Linux** with eBPF support (kernel 5.11+) and **CAP_SYS_RESOURCE** for full telemetry collection
 - **SQLite** (embedded via `modernc.org/sqlite` — no CGO required)
+
+### eBPF privileges
+
+Full kernel telemetry (the Collect layer) requires:
+
+- Linux kernel **5.11+**
+- **CAP_SYS_RESOURCE** (typically root — run `sudo ./bin/rabbit-hole attach --pid <PID>`)
+
+Without these privileges, `attach` and `serve` **refuse to start** and exit
+non-zero with:
+
+```
+eBPF unavailable — telemetry DISABLED
+```
+
+This is deliberate: silently running without kernel probes would make you
+believe telemetry is being collected when nothing is.
+
+**Degraded mode** (explicit opt-in, no kernel telemetry) is available via:
+
+```bash
+./bin/rabbit-hole attach --pid <PID> --no-ebpf
+./bin/rabbit-hole serve --db rabbit-hole.db --no-ebpf
+./bin/rabbit-hole serve --db rabbit-hole.db --demo-stream   # dogfood mode: generates demo flows, no root/eBPF needed
+```
+
+In degraded mode Rabbit-Hole logs a clear warning that telemetry is
+**DISABLED** and the `/health` collector component reports
+`eBPF degraded — telemetry DISABLED`. Session-management commands
+(`status`, `list`, `detach`) keep working on unprivileged hosts and print a
+"telemetry DISABLED" note so the limitation stays visible.
 
 ## Building
 

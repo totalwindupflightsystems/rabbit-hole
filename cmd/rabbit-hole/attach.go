@@ -18,6 +18,7 @@ func newAttachCmd() *cobra.Command {
 		contextWindows bool
 		categories     []string
 		noTLSIntercept bool
+		noEBPF         bool
 	)
 
 	cmd := &cobra.Command{
@@ -34,6 +35,17 @@ func newAttachCmd() *cobra.Command {
 			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
 			if err != nil {
 				return fmt.Errorf("collector: %w", err)
+			}
+
+			// Preflight: attach promises kernel telemetry, so degraded
+			// eBPF is a hard error unless the user explicitly opted into
+			// degraded mode with --no-ebpf.
+			if !noEBPF {
+				if err := coll.PreflightEBPF(); err != nil {
+					return err
+				}
+			} else {
+				logger.Warn("eBPF disabled via --no-ebpf — telemetry DISABLED, running in degraded mode")
 			}
 
 			var cats []types.TraceCategory
@@ -65,6 +77,7 @@ func newAttachCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&contextWindows, "context-windows", false, "Enable context window capture (expensive)")
 	cmd.Flags().StringSliceVar(&categories, "categories", nil, "Trace categories to collect (syscall,network,file,llm_call,process,resource)")
 	cmd.Flags().BoolVar(&noTLSIntercept, "no-tls-intercept", false, "Disable TLS interception")
+	cmd.Flags().BoolVar(&noEBPF, "no-ebpf", false, "Run in degraded mode without eBPF (telemetry DISABLED)")
 	cmd.MarkFlagRequired("pid")
 
 	return cmd

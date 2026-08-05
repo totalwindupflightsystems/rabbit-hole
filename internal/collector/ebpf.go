@@ -37,6 +37,12 @@ type eBPFCollector struct {
 	perfReader  *perf.Reader
 	maxSessions int
 	logger      *slog.Logger
+
+	// ebpfErr is non-nil when the collector is running degraded — kernel
+	// probes failed to load (no CAP_SYS_RESOURCE, kernel < 5.11, missing
+	// BPF support) and no kernel telemetry will arrive. Ring buffer and
+	// session bookkeeping still work.
+	ebpfErr error
 }
 
 // collectionSession tracks the state of a single attached agent process.
@@ -50,9 +56,10 @@ type collectionSession struct {
 // NewEBPFCollector creates and initializes an eBPF-based trace collector.
 //
 // It attempts to load compiled BPF programs (requires `go generate` + clang).
-// If eBPF loading fails (bpf2go not run, no clang, missing kernel support),
-// the collector operates in degraded mode — ring buffer and session tracking
-// work, but no kernel events arrive.
+// If eBPF loading fails (bpf2go not run, no clang, missing kernel support,
+// insufficient privileges), the collector operates in degraded mode — ring
+// buffer and session tracking work, but no kernel events arrive. Callers can
+// distinguish the states via EBPFEnabled() and PreflightEBPF().
 //
 // Parameters:
 //   - bufSize: ring buffer capacity (0 = default 100000)
@@ -79,8 +86,11 @@ func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger) (*eBPFColle
 	}
 
 	// Best-effort eBPF loading. If bpf2go hasn't been run or the kernel
-	// lacks BPF support, operate without kernel probes.
+	// lacks BPF support, operate without kernel probes. The failure is
+	// recorded so callers can hard-fail via PreflightEBPF() when they
+	// need real telemetry (see attach/serve).
 	if err := c.loadEBPF(); err != nil {
+		c.ebpfErr = err
 		logger.Warn("ebpf: kernel probes unavailable, running without eBPF",
 			"err", err,
 			"hint", "run 'go generate ./internal/collector/' with clang and kernel headers installed",
@@ -90,9 +100,34 @@ func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger) (*eBPFColle
 	return c, nil
 }
 
+// EBPFEnabled reports whether kernel probes are loaded and telemetry is
+// flowing. When false, the collector runs degraded: session bookkeeping and
+// the ring buffer work, but no kernel events arrive.
+func (c *eBPFCollector) EBPFEnabled() bool {
+	return c.ebpfErr == nil
+}
+
+// PreflightEBPF returns nil when eBPF probes are loaded and functional.
+// When the collector is running degraded (e.g. no CAP_SYS_RESOURCE, kernel
+// < 5.11, missing BPF support), it returns an explicit error stating that
+// telemetry is DISABLED plus the underlying cause and the opt-in escape
+// hatch. Commands that promise kernel telemetry (attach, serve) must check
+// this before starting; session-management commands (status, list, detach)
+// must not.
+func (c *eBPFCollector) PreflightEBPF() error {
+	if c.ebpfErr == nil {
+		return nil
+	}
+	return fmt.Errorf("eBPF unavailable — telemetry DISABLED (requires CAP_SYS_RESOURCE and kernel 5.11+; use --no-ebpf to run in degraded mode): %w", c.ebpfErr)
+}
+
+// removeMemlock is a package-level hook so tests can simulate an
+// unprivileged host (no CAP_SYS_RESOURCE) without dropping privileges.
+var removeMemlock = rlimit.RemoveMemlock
+
 // loadEBPF attempts to load eBPF programs and start the perf event reader.
 func (c *eBPFCollector) loadEBPF() error {
-	if err := rlimit.RemoveMemlock(); err != nil {
+	if err := removeMemlock(); err != nil {
 		c.logger.Warn("ebpf: remove memlock rlimit failed, continuing without eBPF",
 			"err", err,
 			"hint", "may need CAP_SYS_RESOURCE or kernel 5.11+",

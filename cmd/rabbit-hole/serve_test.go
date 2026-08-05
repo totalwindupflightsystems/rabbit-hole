@@ -66,6 +66,7 @@ func TestNewServeCmd_Flags(t *testing.T) {
 		{"listen address", "addr", "string", ""},
 		{"no classifier flag", "no-classifier", "bool", "false"},
 		{"remote classifier", "remote", "string", ""},
+		{"no ebpf flag", "no-ebpf", "bool", "false"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

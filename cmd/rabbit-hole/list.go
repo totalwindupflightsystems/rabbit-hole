@@ -33,6 +33,12 @@ func newListCmd() *cobra.Command {
 				return fmt.Errorf("collector: %w", err)
 			}
 
+			// Session management works without kernel probes; just be
+			// honest that no telemetry is being collected.
+			if !coll.EBPFEnabled() {
+				logger.Warn("eBPF unavailable — telemetry DISABLED, session management only")
+			}
+
 			sessions, err := coll.List(cobraCmd.Context())
 			if err != nil {
 				return fmt.Errorf("list sessions: %w", err)

@@ -40,6 +40,11 @@ func newStatusCmd() *cobra.Command {
 				return fmt.Errorf("collector: %w", err)
 			}
 
+			ebpfStatus := "enabled"
+			if !col.EBPFEnabled() {
+				ebpfStatus = "DISABLED (no kernel probes — telemetry not collected; see README for required privileges)"
+			}
+
 			sessions, err := col.List(cobraCmd.Context())
 			if err != nil {
 				return fmt.Errorf("sessions: %w", err)
@@ -66,6 +71,7 @@ func newStatusCmd() *cobra.Command {
 			}
 			fmt.Printf("Server:      %s\n", cfg.ListenAddr)
 			fmt.Printf("Log Level:   %s\n", cfg.LogLevel)
+			fmt.Printf("eBPF:        %s\n", ebpfStatus)
 
 			return nil
 		},

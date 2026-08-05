@@ -30,6 +30,7 @@ func newServeCmd() *cobra.Command {
 		remote       string
 		demoStream   bool
 		demoEveryS   int
+		noEBPF       bool
 	)
 
 	cmd := &cobra.Command{
@@ -76,6 +77,19 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
 			if err != nil {
 				return fmt.Errorf("collector: %w", err)
+			}
+
+			// Preflight: serve promises kernel telemetry, so degraded
+			// eBPF is a hard error unless the user explicitly opted into
+			// degraded mode (--no-ebpf or the --demo-stream dogfood mode,
+			// which is documented as "no root/eBPF available").
+			if !coll.EBPFEnabled() {
+				if !noEBPF && !demoStream {
+					return coll.PreflightEBPF()
+				}
+				logger.Warn("eBPF unavailable — telemetry DISABLED, running in degraded mode (--no-ebpf or --demo-stream)")
+			} else if noEBPF {
+				logger.Warn("eBPF disabled via --no-ebpf — telemetry DISABLED, running in degraded mode")
 			}
 
 			// 3. Classifier
@@ -133,9 +147,13 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 				})
 			}
 			collRef := coll
+			collectorDetail := "eBPF probes attached"
+			if !coll.EBPFEnabled() {
+				collectorDetail = "eBPF degraded — telemetry DISABLED"
+			}
 			server.RegisterHealthCheck(express.HealthCheck{
 				Name:   "collector",
-				Detail: "eBPF probes attached",
+				Detail: collectorDetail,
 				Check:  collRef.Health,
 			})
 
@@ -194,6 +212,7 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 	cmd.Flags().StringVar(&remote, "remote", "", "Remote classifier endpoint[::token] (e.g. localhost:50051 or host:443@token)")
 	cmd.Flags().BoolVar(&demoStream, "demo-stream", false, "Dogfood mode: publish a demo flow every N seconds (no root needed)")
 	cmd.Flags().IntVar(&demoEveryS, "demo-every", 3, "Seconds between demo-stream flows")
+	cmd.Flags().BoolVar(&noEBPF, "no-ebpf", false, "Run in degraded mode without eBPF (telemetry DISABLED)")
 
 	return cmd
 }
