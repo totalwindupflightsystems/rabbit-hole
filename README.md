@@ -19,7 +19,7 @@ make build
 ./bin/rabbit-hole attach --pid <PID>
 
 # Start the daemon (collect + classify + serve)
-./bin/rabbit-hole serve --db rabbit-hole.db
+./bin/rabbit-hole serve
 
 # Ask questions
 ./bin/rabbit-hole chat "What did the agent do in the last hour?"
@@ -28,11 +28,19 @@ make build
 ./bin/rabbit-hole search "sql error"
 
 # Check status
-./bin/rabbit-hole status --db rabbit-hole.db
+./bin/rabbit-hole status
 
 # Compact old data
-./bin/rabbit-hole compact --db rabbit-hole.db --before 720h
+./bin/rabbit-hole compact --before 720h
 ```
+
+### Configuration
+
+Rabbit-Hole is configured entirely through environment variables — there are
+no database-path flags. The SQLite database defaults to
+`~/.rabbit-hole/rabbit-hole.db`; override it with `RABBITHOLE_DB_PATH` (or move
+the whole data directory with `RABBITHOLE_DATA_DIR`). The HTTP server binds to
+`127.0.0.1:9734` by default (`RABBITHOLE_LISTEN_ADDR`).
 
 ## Requirements
 
@@ -61,8 +69,8 @@ believe telemetry is being collected when nothing is.
 
 ```bash
 ./bin/rabbit-hole attach --pid <PID> --no-ebpf
-./bin/rabbit-hole serve --db rabbit-hole.db --no-ebpf
-./bin/rabbit-hole serve --db rabbit-hole.db --demo-stream   # dogfood mode: generates demo flows, no root/eBPF needed
+./bin/rabbit-hole serve --no-ebpf
+RABBITHOLE_DB_PATH=/tmp/rabbit-hole-demo.db ./bin/rabbit-hole serve --demo-stream   # dogfood mode: generates demo flows, no root/eBPF needed
 ```
 
 In degraded mode Rabbit-Hole logs a clear warning that telemetry is
