@@ -50,7 +50,7 @@ COLLECT (eBPF/strace) → CLASSIFY (pluggable: local Gemma or remote gRPC) → E
 
 ## Task Board
 
-`.coding-hermes/tasks.md` — spec-driven phased implementation.
+`.coding-hermes/board/tasks.jsonl` — spec-driven phased implementation.
 
 ## Foreman
 

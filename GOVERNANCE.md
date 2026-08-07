@@ -37,7 +37,7 @@ Anyone may open issues and merge requests. Contributions must:
 ### Automated Foreman
 
 The project runs a coding-hermes foreman that executes the task board in
-`.coding-hermes/tasks.md`. The foreman is a contributor, not a maintainer: it
+`.coding-hermes/board/tasks.jsonl`. The foreman is a contributor, not a maintainer: it
 spawns workers, verifies quality gates, and commits against board tasks, but
 release decisions and spec-level architecture changes remain with maintainers.
 
