@@ -26,7 +26,6 @@ data/
 Thumbs.db
 
 # Coding Hermes
-.coding-hermes/
 !.coding-hermes/tasks.md
 
 # Hilo
@@ -50,3 +49,8 @@ internal/collector/bpf/vmlinux.h
 .env
 .env.*
 !.env.example
+
+.coding-hermes/board/board.db
+.coding-hermes/board/board.db.wal
+.coding-hermes/board/*.parquet
+.coding-hermes/board/*.duckdb
