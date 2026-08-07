@@ -24,8 +24,8 @@ info:
     name: MIT
     url: https://opensource.org/license/mit
 servers:
-  - url: http://localhost:8472
-    description: Default local expression server
+  - url: http://127.0.0.1:9734
+    description: Default local expression server (RABBITHOLE_LISTEN_ADDR)
     variables: {}
 tags:
   - name: Health
@@ -42,6 +42,8 @@ tags:
     description: Natural-language queries over agent activity.
   - name: Streaming
     description: Real-time flow events over WebSocket.
+  - name: Dashboard
+    description: Aggregate overview metrics and the embedded dashboard SPA.
 
 paths:
   /health:
@@ -425,6 +427,63 @@ paths:
         pingInterval: PT30S
         pongTimeout: PT60S
         closeReason: session ended
+
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboard
+      summary: Dashboard SPA
+      description: |
+        Serves the embedded single-page dashboard (a New Relic-style trace
+        explorer) as HTML. The SPA reads live data from
+        `GET /api/v1/dashboard/summary`.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Dashboard SPA HTML.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/dashboard/summary:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardSummary
+      summary: Get dashboard aggregate summary
+      description: |
+        Returns the aggregate metrics the dashboard overview page renders:
+        totals, error count, average duration, and breakdowns by phase,
+        outcome and UTC hour, plus the most common intents and the most
+        recent flows.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Dashboard overview aggregates.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
   securitySchemes:
@@ -994,6 +1053,92 @@ components:
           format: int32
           minimum: 1
           description: Relative retry delay in seconds; duplicates the `Retry-After` header.
+
+    DashboardSummary:
+      type: object
+      additionalProperties: false
+      required: [total_flows, total_sessions, total_traces, error_count, avg_duration_ns, by_phase, by_outcome, top_intents, hourly, recent_flows]
+      properties:
+        total_flows:
+          type: integer
+          format: int64
+          description: Total number of classified flows.
+        total_sessions:
+          type: integer
+          format: int64
+          description: Total number of monitored agent sessions.
+        total_traces:
+          type: integer
+          format: int64
+          description: Total number of collected traces.
+        error_count:
+          type: integer
+          format: int64
+          description: Number of flows with a `failure` or `timeout` outcome.
+        avg_duration_ns:
+          type: integer
+          format: int64
+          description: Average flow duration in nanoseconds.
+        by_phase:
+          type: object
+          description: Flow count per classification phase.
+          additionalProperties: {type: integer, format: int64}
+        by_outcome:
+          type: object
+          description: Flow count per outcome.
+          additionalProperties: {type: integer, format: int64}
+        top_intents:
+          type: array
+          description: Most common intents, most frequent first (up to 8).
+          items: {$ref: '#/components/schemas/IntentCount'}
+        hourly:
+          type: array
+          description: Flows started per UTC hour over the last 24 hours, oldest first.
+          items: {$ref: '#/components/schemas/HourlyCount'}
+        recent_flows:
+          type: array
+          description: Most recent flows for the dashboard table preview (up to 12).
+          items: {$ref: '#/components/schemas/Flow'}
+      example:
+        total_flows: 4711
+        total_sessions: 12
+        total_traces: 23108
+        error_count: 37
+        avg_duration_ns: 1250000000
+        by_phase: {perceive: 2100, reason: 1800, act: 811}
+        by_outcome: {success: 4602, failure: 33, timeout: 4, cancelled: 72}
+        top_intents:
+          - {intent: read_file, count: 1204}
+          - {intent: patch_code, count: 892}
+        hourly:
+          - {hour: '2026-08-07T00:00:00Z', count: 0}
+        recent_flows: []
+
+    IntentCount:
+      type: object
+      additionalProperties: false
+      required: [intent, count]
+      properties:
+        intent:
+          type: string
+          description: Classified intent name.
+        count:
+          type: integer
+          format: int64
+          description: Number of flows with this intent.
+
+    HourlyCount:
+      type: object
+      additionalProperties: false
+      required: [hour, count]
+      properties:
+        hour:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+          description: UTC hour bucket start.
+        count:
+          type: integer
+          format: int64
+          description: Number of flows started in this hour.
 
 x-cors:
   description: Middleware handles OPTIONS for every path before route dispatch.
