@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -56,6 +57,10 @@ func newChatCmd() *cobra.Command {
 			var chatResp types.ChatResponse
 			if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
 				return fmt.Errorf("decode: %w", err)
+			}
+
+			if chatResp.Stub {
+				fmt.Fprintln(os.Stderr, "warning: chat model not configured — using built-in stub answers (set RABBITHOLE_CHAT_MODEL_ENDPOINT, RABBITHOLE_CHAT_MODEL_NAME, RABBITHOLE_CHAT_MODEL_API_KEY for real answers)")
 			}
 
 			if jsonOut {

@@ -63,6 +63,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		Suggestions: suggestions,
 	}
 
+	// Surface stub mode to clients: when the built-in keyword model is
+	// active (no real chat model configured), mark the response so the
+	// chat CLI can warn users that answers are canned.
+	if _, ok := s.chatModel.(*stubChatModel); ok {
+		resp.Stub = true
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 

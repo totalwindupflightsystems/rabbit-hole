@@ -2,7 +2,15 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
+
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 func TestNewChatCmd_Structure(t *testing.T) {
@@ -94,5 +102,104 @@ func TestNewChatCmd_FlagValues(t *testing.T) {
 	}
 	if !jsonOut {
 		t.Error("json flag should be true")
+	}
+}
+
+// captureStderr runs fn and returns everything written to os.Stderr.
+func captureStderr(fn func()) string {
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	fn()
+
+	w.Close()
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	return buf.String()
+}
+
+// chatTestServer serves a canned ChatResponse for the chat CLI's POST to
+// /api/v1/chat. GAP-004: lets tests exercise the CLI without a live server.
+func chatTestServer(t *testing.T, resp types.ChatResponse) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func TestChatCmd_PrintsStubWarning(t *testing.T) {
+	ts := chatTestServer(t, types.ChatResponse{
+		Answer:      "I couldn't find any matching activity for your query.",
+		Suggestions: []string{"What happened in the last hour?"},
+		Stub:        true,
+	})
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	stderr := captureStderr(func() {
+		cmd := newChatCmd()
+		cmd.SetArgs([]string{"what happened in the last hour"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("chat: %v", err)
+		}
+	})
+
+	if !strings.Contains(stderr, "stub") {
+		t.Errorf("stderr missing stub warning, got: %q", stderr)
+	}
+	if !strings.Contains(stderr, "RABBITHOLE_CHAT_MODEL_ENDPOINT") {
+		t.Errorf("stderr warning should name the chat model env vars, got: %q", stderr)
+	}
+}
+
+func TestChatCmd_NoStubWarning_WhenRealModel(t *testing.T) {
+	ts := chatTestServer(t, types.ChatResponse{Answer: "Helios edited auth.go."})
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	stderr := captureStderr(func() {
+		cmd := newChatCmd()
+		cmd.SetArgs([]string{"what happened?"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("chat: %v", err)
+		}
+	})
+
+	if strings.Contains(stderr, "stub") {
+		t.Errorf("stderr should not mention stub when the model is real, got: %q", stderr)
+	}
+}
+
+func TestChatCmd_StubWarning_KeepsJSONStdoutClean(t *testing.T) {
+	ts := chatTestServer(t, types.ChatResponse{
+		Answer: "I couldn't find any matching activity for your query.",
+		Stub:   true,
+	})
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	var stdout string
+	stderr := captureStderr(func() {
+		stdout = captureStdout(func() {
+			cmd := newChatCmd()
+			cmd.SetArgs([]string{"--json", "what happened in the last hour"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("chat: %v", err)
+			}
+		})
+	})
+
+	if !strings.Contains(stderr, "stub") {
+		t.Errorf("stderr missing stub warning, got: %q", stderr)
+	}
+	var parsed types.ChatResponse
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Errorf("stdout is not pure JSON: %v — got: %q", err, stdout)
+	}
+	if strings.Contains(stdout, "warning") {
+		t.Errorf("stdout polluted with warning text, got: %q", stdout)
 	}
 }

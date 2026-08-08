@@ -42,6 +42,24 @@ no database-path flags. The SQLite database defaults to
 the whole data directory with `RABBITHOLE_DATA_DIR`). The HTTP server binds to
 `127.0.0.1:9734` by default (`RABBITHOLE_LISTEN_ADDR`).
 
+### Chat model
+
+The chat CLI gets natural-language answers from an LLM via the server. Without
+a real model configured, the server falls back to a built-in keyword stub and
+the chat CLI prints a `stub` warning so you know the answers are canned:
+
+- `RABBITHOLE_CHAT_MODEL_ENDPOINT` — base URL of an OpenAI-compatible chat
+  completions API (e.g. `http://127.0.0.1:11434/v1` for Ollama,
+  `https://api.openai.com/v1` for OpenAI). `/chat/completions` is appended
+  automatically.
+- `RABBITHOLE_CHAT_MODEL_NAME` — the model name to use (e.g. `llama3.1`).
+- `RABBITHOLE_CHAT_MODEL_API_KEY` — API key for the endpoint (any value works
+  for local endpoints like Ollama).
+
+All three are required to enable the real model; if any is unset, the server
+logs a warning and uses built-in stub answers. Set `RABBITHOLE_CHAT_ENABLED=false`
+to force the stub even when the env vars are present.
+
 ## Requirements
 
 - **Go 1.26+** (uses `go tool` and `testing/synctest`)

@@ -36,6 +36,9 @@ type ChatResponse struct {
 	Answer      string   // natural language response
 	Flows       []Flow   // referenced flows
 	Suggestions []string // follow-up questions
+	// Stub is true when the built-in keyword stub model handled the
+	// request (no real chat model configured).
+	Stub bool `json:"stub,omitempty"`
 }
 
 // ListOptions configures pagination for list endpoints.
