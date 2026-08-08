@@ -154,6 +154,11 @@ specs/                    # Architecture and design specifications
 | S04 | specs/04-Expression-Layer.md | HTTP/WebSocket chat interface |
 | S05 | specs/05-Storage-Data-Model.md | SQLite storage and data model |
 | S06 | specs/06-CLI-Self-Hosted.md | CLI and self-hosted deployment |
+| S07 | specs/openapi.yaml | OpenAPI 3.0 API contract (authoritative) |
+
+For a consumer-oriented walkthrough of the HTTP API (endpoints, curl examples,
+WebSocket streaming, configuration), see [docs/integration.md](docs/integration.md).
+The machine-readable contract lives in [specs/openapi.yaml](specs/openapi.yaml).
 
 ## License
 
