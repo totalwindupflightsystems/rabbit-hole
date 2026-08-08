@@ -24,11 +24,12 @@ func (s *Server) dashboardRoutes() {
 	}
 	fileServer := http.FileServer(http.FS(sub))
 
-	// Redirect /dashboard → /dashboard/ so the SPA loads without a trailing
-	// slash, then serve the subtree (FileServer needs the trailing-slash
-	// pattern so the mux strips the prefix before it looks up files).
+	// Serve the SPA index directly at /dashboard (no trailing slash) so
+	// spec-following consumers don't hit a 301 redirect, then serve the
+	// subtree (FileServer needs the trailing-slash pattern so the mux
+	// strips the prefix before it looks up files).
 	s.mux.HandleFunc("GET /dashboard", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/dashboard/", http.StatusMovedPermanently)
+		http.ServeFileFS(w, r, sub, "index.html")
 	})
 	s.mux.Handle("GET /dashboard/", http.StripPrefix("/dashboard/", fileServer))
 	s.mux.HandleFunc("GET /api/v1/dashboard/summary", s.handleDashboardSummary)

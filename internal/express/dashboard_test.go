@@ -34,7 +34,7 @@ func TestDashboardRoutes_ServesSPA(t *testing.T) {
 	}
 }
 
-func TestDashboardRoutes_RedirectsWithoutSlash(t *testing.T) {
+func TestDashboardRoutes_ServesSPAWithoutSlash(t *testing.T) {
 	srv := newTestExpressServer(t)
 	defer srv.store.Close()
 
@@ -42,11 +42,17 @@ func TestDashboardRoutes_RedirectsWithoutSlash(t *testing.T) {
 	rr := httptest.NewRecorder()
 	srv.server.mux.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusMovedPermanently {
-		t.Fatalf("GET /dashboard = %d, want 301", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /dashboard = %d, want 200", rr.Code)
 	}
-	if loc := rr.Header().Get("Location"); loc != "/dashboard/" {
-		t.Errorf("Location = %q, want /dashboard/", loc)
+	body := rr.Body.String()
+	if len(body) < 5000 {
+		t.Errorf("dashboard body = %d bytes, want embedded SPA (>5000)", len(body))
+	}
+	for _, want := range []string{"Trace Dashboard", "Live Stream", "dashboard/summary"} {
+		if !contains(body, want) {
+			t.Errorf("dashboard body missing %q", want)
+		}
 	}
 }
 
