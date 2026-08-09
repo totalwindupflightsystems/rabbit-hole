@@ -1,7 +1,13 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 func TestNewAttachCmd_Structure(t *testing.T) {
@@ -29,6 +35,7 @@ func TestNewAttachCmd_Flags(t *testing.T) {
 		flagName     string
 		defaultValue string
 	}{
+		{"daemon address", "addr", ""},
 		{"pid flag", "pid", "0"},
 		{"context windows", "context-windows", "false"},
 		{"categories", "categories", "[]"},
@@ -64,6 +71,65 @@ func TestNewAttachCmd_PidSetAndRead(t *testing.T) {
 	}
 	if pid != 1234 {
 		t.Errorf("pid = %d, want %d", pid, 1234)
+	}
+}
+
+func TestNewAttachCmd_AddrFlag(t *testing.T) {
+	// DF-006: --addr overrides the daemon address; help must mention the
+	// RABBITHOLE_LISTEN_ADDR fallback.
+	cmd := newAttachCmd()
+
+	f := cmd.Flags().Lookup("addr")
+	if f == nil {
+		t.Fatal("flag --addr not registered")
+	}
+	if f.DefValue != "" {
+		t.Errorf("flag --addr default = %q, want %q", f.DefValue, "")
+	}
+	if !strings.Contains(f.Usage, "RABBITHOLE_LISTEN_ADDR") {
+		t.Errorf("--addr help should mention RABBITHOLE_LISTEN_ADDR fallback, got: %q", f.Usage)
+	}
+
+	if err := cmd.Flags().Set("addr", "127.0.0.1:9999"); err != nil {
+		t.Fatalf("failed to set --addr: %v", err)
+	}
+	addr, err := cmd.Flags().GetString("addr")
+	if err != nil {
+		t.Fatalf("GetString(addr): %v", err)
+	}
+	if addr != "127.0.0.1:9999" {
+		t.Errorf("addr = %q, want %q", addr, "127.0.0.1:9999")
+	}
+}
+
+func TestAttachCmd_AddrFlagReachesServer(t *testing.T) {
+	// DF-006: --addr (not the env var) must route the attach request to the
+	// given daemon address. --no-ebpf skips the eBPF preflight; the data dir
+	// is isolated so config.Validate() passes.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/sessions/attach" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(types.SessionSummary{
+			ID:        "sess-addr-override",
+			AgentPID:  4242,
+			AgentName: "test-agent",
+		})
+	}))
+	defer ts.Close()
+	t.Setenv("RABBITHOLE_DATA_DIR", t.TempDir())
+
+	output := captureStdout(func() {
+		cmd := newAttachCmd()
+		cmd.SetArgs([]string{"--pid", "4242", "--no-ebpf", "--addr", strings.TrimPrefix(ts.URL, "http://")})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("attach with --addr: %v", err)
+		}
+	})
+	if !strings.Contains(output, "sess-addr-override") {
+		t.Errorf("attach output missing session id, got: %q", output)
 	}
 }
 

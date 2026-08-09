@@ -14,6 +14,7 @@ import (
 
 func newAttachCmd() *cobra.Command {
 	var (
+		addr           string
 		pid            int32
 		contextWindows bool
 		categories     []string
@@ -35,6 +36,10 @@ running for collection; stop the session with 'rabbit-hole detach <id>'.`,
 			cfg, err := loadConfig()
 			if err != nil {
 				return fmt.Errorf("config: %w", err)
+			}
+
+			if addr != "" {
+				cfg.ListenAddr = addr
 			}
 
 			logger := newLogger(cfg.LogLevel)
@@ -86,6 +91,7 @@ running for collection; stop the session with 'rabbit-hole detach <id>'.`,
 		},
 	}
 
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 	cmd.Flags().Int32Var(&pid, "pid", 0, "Agent process ID to attach to")
 	cmd.Flags().BoolVar(&contextWindows, "context-windows", false, "Enable context window capture (expensive)")
 	cmd.Flags().StringSliceVar(&categories, "categories", nil, "Trace categories to collect (syscall,network,file,llm_call,process,resource)")

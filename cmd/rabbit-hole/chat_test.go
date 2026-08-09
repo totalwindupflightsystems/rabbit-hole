@@ -39,6 +39,7 @@ func TestNewChatCmd_Flags(t *testing.T) {
 		flagName     string
 		defaultValue string
 	}{
+		{"daemon address", "addr", ""},
 		{"session filter", "session", ""},
 		{"json output", "json", "false"},
 	}
@@ -102,6 +103,54 @@ func TestNewChatCmd_FlagValues(t *testing.T) {
 	}
 	if !jsonOut {
 		t.Error("json flag should be true")
+	}
+}
+
+func TestNewChatCmd_AddrFlag(t *testing.T) {
+	// DF-006: --addr overrides the daemon address; help must mention the
+	// RABBITHOLE_LISTEN_ADDR fallback.
+	cmd := newChatCmd()
+
+	f := cmd.Flags().Lookup("addr")
+	if f == nil {
+		t.Fatal("flag --addr not registered")
+	}
+	if f.DefValue != "" {
+		t.Errorf("flag --addr default = %q, want %q", f.DefValue, "")
+	}
+	if !strings.Contains(f.Usage, "RABBITHOLE_LISTEN_ADDR") {
+		t.Errorf("--addr help should mention RABBITHOLE_LISTEN_ADDR fallback, got: %q", f.Usage)
+	}
+
+	if err := cmd.Flags().Set("addr", "127.0.0.1:9999"); err != nil {
+		t.Fatalf("failed to set --addr: %v", err)
+	}
+	addr, err := cmd.Flags().GetString("addr")
+	if err != nil {
+		t.Fatalf("GetString(addr): %v", err)
+	}
+	if addr != "127.0.0.1:9999" {
+		t.Errorf("addr = %q, want %q", addr, "127.0.0.1:9999")
+	}
+}
+
+func TestChatCmd_AddrFlagReachesServer(t *testing.T) {
+	// DF-006: --addr (not the env var) must route the chat request to the
+	// given daemon address. No RABBITHOLE_LISTEN_ADDR is set here.
+	ts := chatTestServer(t, types.ChatResponse{
+		Answer: "override reached the daemon",
+	})
+	addr := strings.TrimPrefix(ts.URL, "http://")
+
+	output := captureStdout(func() {
+		cmd := newChatCmd()
+		cmd.SetArgs([]string{"--addr", addr, "hi"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("chat with --addr: %v", err)
+		}
+	})
+	if !strings.Contains(output, "override reached the daemon") {
+		t.Errorf("chat output missing server answer, got: %q", output)
 	}
 }
 

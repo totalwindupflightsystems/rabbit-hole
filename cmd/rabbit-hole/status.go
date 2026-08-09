@@ -16,6 +16,8 @@ import (
 )
 
 func newStatusCmd() *cobra.Command {
+	var addr string
+
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show Rabbit-Hole daemon status",
@@ -23,6 +25,10 @@ func newStatusCmd() *cobra.Command {
 			cfg, err := config.Load()
 			if err != nil {
 				return fmt.Errorf("config: %w", err)
+			}
+
+			if addr != "" {
+				cfg.ListenAddr = addr
 			}
 
 			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
@@ -79,6 +85,8 @@ func newStatusCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 
 	return cmd
 }

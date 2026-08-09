@@ -18,6 +18,7 @@ import (
 
 func newChatCmd() *cobra.Command {
 	var (
+		addr      string
 		sessionID string
 		jsonOut   bool
 	)
@@ -30,6 +31,10 @@ func newChatCmd() *cobra.Command {
 			cfg, err := config.Load()
 			if err != nil {
 				return fmt.Errorf("config: %w", err)
+			}
+
+			if addr != "" {
+				cfg.ListenAddr = addr
 			}
 
 			query := strings.Join(args, " ")
@@ -80,6 +85,7 @@ func newChatCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 	cmd.Flags().StringVar(&sessionID, "session", "", "Filter by session ID")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "JSON output")
 	return cmd

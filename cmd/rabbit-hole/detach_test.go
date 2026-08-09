@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -38,6 +41,59 @@ func TestNewDetachCmd_AllFlagDefault(t *testing.T) {
 	}
 	if all {
 		t.Error("default --all should be false")
+	}
+}
+
+func TestNewDetachCmd_AddrFlag(t *testing.T) {
+	// DF-006: --addr overrides the daemon address; help must mention the
+	// RABBITHOLE_LISTEN_ADDR fallback.
+	cmd := newDetachCmd()
+
+	f := cmd.Flags().Lookup("addr")
+	if f == nil {
+		t.Fatal("flag --addr not registered")
+	}
+	if f.DefValue != "" {
+		t.Errorf("flag --addr default = %q, want %q", f.DefValue, "")
+	}
+	if !strings.Contains(f.Usage, "RABBITHOLE_LISTEN_ADDR") {
+		t.Errorf("--addr help should mention RABBITHOLE_LISTEN_ADDR fallback, got: %q", f.Usage)
+	}
+
+	if err := cmd.Flags().Set("addr", "127.0.0.1:9999"); err != nil {
+		t.Fatalf("failed to set --addr: %v", err)
+	}
+	addr, err := cmd.Flags().GetString("addr")
+	if err != nil {
+		t.Fatalf("GetString(addr): %v", err)
+	}
+	if addr != "127.0.0.1:9999" {
+		t.Errorf("addr = %q, want %q", addr, "127.0.0.1:9999")
+	}
+}
+
+func TestDetachCmd_AddrFlagReachesServer(t *testing.T) {
+	// DF-006: --addr (not the env var) must route the detach request to the
+	// given daemon address. The data dir is isolated so config.Validate()
+	// passes.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/sessions/sess-abc/detach" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	t.Setenv("RABBITHOLE_DATA_DIR", t.TempDir())
+
+	output := captureStdout(func() {
+		cmd := newDetachCmd()
+		cmd.SetArgs([]string{"--addr", strings.TrimPrefix(ts.URL, "http://"), "sess-abc"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("detach with --addr: %v", err)
+		}
+	})
+	if !strings.Contains(output, "sess-abc") {
+		t.Errorf("detach output missing session id, got: %q", output)
 	}
 }
 

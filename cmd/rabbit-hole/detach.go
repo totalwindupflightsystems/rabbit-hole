@@ -12,7 +12,10 @@ import (
 )
 
 func newDetachCmd() *cobra.Command {
-	var detachAll bool
+	var (
+		addr      string
+		detachAll bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "detach <session-id>",
@@ -28,6 +31,10 @@ detached too — run 'rabbit-hole list --all' to find the session ID.`,
 			cfg, err := loadConfig()
 			if err != nil {
 				return fmt.Errorf("config: %w", err)
+			}
+
+			if addr != "" {
+				cfg.ListenAddr = addr
 			}
 
 			client := newDaemonClient(cfg.ListenAddr)
@@ -59,6 +66,7 @@ detached too — run 'rabbit-hole list --all' to find the session ID.`,
 		},
 	}
 
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 	cmd.Flags().BoolVar(&detachAll, "all", false, "Detach all active sessions")
 
 	return cmd

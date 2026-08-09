@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -48,11 +49,47 @@ func TestNewStatusCmd_Structure(t *testing.T) {
 	}
 }
 
-func TestNewStatusCmd_NoFlags(t *testing.T) {
-	// status has no custom flags — HasFlags() returns false when none registered
+func TestNewStatusCmd_AddrFlag(t *testing.T) {
+	// DF-006: status accepts --addr; help must mention the
+	// RABBITHOLE_LISTEN_ADDR fallback.
 	cmd := newStatusCmd()
-	// cobra.Command.HasFlags returns true only if flags are registered
-	if cmd.Flags().HasFlags() {
-		t.Error("expected status command to have no flags")
+
+	f := cmd.Flags().Lookup("addr")
+	if f == nil {
+		t.Fatal("flag --addr not registered")
+	}
+	if f.DefValue != "" {
+		t.Errorf("flag --addr default = %q, want %q", f.DefValue, "")
+	}
+	if !strings.Contains(f.Usage, "RABBITHOLE_LISTEN_ADDR") {
+		t.Errorf("--addr help should mention RABBITHOLE_LISTEN_ADDR fallback, got: %q", f.Usage)
+	}
+
+	if err := cmd.Flags().Set("addr", "127.0.0.1:9999"); err != nil {
+		t.Fatalf("failed to set --addr: %v", err)
+	}
+	addr, err := cmd.Flags().GetString("addr")
+	if err != nil {
+		t.Fatalf("GetString(addr): %v", err)
+	}
+	if addr != "127.0.0.1:9999" {
+		t.Errorf("addr = %q, want %q", addr, "127.0.0.1:9999")
+	}
+}
+
+func TestStatusCmd_AddrFlagPrintsOverriddenAddress(t *testing.T) {
+	// DF-006: status prints the overridden daemon address in its Server line.
+	// The data dir is isolated so a fresh DB is created in the temp dir.
+	t.Setenv("RABBITHOLE_DATA_DIR", t.TempDir())
+
+	output := captureStdout(func() {
+		cmd := newStatusCmd()
+		cmd.SetArgs([]string{"--addr", "127.0.0.1:19734"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("status with --addr: %v", err)
+		}
+	})
+	if !strings.Contains(output, "127.0.0.1:19734") {
+		t.Errorf("status output should show the overridden address, got: %q", output)
 	}
 }
