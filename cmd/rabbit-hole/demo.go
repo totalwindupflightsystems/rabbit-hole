@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -52,6 +53,11 @@ Use this to dogfood Rabbit-Hole on itself: seed, serve, open /dashboard.`,
 			start := time.Now().Add(-time.Duration(hoursBack) * time.Hour)
 			sc := demo.Generate(nFlows, start, time.Now().UnixNano())
 
+			// Store the session as 'running' first: StoreTraces resolves the
+			// session ID from the PID via a status='running' lookup, so a
+			// 'completed' session would orphan its traces to an FK failure
+			// on a fresh DB. Finalize to 'completed' after seeding.
+			sc.Session.Status = types.SessionStatusRunning
 			if err := store.StoreSession(ctx, &sc.Session); err != nil {
 				return fmt.Errorf("store session: %w", err)
 			}
@@ -100,6 +106,13 @@ Use this to dogfood Rabbit-Hole on itself: seed, serve, open /dashboard.`,
 				}
 			}
 
+			// All child rows are in — flip the seeded session to its real
+			// terminal status.
+			sc.Session.Status = types.SessionStatusCompleted
+			if err := store.UpdateSession(ctx, &sc.Session); err != nil {
+				return fmt.Errorf("finalize session: %w", err)
+			}
+
 			fmt.Printf("Seeded dogfood session %s\n", sc.Session.ID)
 			fmt.Printf("  agent:   %s (pid %d, %s)\n", sc.Session.AgentName, sc.Session.AgentPID, sc.Session.Metadata.CommandLine)
 			fmt.Printf("  flows:   %d across %s\n", len(sc.Flows), time.Since(start).Round(time.Second))
@@ -109,7 +122,19 @@ Use this to dogfood Rabbit-Hole on itself: seed, serve, open /dashboard.`,
 			}
 			fmt.Printf("  outcome: %v\n", byOutcome)
 			fmt.Println()
-			fmt.Println("Next: run `rabbit-hole serve` and open http://localhost:8080/dashboard")
+
+			// Point the hint at the address the server actually binds
+			// (cfg.ListenAddr honors RABBITHOLE_LISTEN_ADDR), not a
+			// hardcoded port. 0.0.0.0 is not a reachable URL host, so
+			// print localhost in that case.
+			host, port, err := net.SplitHostPort(cfg.ListenAddr)
+			if err != nil {
+				return fmt.Errorf("config: invalid listen addr %q: %w", cfg.ListenAddr, err)
+			}
+			if host == "" || host == "0.0.0.0" {
+				host = "localhost"
+			}
+			fmt.Printf("Next: run `rabbit-hole serve` and open http://%s:%s/dashboard\n", host, port)
 			return nil
 		},
 	}
