@@ -10,20 +10,25 @@ import (
 // Flow is a semantic unit — multiple traces grouped by the classifier
 // into a meaningful action. This is the primary unit the expression layer
 // searches and presents to humans.
+//
+// JSON wire names are snake_case (DF-003) to match the OpenAPI contract in
+// specs/openapi.yaml. Every field is emitted unconditionally (no omitempty)
+// so the wire shape matches the spec's required list; nil ContextWindow and
+// nil Metadata marshal as JSON null.
 type Flow struct {
-	ID            string          // UUIDv7
-	SessionID     string          // agent session this belongs to
-	TraceIDs      []string        // constituent trace IDs
-	Intent        string          // "read_file", "patch_code", "search_web", "llm_api_call"
-	Phase         FlowPhase       // observation, deliberation, action, verification
-	Description   string          // human-readable: "Read auth.go (247 lines, 2ms)"
-	Outcome       FlowOutcome     // success, failure, timeout, unknown
-	Confidence    float64         // 0.0–1.0 classifier confidence
-	StartTime     time.Time       // first trace timestamp
-	EndTime       time.Time       // last trace timestamp
-	Duration      time.Duration   // total duration of the flow
-	ContextWindow *ContextWindow  // optional snapshot at decision point
-	Metadata      json.RawMessage // layer-specific metadata
+	ID            string          `json:"id"`             // UUIDv7
+	SessionID     string          `json:"session_id"`     // agent session this belongs to
+	TraceIDs      []string        `json:"trace_ids"`      // constituent trace IDs
+	Intent        string          `json:"intent"`         // "read_file", "patch_code", "search_web", "llm_api_call"
+	Phase         FlowPhase       `json:"phase"`          // observation, deliberation, action, verification
+	Description   string          `json:"description"`    // human-readable: "Read auth.go (247 lines, 2ms)"
+	Outcome       FlowOutcome     `json:"outcome"`        // success, failure, timeout, unknown
+	Confidence    float64         `json:"confidence"`     // 0.0–1.0 classifier confidence
+	StartTime     time.Time       `json:"start_time"`     // first trace timestamp
+	EndTime       time.Time       `json:"end_time"`       // last trace timestamp
+	Duration      time.Duration   `json:"duration"`       // total duration of the flow
+	ContextWindow *ContextWindow  `json:"context_window"` // optional snapshot at decision point
+	Metadata      json.RawMessage `json:"metadata"`       // layer-specific metadata
 }
 
 // FlowPhase represents the stage in the agent's decision cycle.

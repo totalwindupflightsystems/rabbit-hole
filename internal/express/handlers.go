@@ -129,6 +129,7 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 			StartTime: sess.StartTime,
 			EndTime:   sess.EndTime,
 			Status:    sess.Status,
+			Metadata:  sess.Metadata,
 		}
 	}
 
@@ -141,12 +142,13 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 type sessionSummary struct {
-	ID        string              `json:"id"`
-	AgentPID  int32               `json:"agent_pid"`
-	AgentName string              `json:"agent_name"`
-	StartTime time.Time           `json:"start_time"`
-	EndTime   *time.Time          `json:"end_time,omitempty"`
-	Status    types.SessionStatus `json:"status"`
+	ID        string                `json:"id"`
+	AgentPID  int32                 `json:"agent_pid"`
+	AgentName string                `json:"agent_name"`
+	StartTime time.Time             `json:"start_time"`
+	EndTime   *time.Time            `json:"end_time,omitempty"`
+	Status    types.SessionStatus   `json:"status"`
+	Metadata  types.SessionMetadata `json:"metadata,omitempty"`
 }
 
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {

@@ -638,6 +638,18 @@ components:
       pattern: '^-?(?:[0-9]+(?:\.[0-9]+)?(?:ns|us|µs|ms|s|m|h))+$'
       examples: [2s, 1.5s, 5h30m15s]
 
+    DurationNanoseconds:
+      type: integer
+      format: int64
+      minimum: 0
+      description: |
+        Duration encoded as integer nanoseconds — the JSON wire encoding Go's
+        `time.Duration` marshals to (json.Marshal of time.Duration emits the
+        raw nanosecond count). Used for Flow.duration and
+        ContextWindow.duration; GoDuration (string form) remains for fields
+        such as HealthResponse.uptime that are emitted via String().
+      example: 1200000000
+
     FlowPhase:
       type: string
       description: Stage in the agent decision cycle (`types.FlowPhase`).
@@ -772,6 +784,8 @@ components:
             - $ref: '#/components/schemas/RFC3339Timestamp'
             - type: 'null'
         status: {$ref: '#/components/schemas/SessionStatus'}
+        metadata:
+          $ref: '#/components/schemas/SessionMetadata'
 
     SessionListResponse:
       type: object
@@ -803,6 +817,12 @@ components:
             start_time: '2026-07-21T12:00:00Z'
             end_time: null
             status: running
+            metadata:
+              command_line: hermes chat
+              environment: {OPENAI_API_KEY: '***'}
+              work_dir: /home/kara
+              binary_path: /usr/local/bin/hermes
+              version: 0.18.2
         total: 1
         offset: 0
         limit: 20
@@ -833,7 +853,7 @@ components:
           format: int64
           minimum: 0
         duration:
-          $ref: '#/components/schemas/GoDuration'
+          $ref: '#/components/schemas/DurationNanoseconds'
       example:
         flow_id: 0191b000-0000-7000-8000-000000000001
         timestamp: '2026-07-21T12:00:00Z'
@@ -842,7 +862,7 @@ components:
         messages_in: '[{"role":"user","content":"Read auth.go"}]'
         messages_out: '[{"role":"assistant","content":"..."}]'
         token_count: 2048
-        duration: 1.5s
+        duration: 1500000000
 
     Flow:
       type: object
@@ -894,7 +914,7 @@ components:
         end_time:
           $ref: '#/components/schemas/RFC3339Timestamp'
         duration:
-          $ref: '#/components/schemas/GoDuration'
+          $ref: '#/components/schemas/DurationNanoseconds'
         context_window:
           anyOf:
             - $ref: '#/components/schemas/ContextWindow'
@@ -902,7 +922,10 @@ components:
           description: Optional LLM decision-point snapshot.
         metadata:
           type: object
-          description: Arbitrary layer-specific JSON metadata.
+          nullable: true
+          description: |
+            Arbitrary layer-specific JSON metadata. Null when no metadata was
+            recorded for the flow.
           additionalProperties: true
       example:
         id: 0191b000-0000-7000-8000-000000000001
@@ -915,7 +938,7 @@ components:
         confidence: 0.95
         start_time: '2026-07-21T12:00:00Z'
         end_time: '2026-07-21T12:00:02Z'
-        duration: 2s
+        duration: 2000000000
         context_window: null
         metadata: {}
 

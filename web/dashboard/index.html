@@ -264,7 +264,7 @@ async function loadSessions(){
   try{
     const d=await api('/api/v1/sessions?limit=100');
     const opts=['<option value="">All sessions</option>'];
-    (d.sessions||[]).forEach(s=>opts.push(`<option value="${esc(s.ID)}">${esc(s.Name||s.ID)}</option>`));
+    (d.sessions||[]).forEach(s=>opts.push(`<option value="${esc(s.id)}">${esc(s.agent_name||s.id)}</option>`));
     $('#f-session').innerHTML=opts.join('');
     $('#l-session').innerHTML=opts.slice(1).join('');
   }catch(e){ console.error(e); }
@@ -274,7 +274,7 @@ async function loadFlows(){
   const body={limit:200};
   if(q) body.query=q;
   if(sess) body.session_id=sess;
-  if(ph) body.phases=[ph];
+  if(ph) body.categories=[ph];
   if(oc) body.outcomes=[oc];
   if(RANGE!=='all'){ const [s,e]=rangeWindow(); body.time_range={start:s.toISOString(),end:e.toISOString()}; }
   try{
@@ -342,14 +342,14 @@ function renderMeta(){
   }
 }
 function flowRowHtml(f){
-  return `<tr data-id="${esc(f.ID)}">
-    <td class="time" title="${fmtDay(f.StartTime)}">${fmtT(f.StartTime)}</td>
-    <td style="font-family:var(--mono);font-size:11.5px">${esc(f.Intent)}</td>
-    <td>${phasePill(f.Phase)}</td>
-    <td>${outPill(f.Outcome)}</td>
-    <td class="dur">${fmtDur(f.Duration)}</td>
-    <td class="conf" style="color:${f.Confidence>0.8?'var(--ok)':f.Confidence>0.5?'var(--warn)':'var(--dim)'}">${(f.Confidence*100).toFixed(0)}%</td>
-    <td class="desc" title="${esc(f.Description)}">${esc(f.Description)}</td>
+  return `<tr data-id="${esc(f.id)}">
+    <td class="time" title="${fmtDay(f.start_time)}">${fmtT(f.start_time)}</td>
+    <td style="font-family:var(--mono);font-size:11.5px">${esc(f.intent)}</td>
+    <td>${phasePill(f.phase)}</td>
+    <td>${outPill(f.outcome)}</td>
+    <td class="dur">${fmtDur(f.duration)}</td>
+    <td class="conf" style="color:${f.confidence>0.8?'var(--ok)':f.confidence>0.5?'var(--warn)':'var(--dim)'}">${(f.confidence*100).toFixed(0)}%</td>
+    <td class="desc" title="${esc(f.description)}">${esc(f.description)}</td>
   </tr>`;
 }
 function renderFlowRows(flows){
@@ -369,28 +369,28 @@ async function openFlow(id){
   try{
     const f=await api('/api/v1/flows/'+id);
     $('#d-kv').innerHTML=`
-      <span class="k">id</span><span class="v">${esc(f.ID)}</span>
-      <span class="k">session</span><span class="v">${esc(f.SessionID)}</span>
-      <span class="k">intent</span><span class="v">${esc(f.Intent)}</span>
-      <span class="k">phase</span><span class="v">${phasePill(f.Phase)}</span>
-      <span class="k">outcome</span><span class="v">${outPill(f.Outcome)}</span>
-      <span class="k">confidence</span><span class="v">${(f.Confidence*100).toFixed(1)}%</span>
-      <span class="k">start</span><span class="v">${fmtDay(f.StartTime)} UTC</span>
-      <span class="k">duration</span><span class="v">${fmtDur(f.Duration)}</span>
-      <span class="k">traces</span><span class="v">${(f.TraceIDs||[]).length}</span>
-      <span class="k">description</span><span class="v">${esc(f.Description)}</span>`;
+      <span class="k">id</span><span class="v">${esc(f.id)}</span>
+      <span class="k">session</span><span class="v">${esc(f.session_id)}</span>
+      <span class="k">intent</span><span class="v">${esc(f.intent)}</span>
+      <span class="k">phase</span><span class="v">${phasePill(f.phase)}</span>
+      <span class="k">outcome</span><span class="v">${outPill(f.outcome)}</span>
+      <span class="k">confidence</span><span class="v">${(f.confidence*100).toFixed(1)}%</span>
+      <span class="k">start</span><span class="v">${fmtDay(f.start_time)} UTC</span>
+      <span class="k">duration</span><span class="v">${fmtDur(f.duration)}</span>
+      <span class="k">traces</span><span class="v">${(f.trace_ids||[]).length}</span>
+      <span class="k">description</span><span class="v">${esc(f.description)}</span>`;
     // synthetic waterfall from metadata if present
     const wf=$('#d-wf-body');
-    const md=f.Metadata||{};
+    const md=f.metadata||{};
     let steps=md.steps||null;
-    if(!steps && f.Duration){
-      steps=[{label:'flow',dur:f.Duration,start:0}];
+    if(!steps && f.duration){
+      steps=[{label:'flow',dur:f.duration,start:0}];
     }
     if(steps&&steps.length){
       const max=Math.max(...steps.map(s=>s.dur||1));
       wf.innerHTML=steps.map(s=>`
         <div class="wf-row"><span class="lbl" title="${esc(s.label)}">${esc(s.label)}</span>
-        <span class="wf-track"><i style="left:${s.start?((s.start/f.Duration)*100).toFixed(1):0}%;width:${Math.max(((s.dur||1)/max)*100,4).toFixed(1)}%"></i></span>
+        <span class="wf-track"><i style="left:${s.start?((s.start/f.duration)*100).toFixed(1):0}%;width:${Math.max(((s.dur||1)/max)*100,4).toFixed(1)}%"></i></span>
         <span class="t">${fmtDur(s.dur)}</span></div>`).join('');
     } else { wf.innerHTML='<div style="color:var(--dim);font-size:12px">No step metadata.</div>'; }
     $('#detail').classList.add('open');
@@ -413,10 +413,10 @@ function connectLive(){
   WS.onmessage=(ev)=>{
     let f; try{ f=JSON.parse(ev.data); }catch(e){ return; }
     LIVE_ROWS.unshift(f); if(LIVE_ROWS.length>200) LIVE_ROWS.pop();
-    $('#live-rows').innerHTML=LIVE_ROWS.map(x=>`<tr data-id="${esc(x.ID)}">
-      <td class="time">${fmtT(x.StartTime)}</td><td style="font-family:var(--mono);font-size:11.5px">${esc(x.Intent)}</td>
-      <td>${phasePill(x.Phase)}</td><td>${outPill(x.Outcome)}</td><td class="dur">${fmtDur(x.Duration)}</td>
-      <td class="desc">${esc(x.Description)}</td></tr>`).join('');
+    $('#live-rows').innerHTML=LIVE_ROWS.map(x=>`<tr data-id="${esc(x.id)}">
+      <td class="time">${fmtT(x.start_time)}</td><td style="font-family:var(--mono);font-size:11.5px">${esc(x.intent)}</td>
+      <td>${phasePill(x.phase)}</td><td>${outPill(x.outcome)}</td><td class="dur">${fmtDur(x.duration)}</td>
+      <td class="desc">${esc(x.description)}</td></tr>`).join('');
     toast(f);
   };
   WS.onclose=()=>{ $('#l-state').textContent='Disconnected'; $('#m-ws').classList.remove('on'); };
@@ -424,7 +424,7 @@ function connectLive(){
 }
 function toast(f){
   const t=$('#ticker');
-  t.innerHTML=`<div class="toast"><span class="i">⚡</span><span>${esc(f.Intent)}</span><span style="color:var(--dim)">·</span><span>${fmtDur(f.Duration)}</span></div>`;
+  t.innerHTML=`<div class="toast"><span class="i">⚡</span><span>${esc(f.intent)}</span><span style="color:var(--dim)">·</span><span>${fmtDur(f.duration)}</span></div>`;
   t.classList.add('show');
   clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600);
 }

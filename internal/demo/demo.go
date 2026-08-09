@@ -13,6 +13,8 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
@@ -29,7 +31,9 @@ type Scenario struct {
 func Generate(nFlows int, start time.Time, seed int64) *Scenario {
 	rng := rand.New(rand.NewSource(seed))
 
-	sessionID := "demo-" + start.UTC().Format("20060102-150405") + "-" + fmt.Sprintf("%d", seed%100000)
+	// Session IDs are UUIDv7 to satisfy the OpenAPI contract
+	// (specs/openapi.yaml declares Session.id as UUIDv7).
+	sessionID := uuid.Must(uuid.NewV7()).String()
 	session := types.Session{
 		ID:        sessionID,
 		AgentPID:  4242,
@@ -147,7 +151,7 @@ func Generate(nFlows int, start time.Time, seed int64) *Scenario {
 
 		conf := 0.55 + rng.Float64()*0.45
 		flows = append(flows, types.Flow{
-			ID:          fmt.Sprintf("fl-%s-%06d", sessionID[len("demo-"):], i+1),
+			ID:          fmt.Sprintf("fl-%s-%06d", sessionID, i+1),
 			SessionID:   sessionID,
 			TraceIDs:    traceIDs,
 			Intent:      t.intent,

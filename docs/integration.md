@@ -90,7 +90,14 @@ curl -s "http://127.0.0.1:9734/api/v1/sessions?limit=10" | jq
       "agent_pid": 12345,
       "agent_name": "hermes",
       "start_time": "2026-08-08T10:00:00Z",
-      "status": "running"
+      "status": "running",
+      "metadata": {
+        "command_line": "hermes chat -q 'fix rate limiter race'",
+        "environment": {"os": "linux", "arch": "amd64"},
+        "work_dir": "/home/kara/rabbit-hole",
+        "binary_path": "/home/kara/.local/bin/hermes",
+        "version": "2026.08"
+      }
     }
   ],
   "total": 1,
@@ -101,14 +108,14 @@ curl -s "http://127.0.0.1:9734/api/v1/sessions?limit=10" | jq
 
 ### Search flows
 
-`POST /api/v1/search` accepts a `SearchRequest` JSON body. Field names follow
-the Go wire format (`Query`, `Limit`, `SessionID`, ...); the response is a
-`SearchResponse` with `flows`, `total`, `cursor`, and `has_more`.
+`POST /api/v1/search` accepts a `SearchRequest` JSON body. Field names are
+snake_case (`query`, `session_id`, `limit`, ...) per the OpenAPI contract; the
+response is a `SearchResponse` with `flows`, `total`, `cursor`, and `has_more`.
 
 ```bash
 curl -s -X POST http://127.0.0.1:9734/api/v1/search \
   -H 'Content-Type: application/json' \
-  -d '{"Query": "sql error", "Limit": 10}' | jq
+  -d '{"query": "sql error", "limit": 10}' | jq
 ```
 
 ```json
@@ -117,11 +124,17 @@ curl -s -X POST http://127.0.0.1:9734/api/v1/search \
     {
       "id": "0191b000-0000-7000-8000-000000000001",
       "session_id": "0191a000-0000-7000-8000-000000000001",
+      "trace_ids": ["0191c000-0000-7000-8000-000000000001"],
       "intent": "execute_code",
       "phase": "action",
       "description": "Ran sql query against billing database",
       "outcome": "success",
-      "confidence": 0.97
+      "confidence": 0.97,
+      "start_time": "2026-08-08T10:00:00Z",
+      "end_time": "2026-08-08T10:00:01Z",
+      "duration": 1200000000,
+      "context_window": null,
+      "metadata": {}
     }
   ],
   "total": 1,
@@ -130,34 +143,36 @@ curl -s -X POST http://127.0.0.1:9734/api/v1/search \
 }
 ```
 
-Filter without a free-text query by omitting `Query` and using `SessionID`,
-`Categories`, `Outcomes`, `TimeRange`, and `Cursor` instead.
+Filter without a free-text query by omitting `query` and using `session_id`,
+`categories`, `outcomes`, `time_range`, and `cursor` instead.
 
 ### Chat
 
-`POST /api/v1/chat` accepts a `ChatRequest` with `Message` (required) and an
-optional `SessionID`. The server translates the question into a search, runs
-it, and returns a natural-language `Answer` plus follow-up `Suggestions` and
-the referenced `Flows`.
+`POST /api/v1/chat` accepts a `ChatRequest` with `message` (required) and an
+optional `session_id`. The server translates the question into a search, runs
+it, and returns a natural-language `answer` plus follow-up `suggestions` and
+the referenced `flows`.
 
 ```bash
 curl -s -X POST http://127.0.0.1:9734/api/v1/chat \
   -H 'Content-Type: application/json' \
-  -d '{"Message": "What did the agent do in the last hour?"}' | jq
+  -d '{"message": "What did the agent do in the last hour?"}' | jq
 ```
 
 ```json
 {
-  "Answer": "Found 3 actions:",
-  "Flows": [
+  "answer": "Found 3 actions:",
+  "flows": [
     {
       "id": "0191b000-0000-7000-8000-000000000001",
+      "session_id": "0191a000-0000-7000-8000-000000000001",
       "intent": "execute_code",
+      "phase": "action",
       "description": "Ran sql query against billing database",
       "outcome": "success"
     }
   ],
-  "Suggestions": [
+  "suggestions": [
     "What happened in the last hour?",
     "Show me the slowest operations"
   ]

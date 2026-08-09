@@ -6,15 +6,17 @@ import "time"
 
 // SearchRequest is a structured query for finding flows.
 // Supports natural language and structured filters.
+//
+// JSON wire names are snake_case (DF-003) to match the OpenAPI contract.
 type SearchRequest struct {
-	Query                 string        // natural language or structured
-	SessionID             string        // filter to specific session
-	TimeRange             TimeRange     // time window
-	Categories            []FlowPhase   // filter by phase
-	Outcomes              []FlowOutcome // filter by outcome
-	Limit                 int           // max results (default: 50)
-	Cursor                string        // pagination cursor
-	IncludeContextWindows bool
+	Query                 string        `json:"query"`                   // natural language or structured
+	SessionID             string        `json:"session_id"`              // filter to specific session
+	TimeRange             TimeRange     `json:"time_range"`              // time window
+	Categories            []FlowPhase   `json:"categories"`              // filter by phase
+	Outcomes              []FlowOutcome `json:"outcomes"`                // filter by outcome
+	Limit                 int           `json:"limit"`                   // max results (default: 50)
+	Cursor                string        `json:"cursor"`                  // pagination cursor
+	IncludeContextWindows bool          `json:"include_context_windows"` // include LLM context snapshots
 }
 
 // SearchResponse contains the results of a search query.
@@ -26,16 +28,17 @@ type SearchResponse struct {
 }
 
 // ChatRequest is a natural language query about agent activity.
+// JSON wire names are snake_case (DF-003) to match the OpenAPI contract.
 type ChatRequest struct {
-	Message   string // natural language: "What did helios do at 3am?"
-	SessionID string // optional — scope to one session
+	Message   string `json:"message"`    // natural language: "What did helios do at 3am?"
+	SessionID string `json:"session_id"` // optional — scope to one session
 }
 
 // ChatResponse contains the NL answer and supporting data.
 type ChatResponse struct {
-	Answer      string   // natural language response
-	Flows       []Flow   // referenced flows
-	Suggestions []string // follow-up questions
+	Answer      string   `json:"answer"`      // natural language response
+	Flows       []Flow   `json:"flows"`       // referenced flows
+	Suggestions []string `json:"suggestions"` // follow-up questions
 	// Stub is true when the built-in keyword stub model handled the
 	// request (no real chat model configured).
 	Stub bool `json:"stub,omitempty"`
@@ -73,8 +76,8 @@ type SessionSummary struct {
 
 // TimeRange defines a time window for filtering queries.
 type TimeRange struct {
-	Start time.Time
-	End   time.Time
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
 }
 
 // TraceQuery filters trace lookups.

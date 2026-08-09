@@ -1,9 +1,14 @@
 package demo
 
 import (
+	"regexp"
 	"testing"
 	"time"
 )
+
+// uuidV7RE matches the canonical UUIDv7 shape: version nibble 7 and a
+// RFC 4122 variant nibble (8/9/a/b) in the third group.
+var uuidV7RE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 func TestGenerate_Shape(t *testing.T) {
 	sc := Generate(60, time.Now().Add(-5*time.Hour), 1234)
@@ -39,6 +44,20 @@ func TestGenerate_Shape(t *testing.T) {
 		}
 		if len(f.Metadata) == 0 {
 			t.Errorf("flow %s no metadata", f.ID)
+		}
+	}
+}
+
+func TestGenerate_SessionIDIsUUIDv7(t *testing.T) {
+	sc := Generate(10, time.Now().Add(-1*time.Hour), 42)
+
+	if !uuidV7RE.MatchString(sc.Session.ID) {
+		t.Fatalf("session ID %q is not UUIDv7", sc.Session.ID)
+	}
+	// Every flow must reference the UUIDv7 session id.
+	for _, f := range sc.Flows {
+		if f.SessionID != sc.Session.ID {
+			t.Errorf("flow %s session %q != %q", f.ID, f.SessionID, sc.Session.ID)
 		}
 	}
 }

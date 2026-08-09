@@ -6,14 +6,16 @@ import "time"
 
 // Session groups traces and flows under one agent session.
 // Created when eBPF attaches to a process, updated as the agent runs.
+//
+// JSON wire names are snake_case (DF-003) to match the OpenAPI contract.
 type Session struct {
-	ID        string          // UUIDv7
-	AgentPID  int32           // monitored process ID
-	AgentName string          // "hermes", "codex", "claude-code"
-	StartTime time.Time       // session start
-	EndTime   *time.Time      // nil if still running
-	Status    SessionStatus   // running, completed, crashed, killed
-	Metadata  SessionMetadata // detail about the agent
+	ID        string          `json:"id"`         // UUIDv7
+	AgentPID  int32           `json:"agent_pid"`  // monitored process ID
+	AgentName string          `json:"agent_name"` // "hermes", "codex", "claude-code"
+	StartTime time.Time       `json:"start_time"` // session start
+	EndTime   *time.Time      `json:"end_time"`   // nil if still running
+	Status    SessionStatus   `json:"status"`     // running, completed, crashed, killed
+	Metadata  SessionMetadata `json:"metadata"`   // detail about the agent
 }
 
 // SessionStatus represents the lifecycle state of a monitored session.
@@ -27,10 +29,11 @@ const (
 )
 
 // SessionMetadata holds information about the monitored agent process.
+// JSON wire names are snake_case (DF-003) to match the OpenAPI contract.
 type SessionMetadata struct {
-	CommandLine string            // full command line
-	Environment map[string]string // sanitized env vars
-	WorkDir     string            // working directory
-	BinaryPath  string            // path to binary
-	Version     string            // agent version if detectable
+	CommandLine string            `json:"command_line"` // full command line
+	Environment map[string]string `json:"environment"`  // sanitized env vars
+	WorkDir     string            `json:"work_dir"`     // working directory
+	BinaryPath  string            `json:"binary_path"`  // path to binary
+	Version     string            `json:"version"`      // agent version if detectable
 }
