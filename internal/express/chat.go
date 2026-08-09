@@ -37,8 +37,18 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		searchReq.SessionID = req.SessionID
 	}
 
-	// Step 3: Execute search
-	flows, err := s.store.SearchFlows(ctx, searchReq.Query, searchReq.Limit)
+	// Step 3: Execute search — thread the translated structured filters
+	// (session, categories, outcomes, time range) into QueryFlows so NL
+	// questions like "what happened in the last hour?" filter by time
+	// window instead of FTS5-matching a generic keyword string. DF-002.
+	flows, _, err := s.store.QueryFlows(ctx, types.FlowQuery{
+		SessionID: searchReq.SessionID,
+		Query:     searchReq.Query,
+		TimeRange: searchReq.TimeRange,
+		Phases:    searchReq.Categories,
+		Outcomes:  searchReq.Outcomes,
+		Limit:     searchReq.Limit,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "search failed: "+err.Error())
 		return

@@ -104,24 +104,31 @@ const translateSystemPrompt = `You translate natural language queries about agen
 
 Return ONLY a JSON object with these fields:
 {
-  "query":   "<search string, keywords or phrase>",
+  "query":   "<search string, keywords or phrase; empty string when the question is only about time>",
   "limit":   <integer between 1 and 200, default 50>,
   "phases":  [<zero or more of: "observation", "deliberation", "action", "verification">],
-  "outcomes":[<zero or more of: "success", "failure", "timeout", "unknown">]
+  "outcomes":[<zero or more of: "success", "failure", "timeout", "unknown">],
+  "time_range": {"start": "<RFC3339 UTC timestamp or null>", "end": "<RFC3339 UTC timestamp or null>"}
 }
 
 Rules:
 - "query" should be a compact keywords string, not the full question.
+- For time-based questions ("in the last hour", "at 3am", "today", "this morning"), compute concrete RFC3339 UTC timestamps relative to the current time provided in this prompt and emit them in "time_range". Emit an EMPTY "query" ("") or a generic keyword for these — the store returns all activity in the window when query is empty.
+- If the question has no time component, or you cannot determine a window, emit "time_range": {"start": null, "end": null}.
 - If the user asks about failures, include "failure" in outcomes.
 - If unsure about phases or outcomes, return empty arrays.
 - Do NOT add commentary, explanation, or markdown — JSON only.`
 
 // TranslateQuery implements ChatModel.
 func (m *RealChatModel) TranslateQuery(ctx context.Context, message string) (*types.SearchRequest, error) {
+	// The current time is injected into the system prompt so the model can
+	// compute concrete RFC3339 timestamps for relative windows ("last hour").
+	systemPrompt := translateSystemPrompt +
+		"\nCurrent time (UTC): " + time.Now().UTC().Format(time.RFC3339)
 	body := chatRequest{
 		Model: m.cfg.Model,
 		Messages: []chatMessage{
-			{Role: "system", Content: translateSystemPrompt},
+			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: message},
 		},
 		Temperature: 0,
@@ -153,17 +160,23 @@ func parseTranslateResponse(raw string) (*types.SearchRequest, error) {
 	}
 
 	var parsed struct {
-		Query    string   `json:"query"`
-		Limit    int      `json:"limit"`
-		Phases   []string `json:"phases"`
-		Outcomes []string `json:"outcomes"`
+		Query     string   `json:"query"`
+		Limit     int      `json:"limit"`
+		Phases    []string `json:"phases"`
+		Outcomes  []string `json:"outcomes"`
+		TimeRange struct {
+			Start *string `json:"start"`
+			End   *string `json:"end"`
+		} `json:"time_range"`
 	}
 	if err := json.Unmarshal([]byte(cleaned), &parsed); err != nil {
 		return nil, fmt.Errorf("json unmarshal: %w", err)
 	}
 
-	if parsed.Query == "" {
-		return nil, errors.New("query field is empty")
+	// A pure time-window question legitimately produces query="" plus a
+	// time_range; only reject when BOTH are empty. DF-002.
+	if parsed.Query == "" && parsed.TimeRange.Start == nil && parsed.TimeRange.End == nil {
+		return nil, errors.New("query field is empty and no time range given")
 	}
 	if parsed.Limit <= 0 {
 		parsed.Limit = 50
@@ -175,6 +188,19 @@ func parseTranslateResponse(raw string) (*types.SearchRequest, error) {
 	req := &types.SearchRequest{
 		Query: parsed.Query,
 		Limit: parsed.Limit,
+	}
+
+	// Parse nullable RFC3339 window endpoints. Unparseable values are
+	// silently dropped — the caller then gets no window filter.
+	if parsed.TimeRange.Start != nil && *parsed.TimeRange.Start != "" {
+		if t, err := time.Parse(time.RFC3339, *parsed.TimeRange.Start); err == nil {
+			req.TimeRange.Start = t
+		}
+	}
+	if parsed.TimeRange.End != nil && *parsed.TimeRange.End != "" {
+		if t, err := time.Parse(time.RFC3339, *parsed.TimeRange.End); err == nil {
+			req.TimeRange.End = t
+		}
 	}
 
 	for _, p := range parsed.Phases {

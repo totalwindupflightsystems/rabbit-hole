@@ -3,6 +3,7 @@ package express
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -398,5 +399,114 @@ func TestRealChatModel_TranslateQuery_LimitClamped(t *testing.T) {
 	}
 	if got.Limit != 200 {
 		t.Errorf("Limit=%d, want clamp to 200", got.Limit)
+	}
+}
+
+// TestParseTranslateResponse_TimeRange verifies the model's "time_range"
+// {start,end} RFC3339 window is parsed into searchReq.TimeRange. DF-002.
+func TestParseTranslateResponse_TimeRange(t *testing.T) {
+	start := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	end := time.Now().UTC().Format(time.RFC3339)
+	raw := fmt.Sprintf(`{"query":"","limit":10,"phases":[],"outcomes":[],"time_range":{"start":%q,"end":%q}}`, start, end)
+
+	req, err := parseTranslateResponse(raw)
+	if err != nil {
+		t.Fatalf("parseTranslateResponse: %v", err)
+	}
+	if req.TimeRange.Start.IsZero() || req.TimeRange.End.IsZero() {
+		t.Fatalf("TimeRange not parsed: %+v", req.TimeRange)
+	}
+	if got := req.TimeRange.Start.Format(time.RFC3339); got != start {
+		t.Errorf("Start=%s, want %s", got, start)
+	}
+	if got := req.TimeRange.End.Format(time.RFC3339); got != end {
+		t.Errorf("End=%s, want %s", got, end)
+	}
+}
+
+// TestParseTranslateResponse_TimeRangeOnly proves a pure time-window
+// question (query="" + time_range) is accepted — the store filters by
+// the window alone when query is empty. DF-002.
+func TestParseTranslateResponse_TimeRangeOnly(t *testing.T) {
+	start := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	raw := fmt.Sprintf(`{"query":"","limit":50,"time_range":{"start":%q,"end":null}}`, start)
+
+	req, err := parseTranslateResponse(raw)
+	if err != nil {
+		t.Fatalf("parseTranslateResponse: %v", err)
+	}
+	if req.Query != "" {
+		t.Errorf("Query=%q, want empty", req.Query)
+	}
+	if req.TimeRange.Start.IsZero() {
+		t.Fatal("TimeRange.Start not parsed")
+	}
+}
+
+// TestParseTranslateResponse_EmptyNoTimeRange keeps the original guard:
+// query="" with no time range is still an error.
+func TestParseTranslateResponse_EmptyNoTimeRange(t *testing.T) {
+	if _, err := parseTranslateResponse(`{"query":"","limit":50}`); err == nil {
+		t.Error("expected error for empty query with no time range")
+	}
+}
+
+// TestParseTranslateResponse_BadTimeRange verifies unparseable window
+// timestamps are dropped silently (zero TimeRange) instead of failing
+// the whole translation.
+func TestParseTranslateResponse_BadTimeRange(t *testing.T) {
+	req, err := parseTranslateResponse(`{"query":"x","limit":50,"time_range":{"start":"not-a-time","end":"also-bad"}}`)
+	if err != nil {
+		t.Fatalf("parseTranslateResponse: %v", err)
+	}
+	if !req.TimeRange.Start.IsZero() || !req.TimeRange.End.IsZero() {
+		t.Errorf("expected zero TimeRange for unparseable timestamps, got %+v", req.TimeRange)
+	}
+	if req.Query != "x" {
+		t.Errorf("Query=%q, want x", req.Query)
+	}
+}
+
+// TestRealChatModel_TranslateQuery_TimeRange round-trips a time_range
+// emission through the real model path: the stub endpoint returns
+// query="" + time_range and TranslateQuery must surface both.
+func TestRealChatModel_TranslateQuery_TimeRange(t *testing.T) {
+	start := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	ts := stubChatServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body := map[string]any{
+			"query":    "",
+			"limit":    50,
+			"phases":   []string{},
+			"outcomes": []string{},
+			"time_range": map[string]any{
+				"start": start,
+				"end":   nil,
+			},
+		}
+		b, _ := json.Marshal(body)
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": string(b)}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	m := NewRealChatModel(ChatModelConfig{Endpoint: ts.URL, Model: "m", APIKey: "sk"}, ts.Client())
+	got, err := m.TranslateQuery(context.Background(), "What happened in the last hour?")
+	if err != nil {
+		t.Fatalf("TranslateQuery: %v", err)
+	}
+	if got.Query != "" {
+		t.Errorf("Query=%q, want empty (time-window question)", got.Query)
+	}
+	if got.TimeRange.Start.IsZero() {
+		t.Fatal("TimeRange.Start not surfaced by TranslateQuery")
+	}
+	if got.TimeRange.Start.Format(time.RFC3339) != start {
+		t.Errorf("Start=%s, want %s", got.TimeRange.Start.Format(time.RFC3339), start)
+	}
+	if !got.TimeRange.End.IsZero() {
+		t.Errorf("End=%v, want zero (null)", got.TimeRange.End)
 	}
 }
