@@ -12,6 +12,7 @@ import (
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/config"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -45,14 +46,16 @@ func newStatusCmd() *cobra.Command {
 				ebpfStatus = "DISABLED (no kernel probes — telemetry not collected; see README for required privileges)"
 			}
 
-			sessions, err := col.List(cobraCmd.Context())
+			// Active count comes from the database, not the per-process
+			// collector, so sessions attached by other processes count (DF-001).
+			sessions, err := store.ListSessions(cobraCmd.Context(), 0, listSessionLimit)
 			if err != nil {
 				return fmt.Errorf("sessions: %w", err)
 			}
 
 			activeCount := 0
 			for _, s := range sessions {
-				if s.Status == "running" {
+				if s.Status == types.SessionStatusRunning {
 					activeCount++
 				}
 			}

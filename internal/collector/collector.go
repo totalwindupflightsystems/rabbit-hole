@@ -22,6 +22,11 @@ type Collector interface {
 	List(ctx context.Context) ([]types.Session, error)
 	Stream(ctx context.Context, sessionID string) (<-chan types.Trace, error)
 	Health(ctx context.Context) error
+	// PreflightEBPF reports whether kernel telemetry is available.
+	// Commands that promise kernel telemetry (attach, serve) must call
+	// this and hard-fail when it errors; session-management commands
+	// (status, list, detach) must not.
+	PreflightEBPF() error
 }
 
 // CollectOptions configures collection behavior.

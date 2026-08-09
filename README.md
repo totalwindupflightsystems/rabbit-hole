@@ -15,11 +15,22 @@ Self-hosted. One binary. Zero SDK requirements on the agent.
 # Build
 make build
 
-# Attach to an agent process
-./bin/rabbit-hole attach --pid <PID>
-
-# Start the daemon (collect + classify + serve)
+# Start the daemon first (collect + classify + serve)
 ./bin/rabbit-hole serve
+# (no root/eBPF? use: ./bin/rabbit-hole serve --no-ebpf)
+
+# In a second terminal: attach to an agent process.
+# The session is started on the daemon and persisted to the database.
+./bin/rabbit-hole attach --pid <PID> --no-ebpf
+
+# List sessions (persisted, survives separate invocations)
+./bin/rabbit-hole list --all
+
+# Check status
+./bin/rabbit-hole status
+
+# Detach — completes the session in the daemon and the database
+./bin/rabbit-hole detach <session-id>
 
 # Ask questions
 ./bin/rabbit-hole chat "What did the agent do in the last hour?"
@@ -27,12 +38,16 @@ make build
 # Search flows
 ./bin/rabbit-hole search "sql error"
 
-# Check status
-./bin/rabbit-hole status
-
 # Compact old data
 ./bin/rabbit-hole compact --before 720h
 ```
+
+Sessions are **persistent**: `attach` hands the session to the running daemon,
+which writes it to the database. The session stays visible to `list --all`,
+`status`, and `GET /api/v1/sessions` across separate CLI invocations, and
+`detach <session-id>` completes it. Collection happens in the daemon — keep
+`serve` running (attach to the same PID twice is rejected, and without a
+daemon `attach` explains that `serve` must be started first).
 
 ### Configuration
 

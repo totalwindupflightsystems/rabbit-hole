@@ -47,6 +47,30 @@ type ListOptions struct {
 	Limit  int // max results
 }
 
+// AttachSessionRequest is the JSON body for POST /api/v1/sessions/attach.
+// It mirrors the CLI attach flags; the daemon-side handler converts it into
+// collector.CollectOptions and persists the resulting session.
+type AttachSessionRequest struct {
+	PID             int32    `json:"pid"`
+	ContextWindows  bool     `json:"context_windows"`
+	Categories      []string `json:"categories"`
+	TLSInterception bool     `json:"tls_interception"`
+	NoEBPF          bool     `json:"no_ebpf"`
+}
+
+// SessionSummary is the JSON wire shape returned by the session lifecycle
+// endpoints (POST /api/v1/sessions/attach and GET /api/v1/sessions). The
+// CLI attach/detach commands decode it.
+type SessionSummary struct {
+	ID          string        `json:"id"`
+	AgentPID    int32         `json:"agent_pid"`
+	AgentName   string        `json:"agent_name"`
+	CommandLine string        `json:"command_line,omitempty"`
+	StartTime   time.Time     `json:"start_time"`
+	EndTime     *time.Time    `json:"end_time,omitempty"`
+	Status      SessionStatus `json:"status"`
+}
+
 // TimeRange defines a time window for filtering queries.
 type TimeRange struct {
 	Start time.Time

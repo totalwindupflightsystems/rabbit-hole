@@ -130,6 +130,13 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			)
 			server := express.NewServer(store, logger, cfg.ListenAddr, rl)
 
+			// Session lifecycle: the attach/detach CLI commands hand sessions
+			// to the daemon over HTTP. The daemon owns the collector and the
+			// database, so sessions persist across CLI invocations (DF-001).
+			// The pipeline above picks up sessions started this way and
+			// classifies their traces like any other.
+			server.RegisterSessionManager(attach.NewSessionManager(coll, store, logger))
+
 			// Wire component-level health checks. Storage and metrics are
 			// reported automatically by the server (they live on the Server
 			// struct). Classifier and collector are wired here because they

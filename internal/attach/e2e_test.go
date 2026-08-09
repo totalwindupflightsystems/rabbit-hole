@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -90,6 +91,8 @@ func (m *e2eMockCollector) Stream(_ context.Context, sessionID string) (<-chan t
 }
 
 func (m *e2eMockCollector) Health(_ context.Context) error { return nil }
+
+func (m *e2eMockCollector) PreflightEBPF() error { return nil }
 
 // --- E2E Test ---
 
@@ -333,4 +336,159 @@ func TestE2E_ServeAttachSearchDetach(t *testing.T) {
 	}
 
 	// 12. server.Shutdown happens via t.Cleanup above.
+}
+
+// TestE2E_ServeAttachListDetach exercises the DF-001 session lifecycle over
+// real HTTP with a REAL (degraded) collector:
+//
+//	POST /api/v1/sessions/attach  →  session persisted  →  GET list  →
+//	double attach rejected (409)  →  POST detach  →  session completed.
+//
+// This mirrors the serve wiring: the express server is given a real
+// SessionManager over the daemon collector and store, exactly like
+// cmd/rabbit-hole/serve.go does. No kernel probes are needed — the
+// collector's session bookkeeping is in-memory and works degraded.
+func TestE2E_ServeAttachListDetach(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 1. In-memory SQLite store.
+	store, err := storage.NewSQLiteStore(":memory:", nil)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	// 2. Real collector (degraded on this host) — real session map, real
+	// ErrAlreadyAttached semantics, real UUID session IDs.
+	coll, err := collector.NewEBPFCollector(0, 0, nil)
+	if err != nil {
+		t.Fatalf("NewEBPFCollector: %v", err)
+	}
+
+	// 3. Express server on a random free port with the real session manager.
+	server := express.NewServer(store, nil, "127.0.0.1:0", nil)
+	server.RegisterSessionManager(NewSessionManager(coll, store, nil))
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("server.Start: %v", err)
+	}
+	addr := server.Addr()
+	if addr == "" || addr == "127.0.0.1:0" {
+		t.Fatalf("expected bound address, got %q", addr)
+	}
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	t.Cleanup(func() {
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			t.Logf("server.Shutdown: %v", err)
+		}
+	})
+
+	base := "http://" + addr
+	pid := int32(os.Getpid())
+
+	// 4. Attach via the daemon API (real HTTP) — session must persist.
+	body, _ := json.Marshal(types.AttachSessionRequest{PID: pid, NoEBPF: true})
+	resp, err := http.Post(base+"/api/v1/sessions/attach", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST attach: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("attach: status=%d body=%s", resp.StatusCode, raw)
+	}
+	var summary types.SessionSummary
+	if err := json.NewDecoder(resp.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode attach response: %v", err)
+	}
+	resp.Body.Close()
+	if summary.ID == "" {
+		t.Fatal("attach returned empty session ID")
+	}
+	if summary.AgentPID != pid {
+		t.Errorf("AgentPID: got %d, want %d", summary.AgentPID, pid)
+	}
+	if summary.Status != types.SessionStatusRunning {
+		t.Errorf("status: got %q, want running", summary.Status)
+	}
+
+	// 5. Session is persisted — visible to GET /api/v1/sessions.
+	listResp, err := http.Get(base + "/api/v1/sessions?limit=100")
+	if err != nil {
+		t.Fatalf("GET sessions: %v", err)
+	}
+	var listBody struct {
+		Sessions []types.SessionSummary `json:"sessions"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listBody); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	listResp.Body.Close()
+	var listed bool
+	for _, s := range listBody.Sessions {
+		if s.ID == summary.ID {
+			listed = true
+			if s.Status != types.SessionStatusRunning {
+				t.Errorf("listed status: got %q, want running", s.Status)
+			}
+		}
+	}
+	if !listed {
+		t.Fatalf("session %q not in GET /api/v1/sessions", summary.ID)
+	}
+
+	// 6. Second attach to the same PID → clean 409, no silent orphan
+	// (DF-001 AC3 — the daemon collector rejects duplicates).
+	dupBody, _ := json.Marshal(types.AttachSessionRequest{PID: pid, NoEBPF: true})
+	dupResp, err := http.Post(base+"/api/v1/sessions/attach", "application/json", bytes.NewReader(dupBody))
+	if err != nil {
+		t.Fatalf("POST duplicate attach: %v", err)
+	}
+	defer dupResp.Body.Close()
+	if dupResp.StatusCode != http.StatusConflict {
+		raw, _ := io.ReadAll(dupResp.Body)
+		t.Fatalf("duplicate attach: status=%d body=%s, want 409", dupResp.StatusCode, raw)
+	}
+
+	// 7. Detach via the daemon API.
+	detachReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		base+"/api/v1/sessions/"+summary.ID+"/detach", nil)
+	if err != nil {
+		t.Fatalf("NewRequest detach: %v", err)
+	}
+	detachResp, err := http.DefaultClient.Do(detachReq)
+	if err != nil {
+		t.Fatalf("POST detach: %v", err)
+	}
+	defer detachResp.Body.Close()
+	if detachResp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(detachResp.Body)
+		t.Fatalf("detach: status=%d body=%s", detachResp.StatusCode, raw)
+	}
+
+	// 8. Session completed — verified via API and directly in the store.
+	gotResp, err := http.Get(base + "/api/v1/sessions/" + summary.ID)
+	if err != nil {
+		t.Fatalf("GET session: %v", err)
+	}
+	var gotSession types.Session
+	if err := json.NewDecoder(gotResp.Body).Decode(&gotSession); err != nil {
+		t.Fatalf("decode get session: %v", err)
+	}
+	gotResp.Body.Close()
+	if gotSession.Status != types.SessionStatusCompleted {
+		t.Errorf("API status after detach: got %q, want completed", gotSession.Status)
+	}
+	if gotSession.EndTime == nil {
+		t.Error("API EndTime after detach is nil")
+	}
+
+	persisted, err := store.GetSession(ctx, summary.ID)
+	if err != nil {
+		t.Fatalf("store.GetSession: %v", err)
+	}
+	if persisted.Status != types.SessionStatusCompleted {
+		t.Errorf("store status after detach: got %q, want completed", persisted.Status)
+	}
 }

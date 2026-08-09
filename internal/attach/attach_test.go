@@ -2,6 +2,8 @@ package attach
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +24,7 @@ type mockCollector struct {
 	listErr   error
 	streamErr error
 	healthErr error
+	preflight error
 }
 
 func newMockCollector() *mockCollector {
@@ -92,6 +95,10 @@ func (m *mockCollector) Stream(ctx context.Context, sessionID string) (<-chan ty
 
 func (m *mockCollector) Health(ctx context.Context) error {
 	return m.healthErr
+}
+
+func (m *mockCollector) PreflightEBPF() error {
+	return m.preflight
 }
 
 type mockClassifier struct {
@@ -350,5 +357,30 @@ func TestSessionManager_ListActive(t *testing.T) {
 	}
 	if len(sessions) != 2 {
 		t.Errorf("expected 2 sessions, got %d", len(sessions))
+	}
+}
+
+func TestSessionManager_Preflight(t *testing.T) {
+	coll := newMockCollector()
+	store := newMockStorage()
+	mgr := NewSessionManager(coll, store, nil)
+
+	// Opting into degraded mode always passes (GAP-001 escape hatch).
+	if err := mgr.Preflight(true); err != nil {
+		t.Errorf("Preflight(true) = %v, want nil", err)
+	}
+
+	// Degraded collector hard-fails when kernel telemetry is promised.
+	coll.preflight = errors.New("eBPF unavailable — telemetry DISABLED")
+	if err := mgr.Preflight(false); err == nil {
+		t.Error("Preflight(false) with degraded collector should error")
+	} else if !strings.Contains(err.Error(), "eBPF unavailable") {
+		t.Errorf("Preflight(false) error = %q, want eBPF message", err.Error())
+	}
+
+	// Healthy collector passes.
+	coll.preflight = nil
+	if err := mgr.Preflight(false); err != nil {
+		t.Errorf("Preflight(false) healthy = %v, want nil", err)
 	}
 }

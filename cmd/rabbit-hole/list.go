@@ -10,8 +10,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
+	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
+
+// listSessionLimit bounds the number of sessions `list`/`status` read from
+// the store. The collector caps concurrent sessions at 50 (MaxSessions),
+// so 10000 is effectively unbounded for listing.
+const listSessionLimit = 10000
 
 func newListCmd() *cobra.Command {
 	var showAll bool
@@ -27,26 +33,23 @@ func newListCmd() *cobra.Command {
 				return fmt.Errorf("config: %w", err)
 			}
 
-			logger := newLogger(cfg.LogLevel)
-			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
+			// Sessions are read from the database, not a per-process
+			// collector, so sessions attached by any prior CLI invocation
+			// or daemon lifetime are visible (DF-001).
+			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
 			if err != nil {
-				return fmt.Errorf("collector: %w", err)
+				return fmt.Errorf("storage: %w", err)
 			}
+			defer store.Close()
 
-			// Session management works without kernel probes; just be
-			// honest that no telemetry is being collected.
-			if !coll.EBPFEnabled() {
-				logger.Warn("eBPF unavailable — telemetry DISABLED, session management only")
-			}
-
-			sessions, err := coll.List(cobraCmd.Context())
+			sessions, err := store.ListSessions(cobraCmd.Context(), 0, listSessionLimit)
 			if err != nil {
 				return fmt.Errorf("list sessions: %w", err)
 			}
 
 			activeCount := 0
 			for _, s := range sessions {
-				if s.Status == "running" {
+				if s.Status == types.SessionStatusRunning {
 					activeCount++
 				}
 			}
@@ -64,7 +67,7 @@ func newListCmd() *cobra.Command {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 			fmt.Fprintln(w, "ID\tPID\tAGENT\tSTATUS\tSTARTED")
 			for _, s := range sessions {
-				if !showAll && s.Status != "running" {
+				if !showAll && s.Status != types.SessionStatusRunning {
 					continue
 				}
 				id := s.ID

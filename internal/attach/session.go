@@ -114,5 +114,17 @@ func (m *SessionManager) ListActive(ctx context.Context) ([]types.Session, error
 	return active, nil
 }
 
+// Preflight enforces the GAP-001 contract: an attach that promises kernel
+// telemetry hard-fails when the collector is running degraded. Attach
+// requests that explicitly opt into degraded mode (--no-ebpf) pass
+// through. The daemon-side attach endpoint calls this before starting a
+// session so direct API clients get the same hard-fail as the CLI.
+func (m *SessionManager) Preflight(noEBPF bool) error {
+	if noEBPF {
+		return nil
+	}
+	return m.coll.PreflightEBPF()
+}
+
 // Ensure uuid import is used.
 var _ = uuid.Nil

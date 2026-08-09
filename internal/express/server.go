@@ -52,6 +52,11 @@ type Server struct {
 
 	// healthMu guards healthChecks during registration.
 	healthMu sync.RWMutex
+
+	// sessionMgr is the daemon-side session lifecycle manager wired by the
+	// serve command. When nil, the attach/detach endpoints return 503.
+	// See RegisterSessionManager.
+	sessionMgr SessionManager
 }
 
 // HealthCheck is a named component probe for the /health endpoint. The
@@ -141,6 +146,8 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 	// Sessions
 	s.mux.HandleFunc("GET /api/v1/sessions", s.handleListSessions)
 	s.mux.HandleFunc("GET /api/v1/sessions/{id}", s.handleGetSession)
+	s.mux.HandleFunc("POST /api/v1/sessions/attach", s.handleAttachSession)
+	s.mux.HandleFunc("POST /api/v1/sessions/{id}/detach", s.handleDetachSession)
 
 	// Flows
 	s.mux.HandleFunc("GET /api/v1/flows/{id}", s.handleGetFlow)

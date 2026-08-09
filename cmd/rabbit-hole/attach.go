@@ -24,7 +24,13 @@ func newAttachCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "attach --pid <PID>",
 		Short: "Attach to an agent process and start collecting traces",
-		Args:  cobra.NoArgs,
+		Long: `Attach to an agent process and start collecting traces.
+
+The session is started on the Rabbit-Hole daemon ('rabbit-hole serve') and
+persisted to the database, so it stays visible to 'list --all', 'status',
+and GET /api/v1/sessions across separate CLI invocations. Keep the daemon
+running for collection; stop the session with 'rabbit-hole detach <id>'.`,
+		Args: cobra.NoArgs,
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
@@ -39,7 +45,8 @@ func newAttachCmd() *cobra.Command {
 
 			// Preflight: attach promises kernel telemetry, so degraded
 			// eBPF is a hard error unless the user explicitly opted into
-			// degraded mode with --no-ebpf.
+			// degraded mode with --no-ebpf. The daemon-side attach endpoint
+			// enforces the same contract (GAP-001).
 			if !noEBPF {
 				if err := coll.PreflightEBPF(); err != nil {
 					return err
@@ -48,26 +55,32 @@ func newAttachCmd() *cobra.Command {
 				logger.Warn("eBPF disabled via --no-ebpf — telemetry DISABLED, running in degraded mode")
 			}
 
-			var cats []types.TraceCategory
-			for _, c := range categories {
-				cats = append(cats, types.TraceCategory(c))
-			}
-
-			session, err := coll.Attach(cobraCmd.Context(), pid, collector.CollectOptions{
-				ContextWindows:  contextWindows,
-				TraceCategories: cats,
-				TLSInterception: !noTLSIntercept,
-			})
+			session, err := newDaemonClient(cfg.ListenAddr).attachSession(
+				cobraCmd.Context(),
+				types.AttachSessionRequest{
+					PID:             pid,
+					ContextWindows:  contextWindows,
+					Categories:      categories,
+					TLSInterception: !noTLSIntercept,
+					NoEBPF:          noEBPF,
+				},
+			)
 			if err != nil {
 				return err
 			}
 
+			cmdline := ""
+			if session.CommandLine != "" {
+				cmdline = " (" + session.CommandLine + ")"
+			}
 			fmt.Printf("Attached to PID %d\n", pid)
 			fmt.Printf("Session ID: %s\n", session.ID)
-			fmt.Printf("Agent: %s (%s)\n", session.AgentName, session.Metadata.CommandLine)
+			fmt.Printf("Agent: %s%s\n", session.AgentName, cmdline)
 			fmt.Println()
 			fmt.Println("Collection active. Use 'rabbit-hole status' to monitor or 'rabbit-hole chat' to query.")
 			fmt.Printf("Detach with: rabbit-hole detach %s\n", session.ID)
+			fmt.Printf("Session persisted to %s — visible via 'list --all', 'status', and GET /api/v1/sessions.\n", cfg.DBPath)
+			fmt.Println("Collection runs in the daemon ('rabbit-hole serve') — keep it running.")
 
 			return nil
 		},

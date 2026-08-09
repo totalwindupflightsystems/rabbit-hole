@@ -4,12 +4,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 func newDetachCmd() *cobra.Command {
@@ -18,32 +17,31 @@ func newDetachCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "detach <session-id>",
 		Short: "Stop tracing a session",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Stop tracing a session.
+
+The session is completed on the Rabbit-Hole daemon ('rabbit-hole serve'):
+the collector stops tracing it and the database record is marked completed.
+Sessions attached by a previous CLI invocation or daemon lifetime can be
+detached too — run 'rabbit-hole list --all' to find the session ID.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
 				return fmt.Errorf("config: %w", err)
 			}
 
-			logger := newLogger(cfg.LogLevel)
-			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
-			if err != nil {
-				return fmt.Errorf("collector: %w", err)
-			}
-
-			// Session management works without kernel probes; just be
-			// honest that no telemetry is being collected.
-			if !coll.EBPFEnabled() {
-				logger.Warn("eBPF unavailable — telemetry DISABLED, session management only")
-			}
+			client := newDaemonClient(cfg.ListenAddr)
 
 			if detachAll {
-				sessions, err := coll.List(cobraCmd.Context())
+				sessions, err := client.listSessions(cobraCmd.Context())
 				if err != nil {
-					return fmt.Errorf("list sessions: %w", err)
+					return err
 				}
 				for _, s := range sessions {
-					if err := coll.Detach(cobraCmd.Context(), s.ID); err != nil {
+					if s.Status != types.SessionStatusRunning {
+						continue
+					}
+					if err := client.detachSession(cobraCmd.Context(), s.ID); err != nil {
 						fmt.Fprintf(cobraCmd.ErrOrStderr(), "Failed to detach %s: %v\n", s.ID, err)
 					} else {
 						fmt.Printf("Detached session %s (PID %d)\n", s.ID, s.AgentPID)
@@ -53,7 +51,7 @@ func newDetachCmd() *cobra.Command {
 			}
 
 			sessionID := args[0]
-			if err := coll.Detach(context.Background(), sessionID); err != nil {
+			if err := client.detachSession(cobraCmd.Context(), sessionID); err != nil {
 				return err
 			}
 			fmt.Printf("Detached session %s\n", sessionID)
