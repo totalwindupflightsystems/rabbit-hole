@@ -69,6 +69,33 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		return fmt.Errorf("create metadata: %w", err)
 	}
 
+	// PRAGMAs cannot run inside a transaction, and concurrent migrators
+	// must serialize — so hoist the pragmas out of the migration script
+	// and run the version-read + apply loop under BEGIN IMMEDIATE
+	// (DF-009). The DSN already sets the same pragmas (_journal_mode=WAL,
+	// _foreign_keys=on, _busy_timeout=5000); executing them here again is
+	// harmless and keeps the migration scripts self-contained.
+	pragmas, body := splitMigrationSQL(migration001)
+	for _, stmt := range pragmas {
+		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("pragma %s: %w", stmt, err)
+		}
+	}
+	// BEGIN IMMEDIATE takes the write lock, so a second migrator on the
+	// same DB file blocks here (busy_timeout 5000ms) until the first
+	// commits — it then reads schema_version=1 and skips. Without the
+	// lock, both migrators can read version=0 and both apply migration
+	// 001, failing with "table sessions already exists" (DF-009).
+	if _, err := s.db.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+		return fmt.Errorf("begin migration: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = s.db.ExecContext(ctx, `ROLLBACK`)
+		}
+	}()
+
 	var version int
 	err = s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(CAST(value AS INTEGER), 0) FROM metadata WHERE key = 'schema_version'`,
@@ -81,7 +108,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		version int
 		sql     string
 	}{
-		{1, migration001},
+		{1, body},
 	}
 
 	for _, m := range migrations {
@@ -97,7 +124,37 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			}
 		}
 	}
+
+	if _, err := s.db.ExecContext(ctx, `COMMIT`); err != nil {
+		return fmt.Errorf("commit migration: %w", err)
+	}
+	committed = true
 	return nil
+}
+
+// splitMigrationSQL separates leading PRAGMA statements from the rest of a
+// migration script. SQLite forbids PRAGMA journal_mode/foreign_keys/
+// busy_timeout inside a transaction, so they must run before the
+// BEGIN IMMEDIATE block that applies the schema (DF-009). Pragmas must be
+// single-line and appear before any other statement — true for every
+// migration in this repo.
+func splitMigrationSQL(script string) (pragmas []string, body string) {
+	lines := strings.Split(script, "\n")
+	i := 0
+	for i < len(lines) {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+			i++
+			continue
+		}
+		if strings.HasPrefix(strings.ToUpper(trimmed), "PRAGMA") {
+			pragmas = append(pragmas, lines[i])
+			i++
+			continue
+		}
+		break
+	}
+	return pragmas, strings.Join(lines[i:], "\n")
 }
 
 // ---------- Metadata ----------

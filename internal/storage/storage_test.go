@@ -1912,3 +1912,120 @@ func formatBytes(n int64) string {
 	}
 	return fmt.Sprintf("%.1f%c", float64(n)/float64(div), "kMGTPE"[exp])
 }
+
+// ---------- Metadata ----------
+
+func TestSetMetadata_GetMetadata_RoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Absent key → ok=false.
+	if _, ok, err := store.GetMetadata(ctx, "listen_addr"); err != nil {
+		t.Fatalf("GetMetadata absent: %v", err)
+	} else if ok {
+		t.Error("GetMetadata on absent key: ok=true, want false")
+	}
+
+	if err := store.SetMetadata(ctx, "listen_addr", "127.0.0.1:19734"); err != nil {
+		t.Fatalf("SetMetadata: %v", err)
+	}
+	got, ok, err := store.GetMetadata(ctx, "listen_addr")
+	if err != nil {
+		t.Fatalf("GetMetadata: %v", err)
+	}
+	if !ok || got != "127.0.0.1:19734" {
+		t.Errorf("GetMetadata = (%q, %v), want (127.0.0.1:19734, true)", got, ok)
+	}
+
+	// Upsert replaces the previous value.
+	if err := store.SetMetadata(ctx, "listen_addr", "0.0.0.0:9734"); err != nil {
+		t.Fatalf("SetMetadata upsert: %v", err)
+	}
+	got, ok, err = store.GetMetadata(ctx, "listen_addr")
+	if err != nil {
+		t.Fatalf("GetMetadata after upsert: %v", err)
+	}
+	if !ok || got != "0.0.0.0:9734" {
+		t.Errorf("GetMetadata after upsert = (%q, %v), want (0.0.0.0:9734, true)", got, ok)
+	}
+}
+
+// ---------- Migration idempotency (DF-009) ----------
+
+// TestMigrate_ApplyTwiceIsNoOp applies migration 001 a second time on an
+// already-migrated DB. Every CREATE in the script is IF NOT EXISTS, so the
+// double apply is a no-op instead of "table sessions already exists" — the
+// error `demo` hit when racing `serve` on the same DB.
+func TestMigrate_ApplyTwiceIsNoOp(t *testing.T) {
+	store := newTestStore(t) // migrate() already applied 001 once
+	ctx := context.Background()
+
+	if _, err := store.DB().ExecContext(ctx, migration001); err != nil {
+		t.Fatalf("second application of migration001: %v", err)
+	}
+
+	// FTS triggers must not be duplicated by the second apply.
+	var triggers int
+	if err := store.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'flows_%'`,
+	).Scan(&triggers); err != nil {
+		t.Fatalf("count flows triggers: %v", err)
+	}
+	if triggers != 3 {
+		t.Errorf("flows triggers = %d, want 3 (no duplicates)", triggers)
+	}
+
+	var fts int
+	if err := store.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'flows_fts'`,
+	).Scan(&fts); err != nil {
+		t.Fatalf("count flows_fts: %v", err)
+	}
+	if fts != 1 {
+		t.Errorf("flows_fts tables = %d, want 1 (no duplicates)", fts)
+	}
+
+	// Storage still healthy.
+	if err := store.Health(ctx); err != nil {
+		t.Fatalf("health after second apply: %v", err)
+	}
+}
+
+// TestNewSQLiteStore_SecondMigrateAfterVersionReset reproduces the DF-009
+// race outcome: a migrator that read schema_version=0 while another process
+// had already created the tables. Before the fix this failed with
+// "table sessions already exists"; now the BEGIN IMMEDIATE serialization
+// plus IF NOT EXISTS makes it a no-op and restores the version.
+func TestNewSQLiteStore_SecondMigrateAfterVersionReset(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "race.db")
+
+	storeA, err := NewSQLiteStore(dbPath, nil)
+	if err != nil {
+		t.Fatalf("store A: %v", err)
+	}
+	defer storeA.Close()
+	ctx := context.Background()
+
+	// Simulate the second migrator's stale read: tables exist but the
+	// schema_version row still says 0.
+	if err := storeA.SetMetadata(ctx, "schema_version", "0"); err != nil {
+		t.Fatalf("reset schema_version: %v", err)
+	}
+
+	// Store B opens the same file while A is open and must migrate cleanly.
+	storeB, err := NewSQLiteStore(dbPath, nil)
+	if err != nil {
+		t.Fatalf("store B on same path while A open: %v", err)
+	}
+	defer storeB.Close()
+
+	// Both stores usable, version restored to 1.
+	for name, st := range map[string]*SQLiteStore{"A": storeA, "B": storeB} {
+		if err := st.Health(ctx); err != nil {
+			t.Fatalf("store %s health: %v", name, err)
+		}
+	}
+	if v, ok, err := storeB.GetMetadata(ctx, "schema_version"); err != nil || !ok || v != "1" {
+		t.Errorf("schema_version after re-migrate = (%q, %v, %v), want (\"1\", true, nil)", v, ok, err)
+	}
+}
