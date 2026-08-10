@@ -32,8 +32,9 @@ import (
 
 // MetricsCollectorInterval is how often runtime gauges (goroutine count,
 // uptime) are refreshed. Counters and histograms are recorded inline and
-// are always live.
-const MetricsCollectorInterval = 15 * time.Second
+// are always live. A var (not const) so tests can shrink it and keep
+// -short runs fast (DF-013).
+var MetricsCollectorInterval = 15 * time.Second
 
 // Metrics owns the Prometheus registry and the background ticker that
 // refreshes runtime-derived gauges. It is safe for concurrent use.

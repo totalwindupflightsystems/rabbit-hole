@@ -157,6 +157,12 @@ func TestMetricsEndpoint_BypassesRateLimit(t *testing.T) {
 // TestMetricsCollector_RecordsSamples verifies that the collector
 // accepts samples and increments counters/histograms.
 func TestMetricsCollector_RecordsSamples(t *testing.T) {
+	// DF-013: shrink the collector interval for the duration of this test
+	// so the "force one tick" wait below is milliseconds, not 15 seconds.
+	old := MetricsCollectorInterval
+	MetricsCollectorInterval = 40 * time.Millisecond
+	defer func() { MetricsCollectorInterval = old }()
+
 	mc := NewMetricsCollector(time.Now(), nil)
 	defer mc.Stop()
 

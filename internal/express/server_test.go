@@ -510,6 +510,23 @@ func TestWebSocket(t *testing.T) {
 	}
 }
 
+// waitFor polls cond every pollInterval until it returns true or the
+// deadline expires. Generous deadlines avoid flakes under full-suite load;
+// prefer this over fixed sleeps in tests (DF-013).
+func waitFor(t *testing.T, timeout, pollInterval time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if cond() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for condition")
+		}
+		time.Sleep(pollInterval)
+	}
+}
+
 // TestStress_ConcurrentWebSocket verifies STR-006: 100 concurrent WebSocket
 // connections receive all published flows with no dropped messages and no
 // cross-talk between sessions.
@@ -544,6 +561,7 @@ func TestStress_ConcurrentWebSocket(t *testing.T) {
 	url := "ws://" + srv.Addr() + "/api/v1/ws/sessions/" + sess.ID
 
 	var dialErrCount atomic.Int32
+	var receivedTotal atomic.Int32
 	var wg sync.WaitGroup
 	results := make([]connResult, numConns)
 
@@ -573,17 +591,19 @@ func TestStress_ConcurrentWebSocket(t *testing.T) {
 					continue
 				}
 				results[id].received++
+				receivedTotal.Add(1)
 			}
 		}(i)
 	}
 
-	// Wait for all connections to dial and subscribe.
-	wgReady := make(chan struct{})
-	go func() {
-		time.Sleep(2 * time.Second)
-		close(wgReady)
-	}()
-	<-wgReady
+	// Wait for all connections to dial and subscribe before publishing —
+	// deterministic poll instead of a fixed 2s sleep (DF-013).
+	waitFor(t, 5*time.Second, 10*time.Millisecond, func() bool {
+		srv.subMu.Lock()
+		n := len(srv.subscribers[sess.ID])
+		srv.subMu.Unlock()
+		return n+int(dialErrCount.Load()) >= numConns
+	})
 
 	if n := dialErrCount.Load(); n > 0 {
 		t.Fatalf("%d connections failed to dial", n)
@@ -605,8 +625,11 @@ func TestStress_ConcurrentWebSocket(t *testing.T) {
 		Intent: "cross_talk", Outcome: types.FlowOutcomeSuccess,
 	})
 
-	// Wait for delivery, then close the server to terminate connections.
-	time.Sleep(500 * time.Millisecond)
+	// Wait for delivery of all flows, then close the server to terminate
+	// connections — deterministic poll instead of a fixed 500ms sleep (DF-013).
+	waitFor(t, 5*time.Second, 10*time.Millisecond, func() bool {
+		return receivedTotal.Load() >= numConns*numFlows
+	})
 	srv.Shutdown(context.Background())
 
 	// Wait for all goroutines to finish.
