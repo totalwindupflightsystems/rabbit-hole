@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,6 +28,13 @@ type SQLiteStore struct {
 
 // NewSQLiteStore opens a SQLite database at dbPath and runs migrations.
 func NewSQLiteStore(dbPath string, logger *slog.Logger) (*SQLiteStore, error) {
+	// Ensure the parent directory exists so a DB path in a fresh directory
+	// works on first run without a manual mkdir (DF-011).
+	if dir := filepath.Dir(dbPath); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("create db dir %s: %w", dir, err)
+		}
+	}
 	dsn := dbPath + "?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

@@ -25,6 +25,31 @@ func newTestStore(t *testing.T) *SQLiteStore {
 	return store
 }
 
+// TestNewSQLiteStore_CreatesParentDir confirms that opening a DB whose
+// parent directory does not exist yet creates the parent instead of
+// failing with "unable to open database file" (DF-011).
+func TestNewSQLiteStore_CreatesParentDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "fresh", "nested") // neither level exists
+	dbPath := filepath.Join(dir, "rh.db")
+
+	store, err := NewSQLiteStore(dbPath, nil)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore: %v", err)
+	}
+	defer store.Close()
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("parent dir was not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("parent dir %s is not a directory", dir)
+	}
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("db file was not created: %v", err)
+	}
+}
+
 // ---------- Session CRUD ----------
 
 func TestStoreAndGetSession(t *testing.T) {

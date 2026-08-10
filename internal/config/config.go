@@ -122,6 +122,13 @@ func Load() (Config, error) {
 		}
 	}
 
+	// Ensure the data directory exists so a fresh RABBITHOLE_DATA_DIR (or
+	// the default ~/.rabbit-hole) works on first run without a manual mkdir
+	// (DF-011). Validate() still rejects paths that cannot be created.
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return Config{}, fmt.Errorf("create data dir %s: %w", cfg.DataDir, err)
+	}
+
 	// Paths (after DataDir is resolved)
 	if v := os.Getenv("RABBITHOLE_DB_PATH"); v != "" {
 		cfg.DBPath = v

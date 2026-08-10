@@ -79,6 +79,7 @@ func TestDefaults(t *testing.T) {
 
 func TestLoadEnvOverrides(t *testing.T) {
 	// Set environment variables
+	dataDir := filepath.Join(t.TempDir(), "rh-data") // creatable: Load() now MkdirAlls DataDir (DF-011)
 	envVars := map[string]string{
 		"RABBITHOLE_LISTEN_ADDR":       "0.0.0.0:8080",
 		"RABBITHOLE_BUFFER_SIZE":       "50000",
@@ -104,7 +105,7 @@ func TestLoadEnvOverrides(t *testing.T) {
 		"RABBITHOLE_DB_PATH":           "/data/rabbit-hole.db",
 		"RABBITHOLE_CORS_ORIGINS":      "http://localhost:3000",
 		"RABBITHOLE_BPF_DEBUG":         "true",
-		"RABBITHOLE_DATA_DIR":          "/opt/rabbit-hole",
+		"RABBITHOLE_DATA_DIR":          dataDir,
 	}
 	for k, v := range envVars {
 		os.Setenv(k, v)
@@ -168,8 +169,8 @@ func TestLoadEnvOverrides(t *testing.T) {
 	if cfg.BPFDebug != true {
 		t.Errorf("BPFDebug: expected true, got false")
 	}
-	if cfg.DataDir != "/opt/rabbit-hole" {
-		t.Errorf("DataDir: expected /opt/rabbit-hole, got %s", cfg.DataDir)
+	if cfg.DataDir != dataDir {
+		t.Errorf("DataDir: expected %s, got %s", dataDir, cfg.DataDir)
 	}
 
 	// Duration checks
@@ -200,7 +201,8 @@ func TestLoadEnvOverrides(t *testing.T) {
 }
 
 func TestLoadDataDirDerivesPaths(t *testing.T) {
-	os.Setenv("RABBITHOLE_DATA_DIR", "/custom/data")
+	dataDir := filepath.Join(t.TempDir(), "rh-data") // creatable: Load() now MkdirAlls DataDir (DF-011)
+	os.Setenv("RABBITHOLE_DATA_DIR", dataDir)
 	defer os.Unsetenv("RABBITHOLE_DATA_DIR")
 
 	cfg, err := Load()
@@ -208,19 +210,20 @@ func TestLoadDataDirDerivesPaths(t *testing.T) {
 		t.Fatalf("Load() failed: %v", err)
 	}
 
-	if cfg.DataDir != "/custom/data" {
-		t.Errorf("DataDir: expected /custom/data, got %s", cfg.DataDir)
+	if cfg.DataDir != dataDir {
+		t.Errorf("DataDir: expected %s, got %s", dataDir, cfg.DataDir)
 	}
-	if cfg.DBPath != "/custom/data/rabbit-hole.db" {
-		t.Errorf("DBPath: expected /custom/data/rabbit-hole.db, got %s", cfg.DBPath)
+	if cfg.DBPath != filepath.Join(dataDir, "rabbit-hole.db") {
+		t.Errorf("DBPath: expected %s, got %s", filepath.Join(dataDir, "rabbit-hole.db"), cfg.DBPath)
 	}
-	if cfg.ModelPath != "/custom/data/models/gemma-3-4b.gguf" {
-		t.Errorf("ModelPath: expected /custom/data/models/gemma-3-4b.gguf, got %s", cfg.ModelPath)
+	if cfg.ModelPath != filepath.Join(dataDir, "models", "gemma-3-4b.gguf") {
+		t.Errorf("ModelPath: expected %s, got %s", filepath.Join(dataDir, "models", "gemma-3-4b.gguf"), cfg.ModelPath)
 	}
 }
 
 func TestLoadExplicitPathsOverrideDataDir(t *testing.T) {
-	os.Setenv("RABBITHOLE_DATA_DIR", "/custom/data")
+	dataDir := filepath.Join(t.TempDir(), "rh-data") // creatable: Load() now MkdirAlls DataDir (DF-011)
+	os.Setenv("RABBITHOLE_DATA_DIR", dataDir)
 	os.Setenv("RABBITHOLE_DB_PATH", "/explicit/db.sqlite")
 	os.Setenv("RABBITHOLE_MODEL_PATH", "/explicit/model.gguf")
 	defer func() {
@@ -234,8 +237,8 @@ func TestLoadExplicitPathsOverrideDataDir(t *testing.T) {
 		t.Fatalf("Load() failed: %v", err)
 	}
 
-	if cfg.DataDir != "/custom/data" {
-		t.Errorf("DataDir: expected /custom/data, got %s", cfg.DataDir)
+	if cfg.DataDir != dataDir {
+		t.Errorf("DataDir: expected %s, got %s", dataDir, cfg.DataDir)
 	}
 	// Explicit paths override derived paths
 	if cfg.DBPath != "/explicit/db.sqlite" {
@@ -243,6 +246,29 @@ func TestLoadExplicitPathsOverrideDataDir(t *testing.T) {
 	}
 	if cfg.ModelPath != "/explicit/model.gguf" {
 		t.Errorf("ModelPath: expected /explicit/model.gguf, got %s", cfg.ModelPath)
+	}
+}
+
+// TestLoadCreatesDataDir confirms that Load() creates a fresh
+// RABBITHOLE_DATA_DIR instead of failing on a directory that does not
+// exist yet (DF-011).
+func TestLoadCreatesDataDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "fresh", "nested") // neither level exists
+	t.Setenv("RABBITHOLE_DATA_DIR", dir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed for fresh data dir: %v", err)
+	}
+	if cfg.DataDir != dir {
+		t.Errorf("DataDir: expected %s, got %s", dir, cfg.DataDir)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("data dir was not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("data dir %s is not a directory", dir)
 	}
 }
 
