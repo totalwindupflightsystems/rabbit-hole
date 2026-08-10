@@ -100,6 +100,32 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 	return nil
 }
 
+// ---------- Metadata ----------
+
+// SetMetadata upserts a key/value pair in the metadata table.
+func (s *SQLiteStore) SetMetadata(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)`, key, value)
+	if err != nil {
+		return fmt.Errorf("set metadata %s: %w", key, err)
+	}
+	return nil
+}
+
+// GetMetadata reads a key from the metadata table. ok is false when the
+// key is absent.
+func (s *SQLiteStore) GetMetadata(ctx context.Context, key string) (value string, ok bool, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`SELECT value FROM metadata WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("get metadata %s: %w", key, err)
+	}
+	return value, true, nil
+}
+
 // ---------- Trace Operations ----------
 
 // StoreTraces inserts a batch of traces in a single transaction.

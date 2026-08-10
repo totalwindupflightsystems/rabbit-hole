@@ -66,6 +66,17 @@ func newStatusCmd() *cobra.Command {
 				}
 			}
 
+			// The daemon records the ACTUAL bound address in DB metadata at
+			// serve startup, so status reflects what is really listening even
+			// with --addr or an ephemeral :0 port (DF-007). Old DBs have no
+			// such row — fall back to the configured address.
+			serverAddr := cfg.ListenAddr
+			if stored, ok, err := store.GetMetadata(cobraCmd.Context(), "listen_addr"); err != nil {
+				return fmt.Errorf("listen addr: %w", err)
+			} else if ok && stored != "" {
+				serverAddr = stored
+			}
+
 			fmt.Println("🐇 Rabbit-Hole")
 			fmt.Printf("Database:    %s\n", cfg.DBPath)
 			fmt.Printf("Sessions:    %d (%d active, %d completed)\n",
@@ -78,7 +89,7 @@ func newStatusCmd() *cobra.Command {
 					stats.OldestTrace.Format("2006-01-02 15:04:05"),
 					time.Since(stats.OldestTrace).Round(time.Second))
 			}
-			fmt.Printf("Server:      %s\n", cfg.ListenAddr)
+			fmt.Printf("Server:      %s\n", serverAddr)
 			fmt.Printf("Log Level:   %s\n", cfg.LogLevel)
 			fmt.Printf("eBPF:        %s\n", ebpfStatus)
 

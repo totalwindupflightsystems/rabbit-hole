@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
 )
 
 func TestHumanizeBytes(t *testing.T) {
@@ -91,5 +95,41 @@ func TestStatusCmd_AddrFlagPrintsOverriddenAddress(t *testing.T) {
 	})
 	if !strings.Contains(output, "127.0.0.1:19734") {
 		t.Errorf("status output should show the overridden address, got: %q", output)
+	}
+}
+
+func TestStatusCmd_PrintsStoredListenAddrFromMetadata(t *testing.T) {
+	// DF-007: status reports the daemon's ACTUAL bound address from DB
+	// metadata (written by serve at startup), not the configured default —
+	// the stored value wins even when --addr differs. Old DBs without the
+	// row still fall back to --addr (covered by
+	// TestStatusCmd_AddrFlagPrintsOverriddenAddress).
+	dataDir := t.TempDir()
+	t.Setenv("RABBITHOLE_DATA_DIR", dataDir)
+
+	store, err := storage.NewSQLiteStore(filepath.Join(dataDir, "rabbit-hole.db"), nil)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore: %v", err)
+	}
+	if err := store.SetMetadata(context.Background(), "listen_addr", "127.0.0.1:19734"); err != nil {
+		store.Close()
+		t.Fatalf("SetMetadata: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	output := captureStdout(func() {
+		cmd := newStatusCmd()
+		cmd.SetArgs([]string{"--addr", "127.0.0.1:9999"}) // differs from stored value
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("status: %v", err)
+		}
+	})
+	if !strings.Contains(output, "Server:      127.0.0.1:19734") {
+		t.Errorf("status should print the stored listen addr, got: %q", output)
+	}
+	if strings.Contains(output, "127.0.0.1:9999") {
+		t.Errorf("status must not print the --addr override when stored metadata exists, got: %q", output)
 	}
 }

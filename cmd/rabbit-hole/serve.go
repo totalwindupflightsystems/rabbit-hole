@@ -168,6 +168,14 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 				return fmt.Errorf("server: %w", err)
 			}
 
+			// Record the ACTUAL bound address (server.Addr() reflects
+			// --addr and :0 ephemeral ports) in DB metadata so `status`
+			// reports what is really listening, not the configured
+			// default (DF-007).
+			if err := store.SetMetadata(cobraCmd.Context(), "listen_addr", server.Addr()); err != nil {
+				return fmt.Errorf("store listen addr: %w", err)
+			}
+
 			// Dogfood live stream: generate + store + publish one flow every N
 			// seconds into a dedicated demo session. The dashboard's Live tab
 			// subscribes via WebSocket and shows flows arriving in real time.
@@ -201,7 +209,7 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 				logger.Info("dogfood live stream enabled", "session", sessionID, "every_s", demoEveryS)
 			}
 
-			logger.Info("rabbit-hole is running", "addr", cfg.ListenAddr, "pid", os.Getpid())
+			logger.Info("rabbit-hole is running", "addr", server.Addr(), "pid", os.Getpid())
 
 			// Wait for signal
 			sigCh := make(chan os.Signal, 1)
