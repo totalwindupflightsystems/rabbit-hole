@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -211,11 +213,148 @@ func (s *Server) Metrics() *MetricsCollector { return s.metrics }
 // No external LLM dependency — production should use a real model.
 type stubChatModel struct{}
 
+// Time-phrase matchers for the stub translator. The stub mirrors the real
+// model's contract (see translateSystemPrompt): time-based questions get a
+// concrete UTC window and an empty (or keyword-only) query so the store
+// returns all activity in the window. DF-008.
+var (
+	// relativeWindowRe matches "last hour", "past 2 days", "last 30 minutes".
+	relativeWindowRe = regexp.MustCompile(`(?i)\b(last|past)\s+(\d+\s+)?(minute|minutes|hour|hours|day|days|week|weeks)\b`)
+	// atTimeRe matches "at 3am", "at 15:30", "at 3pm".
+	atTimeRe = regexp.MustCompile(`(?i)\bat\s+(\d{1,2})(:\d{2})?\s*(am|pm)?\b`)
+	// thisTimeRe matches "this morning", "this afternoon", "this evening".
+	thisTimeRe  = regexp.MustCompile(`(?i)\bthis\s+(morning|afternoon|evening)\b`)
+	tonightRe   = regexp.MustCompile(`(?i)\btonight\b`)
+	todayRe     = regexp.MustCompile(`(?i)\btoday\b`)
+	yesterdayRe = regexp.MustCompile(`(?i)\byesterday\b`)
+	// nonWordRe strips punctuation when extracting keywords. Underscores
+	// are kept so identifiers like "read_file" survive.
+	nonWordRe = regexp.MustCompile(`[^a-zA-Z0-9_\s]+`)
+
+	// chatStopwords are filler words that carry no searchable meaning.
+	// After stripping time phrases, a remainder made only of these means
+	// the question is time-only → Query == "".
+	chatStopwords = map[string]struct{}{
+		"a": {}, "about": {}, "agent": {}, "an": {}, "and": {}, "any": {},
+		"are": {}, "at": {}, "be": {}, "by": {}, "can": {}, "could": {},
+		"did": {}, "do": {}, "does": {}, "for": {}, "from": {}, "get": {},
+		"happen": {}, "happened": {}, "happening": {}, "in": {}, "is": {},
+		"it": {}, "me": {}, "of": {}, "on": {}, "or": {}, "our": {},
+		"activity": {}, "actions": {}, "show": {}, "that": {}, "the": {},
+		"there": {}, "these": {},
+		"this": {}, "to": {}, "us": {}, "was": {}, "we": {}, "were": {},
+		"what": {}, "when": {}, "where": {}, "which": {}, "who": {},
+		"why": {}, "with": {}, "you": {}, "your": {},
+	}
+)
+
 func (m *stubChatModel) TranslateQuery(ctx context.Context, message string) (*types.SearchRequest, error) {
+	start, end, ok := stubTimeWindow(message, time.Now().UTC())
+	if !ok {
+		// Non-time query: exact previous behavior — the whole message
+		// becomes the keyword filter.
+		return &types.SearchRequest{
+			Query: message,
+			Limit: 50,
+		}, nil
+	}
+	// Time-based question: mirror the real model's contract — a concrete
+	// UTC window plus a compact keyword query (empty when the question is
+	// time-only). The store returns all activity in the window when query
+	// is empty.
 	return &types.SearchRequest{
-		Query: message,
+		Query: stubKeywordQuery(message),
 		Limit: 50,
+		TimeRange: types.TimeRange{
+			Start: start,
+			End:   end,
+		},
 	}, nil
+}
+
+// stubTimeWindow maps a time phrase in msg to a concrete UTC window.
+// Returns ok=false when msg contains no time phrase.
+func stubTimeWindow(msg string, now time.Time) (start, end time.Time, ok bool) {
+	if m := relativeWindowRe.FindStringSubmatch(msg); m != nil {
+		n := 1
+		if num := strings.TrimSpace(m[2]); num != "" {
+			if parsed, err := strconv.Atoi(num); err == nil && parsed > 0 {
+				n = parsed
+			}
+		}
+		unit := map[string]time.Duration{
+			"minute": time.Minute, "minutes": time.Minute,
+			"hour": time.Hour, "hours": time.Hour,
+			"day": 24 * time.Hour, "days": 24 * time.Hour,
+			"week": 7 * 24 * time.Hour, "weeks": 7 * 24 * time.Hour,
+		}[strings.ToLower(m[3])]
+		if unit == 0 {
+			unit = time.Hour
+		}
+		return now.Add(-time.Duration(n) * unit), now, true
+	}
+	if m := atTimeRe.FindStringSubmatch(msg); m != nil {
+		hour, _ := strconv.Atoi(m[1])
+		minute := 0
+		if m[2] != "" {
+			minute, _ = strconv.Atoi(strings.TrimPrefix(m[2], ":"))
+		}
+		switch strings.ToLower(m[3]) {
+		case "am":
+			if hour == 12 {
+				hour = 0
+			}
+		case "pm":
+			if hour < 12 {
+				hour += 12
+			}
+		}
+		start := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
+		return start, start.Add(time.Hour), true
+	}
+	if m := thisTimeRe.FindStringSubmatch(msg); m != nil {
+		var start time.Time
+		switch strings.ToLower(m[1]) {
+		case "morning":
+			start = time.Date(now.Year(), now.Month(), now.Day(), 6, 0, 0, 0, time.UTC)
+		case "afternoon":
+			start = time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, time.UTC)
+		default: // evening
+			start = time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, time.UTC)
+		}
+		return start, start.Add(6 * time.Hour), true
+	}
+	if tonightRe.MatchString(msg) {
+		start := time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, time.UTC)
+		return start, start.Add(6 * time.Hour), true
+	}
+	if todayRe.MatchString(msg) {
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		return start, now, true
+	}
+	if yesterdayRe.MatchString(msg) {
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -1)
+		return start, start.Add(24 * time.Hour), true
+	}
+	return time.Time{}, time.Time{}, false
+}
+
+// stubKeywordQuery strips time phrases and filler words from a time-based
+// question. The remaining words (if any) become the keyword query; when
+// nothing meaningful remains the query is empty and the store returns all
+// activity in the window.
+func stubKeywordQuery(msg string) string {
+	for _, re := range []*regexp.Regexp{relativeWindowRe, atTimeRe, thisTimeRe, tonightRe, todayRe, yesterdayRe} {
+		msg = re.ReplaceAllString(msg, " ")
+	}
+	msg = nonWordRe.ReplaceAllString(msg, " ")
+	var keywords []string
+	for _, w := range strings.Fields(msg) {
+		if _, stop := chatStopwords[strings.ToLower(w)]; !stop {
+			keywords = append(keywords, w)
+		}
+	}
+	return strings.Join(keywords, " ")
 }
 
 func (m *stubChatModel) GenerateAnswer(ctx context.Context, message string, flows []types.Flow) (string, error) {

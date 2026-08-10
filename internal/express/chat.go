@@ -57,6 +57,30 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		flows = []types.Flow{}
 	}
 
+	// Step 3b: Stub zero-result fallback for time-window questions. The
+	// stub translates "What did the agent do in the last hour?" into an
+	// empty query + time window; when nothing was recorded in that window
+	// (e.g. right after `rabbit-hole demo` seeds flows ~3h back), re-run
+	// without the window so the answer shows the most recent activity
+	// instead of dead-ending on "couldn't find any matching activity".
+	// Only stub-translated time-only requests fall back — keyword queries
+	// with no matches keep their honest empty result. DF-008.
+	_, isStub := s.chatModel.(*stubChatModel)
+	if isStub && len(flows) == 0 && searchReq.Query == "" && !searchReq.TimeRange.Start.IsZero() {
+		s.logger.Debug("stub: time-window question returned no flows; falling back to recent flows",
+			"message", req.Message)
+		recent, _, ferr := s.store.QueryFlows(ctx, types.FlowQuery{
+			SessionID: searchReq.SessionID,
+			Query:     searchReq.Query,
+			Phases:    searchReq.Categories,
+			Outcomes:  searchReq.Outcomes,
+			Limit:     searchReq.Limit,
+		})
+		if ferr == nil && len(recent) > 0 {
+			flows = recent
+		}
+	}
+
 	// Step 4: Generate natural language answer
 	answer, err := s.chatModel.GenerateAnswer(ctx, req.Message, flows)
 	if err != nil {
@@ -76,7 +100,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	// Surface stub mode to clients: when the built-in keyword model is
 	// active (no real chat model configured), mark the response so the
 	// chat CLI can warn users that answers are canned.
-	if _, ok := s.chatModel.(*stubChatModel); ok {
+	if isStub {
 		resp.Stub = true
 	}
 

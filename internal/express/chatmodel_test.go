@@ -510,3 +510,109 @@ func TestRealChatModel_TranslateQuery_TimeRange(t *testing.T) {
 		t.Errorf("End=%v, want zero (null)", got.TimeRange.End)
 	}
 }
+
+// TestStubChatModel_TranslateQuery_TimeWindow verifies the stub detects
+// time phrases and returns an empty keyword query + a concrete UTC window,
+// mirroring the real model's contract for time-based questions. DF-008.
+func TestStubChatModel_TranslateQuery_TimeWindow(t *testing.T) {
+	m := &stubChatModel{}
+	cases := []struct {
+		msg     string
+		wantDur time.Duration // expected window duration (0 = today, ends at now)
+	}{
+		{"What did the agent do in the last hour?", time.Hour},
+		{"what happened in the past 2 hours?", 2 * time.Hour},
+		{"show me the activity today", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.msg, func(t *testing.T) {
+			before := time.Now().UTC()
+			req, err := m.TranslateQuery(context.Background(), c.msg)
+			after := time.Now().UTC()
+			if err != nil {
+				t.Fatalf("TranslateQuery: %v", err)
+			}
+			if req.Query != "" {
+				t.Errorf("Query=%q, want empty (time-only question)", req.Query)
+			}
+			if req.Limit != 50 {
+				t.Errorf("Limit=%d, want 50", req.Limit)
+			}
+			if req.TimeRange.Start.IsZero() || req.TimeRange.End.IsZero() {
+				t.Fatalf("TimeRange not set: %+v", req.TimeRange)
+			}
+			if req.TimeRange.End.Before(req.TimeRange.Start) {
+				t.Errorf("window inverted: start=%v end=%v", req.TimeRange.Start, req.TimeRange.End)
+			}
+			if c.wantDur > 0 {
+				if d := req.TimeRange.End.Sub(req.TimeRange.Start); d < c.wantDur-5*time.Minute || d > c.wantDur+5*time.Minute {
+					t.Errorf("window duration=%v, want ~%v", d, c.wantDur)
+				}
+				if req.TimeRange.Start.Before(before.Add(-c.wantDur-10*time.Minute)) || req.TimeRange.Start.After(after) {
+					t.Errorf("Start=%v, want ≈ now-%v", req.TimeRange.Start, c.wantDur)
+				}
+			} else {
+				// "today": window starts at UTC midnight and ends at now.
+				if h, mnt, s := req.TimeRange.Start.UTC().Clock(); h != 0 || mnt != 0 || s != 0 {
+					t.Errorf("Start=%v, want UTC midnight today", req.TimeRange.Start)
+				}
+			}
+			if req.TimeRange.End.Before(before.Add(-1*time.Minute)) || req.TimeRange.End.After(after.Add(1*time.Minute)) {
+				t.Errorf("End=%v, want ≈ now", req.TimeRange.End)
+			}
+		})
+	}
+}
+
+// TestStubChatModel_TranslateQuery_KeywordPlusWindow verifies a question
+// with BOTH a time phrase and a concrete keyword keeps the keyword as the
+// query and adds the window. DF-008.
+func TestStubChatModel_TranslateQuery_KeywordPlusWindow(t *testing.T) {
+	m := &stubChatModel{}
+	req, err := m.TranslateQuery(context.Background(), "sql errors in the last hour")
+	if err != nil {
+		t.Fatalf("TranslateQuery: %v", err)
+	}
+	if req.Query != "sql errors" {
+		t.Errorf("Query=%q, want %q", req.Query, "sql errors")
+	}
+	if req.TimeRange.Start.IsZero() || req.TimeRange.End.IsZero() {
+		t.Fatalf("TimeRange not set: %+v", req.TimeRange)
+	}
+	if d := req.TimeRange.End.Sub(req.TimeRange.Start); d < 55*time.Minute || d > 65*time.Minute {
+		t.Errorf("window duration=%v, want ~1h", d)
+	}
+
+	req, err = m.TranslateQuery(context.Background(), "show me sql errors from yesterday")
+	if err != nil {
+		t.Fatalf("TranslateQuery: %v", err)
+	}
+	if req.Query != "sql errors" {
+		t.Errorf("Query=%q, want %q", req.Query, "sql errors")
+	}
+	if req.TimeRange.Start.IsZero() {
+		t.Fatal("TimeRange.Start not set for yesterday question")
+	}
+}
+
+// TestStubChatModel_TranslateQuery_PlainKeyword is the no-regression case:
+// a plain keyword query without time words behaves exactly as before —
+// the whole message becomes the query and no window is set. DF-008.
+func TestStubChatModel_TranslateQuery_PlainKeyword(t *testing.T) {
+	m := &stubChatModel{}
+	for _, msg := range []string{"sql error", "what failed in auth.go?"} {
+		req, err := m.TranslateQuery(context.Background(), msg)
+		if err != nil {
+			t.Fatalf("TranslateQuery(%q): %v", msg, err)
+		}
+		if req.Query != msg {
+			t.Errorf("Query=%q, want %q (unchanged)", req.Query, msg)
+		}
+		if !req.TimeRange.Start.IsZero() || !req.TimeRange.End.IsZero() {
+			t.Errorf("TimeRange=%+v, want zero for non-time query", req.TimeRange)
+		}
+		if req.Limit != 50 {
+			t.Errorf("Limit=%d, want 50", req.Limit)
+		}
+	}
+}

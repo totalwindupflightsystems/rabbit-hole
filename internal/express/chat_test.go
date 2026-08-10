@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/totalwindupflightsystems/rabbit-hole/internal/demo"
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
@@ -168,5 +169,58 @@ func TestHandleChat_TimeWindowQuestion(t *testing.T) {
 			t.Errorf("flow %s outside window: start_time %s < window start %s",
 				f.ID, f.StartTime.Format(time.RFC3339), windowStart.Format(time.RFC3339))
 		}
+	}
+}
+
+// TestHandleChat_StubTimeWindowFallbackToRecent proves the DF-008 PASS:
+// with default config (stub chat model) and demo-style flows seeded ~3h
+// back, asking "What did the agent do in the last hour?" returns the
+// recent flows instead of a dead-end "couldn't find any matching
+// activity". The strict window has no data, so handleChat re-runs the
+// query without the time range (most recent flows, same limit).
+func TestHandleChat_StubTimeWindowFallbackToRecent(t *testing.T) {
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "false")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", "http://example.invalid")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	store := newTestStore(t)
+	defer store.Close()
+
+	// Seed like `rabbit-hole demo` defaults: 48 flows starting 3h back,
+	// each 15s apart — all outside a strict "last hour" window.
+	sc := demo.Generate(48, time.Now().UTC().Add(-3*time.Hour), 12345)
+	sc.Session.Status = types.SessionStatusRunning
+	if err := store.StoreSession(context.Background(), &sc.Session); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+	if err := store.StoreFlows(context.Background(), sc.Flows); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	defer srv.Shutdown(context.Background())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat",
+		strings.NewReader(`{"message":"What did the agent do in the last hour?"}`))
+	rr := httptest.NewRecorder()
+	srv.handleChat(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	var resp types.ChatResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Flows) == 0 {
+		t.Fatalf("Flows = 0 — time-window question dead-ended (body: %s)", rr.Body.String())
+	}
+	if strings.Contains(resp.Answer, "couldn't find") {
+		t.Errorf("Answer=%q — expected a real summary, not the no-match message", resp.Answer)
+	}
+	if !resp.Stub {
+		t.Error("Stub = false, want true — stub model active")
 	}
 }

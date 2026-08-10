@@ -61,7 +61,11 @@ the whole data directory with `RABBITHOLE_DATA_DIR`). The HTTP server binds to
 
 The chat CLI gets natural-language answers from an LLM via the server. Without
 a real model configured, the server falls back to a built-in keyword stub and
-the chat CLI prints a `stub` warning so you know the answers are canned:
+the chat CLI prints a `stub` warning so you know the answers are canned. In
+stub mode, time-window questions (e.g. "What did the agent do in the last
+hour?") are answered from the most recent recorded activity, so the Quick
+Start flow works out of the box; full natural-language answers need the model
+env vars below.
 
 - `RABBITHOLE_CHAT_MODEL_ENDPOINT` — base URL of an OpenAI-compatible chat
   completions API (e.g. `http://127.0.0.1:11434/v1` for Ollama,
