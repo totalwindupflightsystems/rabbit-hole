@@ -39,6 +39,7 @@ pipeline:
       type: ai_eval
       on: [pre-eval]
       condition: "true"
-      max_iterations: 50
+      max_iterations: 200
+      max_time: 25m
       tools: [read_file, run_command, search_pattern, read_diff, sandbox, detect_dead_code]
 
