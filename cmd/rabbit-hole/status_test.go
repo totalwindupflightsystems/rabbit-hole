@@ -1,12 +1,11 @@
 package main
 
 import (
-	"context"
-	"path/filepath"
+	"net"
 	"strings"
 	"testing"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
+	"github.com/totalwindupflightsystems/rabbit-hole/internal/express"
 )
 
 func TestHumanizeBytes(t *testing.T) {
@@ -81,55 +80,104 @@ func TestNewStatusCmd_AddrFlag(t *testing.T) {
 	}
 }
 
-func TestStatusCmd_AddrFlagPrintsOverriddenAddress(t *testing.T) {
-	// DF-006: status prints the overridden daemon address in its Server line.
-	// The data dir is isolated so a fresh DB is created in the temp dir.
+func TestStatusCmd_WithoutDaemon_ReportsAddr(t *testing.T) {
+	// status now reads the daemon over HTTP (DF-014); a missing daemon
+	// must fail with the unreachable message naming the address, not
+	// print a local-DB snapshot.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
 	t.Setenv("RABBITHOLE_DATA_DIR", t.TempDir())
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", addr)
 
 	output := captureStdout(func() {
 		cmd := newStatusCmd()
-		cmd.SetArgs([]string{"--addr", "127.0.0.1:19734"})
-		if err := cmd.Execute(); err != nil {
-			t.Fatalf("status with --addr: %v", err)
+		if err := cmd.Execute(); err == nil {
+			t.Fatal("status without daemon should fail")
+		} else if !strings.Contains(err.Error(), "cannot reach Rabbit-Hole daemon") ||
+			!strings.Contains(err.Error(), addr) {
+			t.Errorf("status error = %q, want unreachable message naming %s", err.Error(), addr)
 		}
 	})
-	if !strings.Contains(output, "127.0.0.1:19734") {
-		t.Errorf("status output should show the overridden address, got: %q", output)
+	if strings.Contains(output, "Rabbit-Hole") {
+		t.Errorf("status must not print a snapshot when the daemon is unreachable, got:\n%s", output)
 	}
 }
 
-func TestStatusCmd_PrintsStoredListenAddrFromMetadata(t *testing.T) {
-	// DF-007: status reports the daemon's ACTUAL bound address from DB
-	// metadata (written by serve at startup), not the configured default —
-	// the stored value wins even when --addr differs. Old DBs without the
-	// row still fall back to --addr (covered by
-	// TestStatusCmd_AddrFlagPrintsOverriddenAddress).
-	dataDir := t.TempDir()
-	t.Setenv("RABBITHOLE_DATA_DIR", dataDir)
-
-	store, err := storage.NewSQLiteStore(filepath.Join(dataDir, "rabbit-hole.db"), nil)
-	if err != nil {
-		t.Fatalf("NewSQLiteStore: %v", err)
-	}
-	if err := store.SetMetadata(context.Background(), "listen_addr", "127.0.0.1:19734"); err != nil {
-		store.Close()
-		t.Fatalf("SetMetadata: %v", err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+func TestStatusCmd_ShowsDaemonFacts(t *testing.T) {
+	// DF-014: status renders the DAEMON's facts — DB path, bound address,
+	// session counts, log level, eBPF state — all over HTTP.
+	server, store := startTestDaemon(t)
+	server.SetRuntimeInfo(express.RuntimeInfo{
+		LogLevel:    "debug",
+		EBPFEnabled: true,
+		EBPFDetail:  "kernel probes attached",
+	})
 
 	output := captureStdout(func() {
 		cmd := newStatusCmd()
-		cmd.SetArgs([]string{"--addr", "127.0.0.1:9999"}) // differs from stored value
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("status: %v", err)
 		}
 	})
-	if !strings.Contains(output, "Server:      127.0.0.1:19734") {
-		t.Errorf("status should print the stored listen addr, got: %q", output)
+	if !strings.Contains(output, "Server:      "+server.Addr()) {
+		t.Errorf("status should show the daemon's bound address, got:\n%s", output)
 	}
-	if strings.Contains(output, "127.0.0.1:9999") {
-		t.Errorf("status must not print the --addr override when stored metadata exists, got: %q", output)
+	if !strings.Contains(output, "Database:    "+store.Path()) {
+		t.Errorf("status should show the daemon's DB path, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Sessions:    0 (0 active, 0 completed)") {
+		t.Errorf("status session line wrong, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Log Level:   debug") {
+		t.Errorf("status should show the daemon's log level, got:\n%s", output)
+	}
+	if !strings.Contains(output, "eBPF:        enabled") {
+		t.Errorf("status should show eBPF enabled, got:\n%s", output)
+	}
+}
+
+func TestStatusCmd_ReportsDaemonDB_NotLocalPath(t *testing.T) {
+	// DF-014 regression: the CLI's own RABBITHOLE_DB_PATH differs from the
+	// daemon's, yet status must report the daemon's database — never the
+	// CLI's local (phantom) path.
+	server, store := startTestDaemon(t)
+	_ = server
+
+	phantom := t.TempDir() + "/phantom.db"
+	t.Setenv("RABBITHOLE_DB_PATH", phantom)
+
+	output := captureStdout(func() {
+		cmd := newStatusCmd()
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("status: %v", err)
+		}
+	})
+	if !strings.Contains(output, "Database:    "+store.Path()) {
+		t.Errorf("status must report the daemon's DB path %q, got:\n%s", store.Path(), output)
+	}
+	if strings.Contains(output, phantom) {
+		t.Errorf("status must not report the CLI's local DB path %q, got:\n%s", phantom, output)
+	}
+}
+
+func TestStatusCmd_AddrFlagRoutesToDaemon(t *testing.T) {
+	// --addr must override the env/default daemon address (DF-006): the
+	// request goes to the given address, which here is a real daemon.
+	server, _ := startTestDaemon(t)
+
+	output := captureStdout(func() {
+		cmd := newStatusCmd()
+		cmd.SetArgs([]string{"--addr", server.Addr()})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("status with --addr: %v", err)
+		}
+	})
+	if !strings.Contains(output, "Server:      "+server.Addr()) {
+		t.Errorf("status --addr should report the daemon at %s, got:\n%s", server.Addr(), output)
 	}
 }

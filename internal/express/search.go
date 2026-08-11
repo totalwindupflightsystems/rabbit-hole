@@ -42,6 +42,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			TimeRange:             req.TimeRange,
 			Phases:                req.Categories,
 			Outcomes:              req.Outcomes,
+			MinConfidence:         req.MinConfidence,
 			IncludeContextWindows: req.IncludeContextWindows,
 			Limit:                 req.Limit,
 			Cursor:                req.Cursor,

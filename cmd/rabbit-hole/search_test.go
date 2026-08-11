@@ -1,7 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"net"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 func TestNewSearchCmd_Structure(t *testing.T) {
@@ -88,5 +95,124 @@ func TestNewSearchCmd_ZeroArgs(t *testing.T) {
 	err := cmd.Args(cmd, []string{})
 	if err != nil {
 		t.Errorf("unexpected error for 0 args: %v", err)
+	}
+}
+
+// TestSearchCmd_NoResultsAgainstDaemon proves `search` talks to the daemon
+// (DF-014): an empty daemon store yields "No results found." even when the
+// CLI's local DB path points somewhere else.
+func TestSearchCmd_NoResultsAgainstDaemon(t *testing.T) {
+	startTestDaemon(t)
+	// Divergent local DB path — must have no effect on the daemon-backed search.
+	t.Setenv("RABBITHOLE_DB_PATH", t.TempDir()+"/phantom.db")
+
+	out, err := executeCLI(t, newSearchCmd(), "zzz-no-such-flow")
+	if err != nil {
+		t.Fatalf("search failed: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "No results found.") {
+		t.Errorf("expected 'No results found.', got:\n%s", out)
+	}
+}
+
+// TestSearchCmd_FindsSeededFlow exercises the full daemon path: flow seeded
+// in the daemon's store is found by the CLI over HTTP, and the structured
+// --phase filter is applied daemon-side.
+func TestSearchCmd_FindsSeededFlow(t *testing.T) {
+	_, store := startTestDaemon(t)
+
+	sess := &types.Session{
+		ID: "0191a000-0000-7000-8000-000000000001", AgentPID: 12345, AgentName: "hermes",
+		StartTime: time.Now().UTC(), Status: types.SessionStatusRunning,
+	}
+	if err := store.StoreSession(context.Background(), sess); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+	flow := &types.Flow{
+		ID: "0191b000-0000-7000-8000-000000000001", SessionID: "0191a000-0000-7000-8000-000000000001",
+		Intent: "read_file", Phase: types.FlowPhaseObservation,
+		Description: "Read auth.go (247 lines)",
+		Outcome:     types.FlowOutcomeSuccess, Confidence: 0.95,
+		StartTime: time.Now().UTC(), EndTime: time.Now().UTC().Add(2 * time.Millisecond),
+	}
+	if err := store.StoreFlows(context.Background(), []types.Flow{*flow}); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	out, err := executeCLI(t, newSearchCmd(), "auth.go")
+	if err != nil {
+		t.Fatalf("search failed: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "Found 1 results") {
+		t.Errorf("expected 'Found 1 results', got:\n%s", out)
+	}
+	if !strings.Contains(out, "read_file") {
+		t.Errorf("search output missing flow intent, got:\n%s", out)
+	}
+
+	// Structured filter through the API: wrong phase → nothing.
+	out, err = executeCLI(t, newSearchCmd(), "--phase", "action")
+	if err != nil {
+		t.Fatalf("search --phase failed: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "No results found.") {
+		t.Errorf("--phase action should filter out the observation flow, got:\n%s", out)
+	}
+
+	// Right phase → the flow.
+	out, err = executeCLI(t, newSearchCmd(), "--phase", "observation")
+	if err != nil {
+		t.Fatalf("search --phase failed: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "Found 1 results") {
+		t.Errorf("--phase observation should match the flow, got:\n%s", out)
+	}
+}
+
+// TestSearchCmd_JsonOutput verifies --json keeps the {"flows":..., "total":...}
+// envelope over the daemon path.
+func TestSearchCmd_JsonOutput(t *testing.T) {
+	startTestDaemon(t)
+
+	out, err := executeCLI(t, newSearchCmd(), "--json", "anything")
+	if err != nil {
+		t.Fatalf("search --json failed: %v\noutput:\n%s", err, out)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(out), &decoded); err != nil {
+		t.Fatalf("search --json output not JSON: %v\noutput:\n%s", err, out)
+	}
+	flows, ok := decoded["flows"].([]any)
+	if !ok {
+		t.Fatalf("search --json output missing flows array: %v", decoded)
+	}
+	if len(flows) != 0 {
+		t.Errorf("expected empty flows on empty store, got %d", len(flows))
+	}
+	if total, _ := decoded["total"].(float64); total != 0 {
+		t.Errorf("total = %v, want 0", decoded["total"])
+	}
+}
+
+// TestSearchCmd_WithoutDaemon_FailsCleanly matches the attach contract: a
+// missing daemon is reported, not a silent "No results found.".
+func TestSearchCmd_WithoutDaemon_FailsCleanly(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	t.Setenv("RABBITHOLE_DATA_DIR", t.TempDir())
+	t.Setenv("RABBITHOLE_DB_PATH", t.TempDir()+"/rh.db")
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", addr)
+
+	out, err := executeCLI(t, newSearchCmd(), "anything")
+	if err == nil {
+		t.Fatalf("search without daemon should fail; output:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "cannot reach Rabbit-Hole daemon") {
+		t.Errorf("search error = %q, want daemon-unreachable message", err.Error())
 	}
 }

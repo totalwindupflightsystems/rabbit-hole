@@ -10,13 +10,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
-// listSessionLimit bounds the number of sessions `list`/`status` read from
-// the store. The collector caps concurrent sessions at 50 (MaxSessions),
-// so 10000 is effectively unbounded for listing.
+// listSessionLimit bounds the number of sessions the daemon-side store read
+// uses when computing the active count (status) and in tests. The collector
+// caps concurrent sessions at 50 (MaxSessions), so 10000 is effectively
+// unbounded for listing.
 const listSessionLimit = 10000
 
 func newListCmd() *cobra.Command {
@@ -33,18 +33,12 @@ func newListCmd() *cobra.Command {
 				return fmt.Errorf("config: %w", err)
 			}
 
-			// Sessions are read from the database, not a per-process
-			// collector, so sessions attached by any prior CLI invocation
-			// or daemon lifetime are visible (DF-001).
-			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
+			// Sessions are read from the daemon over HTTP, which owns the
+			// database (DF-001) — never from the CLI's local DB path, which
+			// may differ from the daemon's (DF-014).
+			sessions, err := newDaemonClient(cfg.ListenAddr).listSessions(cobraCmd.Context())
 			if err != nil {
-				return fmt.Errorf("storage: %w", err)
-			}
-			defer store.Close()
-
-			sessions, err := store.ListSessions(cobraCmd.Context(), 0, listSessionLimit)
-			if err != nil {
-				return fmt.Errorf("list sessions: %w", err)
+				return err
 			}
 
 			activeCount := 0

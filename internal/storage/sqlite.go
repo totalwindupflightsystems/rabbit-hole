@@ -24,6 +24,7 @@ var migration001 string
 type SQLiteStore struct {
 	db     *sql.DB
 	logger *slog.Logger
+	path   string // database file path, for reporting (GET /api/v1/stats)
 }
 
 // NewSQLiteStore opens a SQLite database at dbPath and runs migrations.
@@ -47,7 +48,7 @@ func NewSQLiteStore(dbPath string, logger *slog.Logger) (*SQLiteStore, error) {
 		logger = slog.Default()
 	}
 
-	store := &SQLiteStore{db: db, logger: logger}
+	store := &SQLiteStore{db: db, logger: logger, path: dbPath}
 	if err := store.migrate(context.Background()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
@@ -60,6 +61,9 @@ func (s *SQLiteStore) Close() error { return s.db.Close() }
 
 // DB exposes the underlying *sql.DB for testing.
 func (s *SQLiteStore) DB() *sql.DB { return s.db }
+
+// Path returns the database file path the store was opened with.
+func (s *SQLiteStore) Path() string { return s.path }
 
 // ---------- Migration ----------
 
@@ -390,6 +394,10 @@ func (s *SQLiteStore) QueryFlows(ctx context.Context, req types.FlowQuery) ([]ty
 	if !req.TimeRange.End.IsZero() {
 		q += " AND start_time <= ?"
 		args = append(args, req.TimeRange.End.Format(time.RFC3339Nano))
+	}
+	if req.MinConfidence > 0 {
+		q += " AND confidence >= ?"
+		args = append(args, req.MinConfidence)
 	}
 	q += " ORDER BY start_time DESC"
 	if req.Limit <= 0 {

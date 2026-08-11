@@ -135,6 +135,69 @@ func (d *daemonClient) unreachable(err error) error {
 		d.baseURL, err)
 }
 
+// stats returns the daemon's aggregate storage and runtime facts for
+// `status`. The daemon owns the database, so all paths and counts reflect
+// the daemon's store, never the CLI's local configuration (DF-014).
+func (d *daemonClient) stats(ctx context.Context) (*types.DaemonStats, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, d.baseURL+"/api/v1/stats", nil)
+	if err != nil {
+		return nil, err
+	}
+	if d.apiKey != "" {
+		httpReq.Header.Set("X-API-Key", d.apiKey)
+	}
+
+	resp, err := d.http.Do(httpReq)
+	if err != nil {
+		return nil, d.unreachable(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, d.decodeError(resp)
+	}
+
+	var stats types.DaemonStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("decode stats response: %w", err)
+	}
+	return &stats, nil
+}
+
+// searchFlows runs a structured search against the daemon's store, which
+// owns the database (DF-014: the CLI never opens the SQLite file itself).
+func (d *daemonClient) searchFlows(ctx context.Context, req types.SearchRequest) (*types.SearchResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("encode search request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		d.baseURL+"/api/v1/search", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if d.apiKey != "" {
+		httpReq.Header.Set("X-API-Key", d.apiKey)
+	}
+
+	resp, err := d.http.Do(httpReq)
+	if err != nil {
+		return nil, d.unreachable(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, d.decodeError(resp)
+	}
+
+	var out types.SearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode search response: %w", err)
+	}
+	return &out, nil
+}
+
 // decodeError extracts the {"error": "..."} message the daemon returns for
 // non-2xx responses, falling back to the bare status code.
 func (d *daemonClient) decodeError(resp *http.Response) error {

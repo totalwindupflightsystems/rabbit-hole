@@ -59,6 +59,11 @@ type Server struct {
 	// serve command. When nil, the attach/detach endpoints return 503.
 	// See RegisterSessionManager.
 	sessionMgr SessionManager
+
+	// runtimeInfo carries daemon runtime facts (log level, eBPF state) for
+	// GET /api/v1/stats. Wired by the serve command via SetRuntimeInfo.
+	runtimeMu   sync.RWMutex
+	runtimeInfo RuntimeInfo
 }
 
 // HealthCheck is a named component probe for the /health endpoint. The
@@ -150,6 +155,9 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 	s.mux.HandleFunc("GET /api/v1/sessions/{id}", s.handleGetSession)
 	s.mux.HandleFunc("POST /api/v1/sessions/attach", s.handleAttachSession)
 	s.mux.HandleFunc("POST /api/v1/sessions/{id}/detach", s.handleDetachSession)
+
+	// Daemon aggregate stats for the CLI `status` command (DF-014).
+	s.mux.HandleFunc("GET /api/v1/stats", s.handleStats)
 
 	// Flows
 	s.mux.HandleFunc("GET /api/v1/flows/{id}", s.handleGetFlow)

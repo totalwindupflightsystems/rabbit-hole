@@ -90,8 +90,7 @@ func TestCompactCmd_InvalidBefore(t *testing.T) {
 }
 
 func TestSearchCmd_WithJsonFlag(t *testing.T) {
-	cleanup := execTestEnv(t)
-	defer cleanup()
+	startTestDaemon(t)
 
 	output := captureStdout(func() {
 		cmd := newSearchCmd()
@@ -108,8 +107,7 @@ func TestSearchCmd_WithJsonFlag(t *testing.T) {
 }
 
 func TestSearchCmd_NoResults(t *testing.T) {
-	cleanup := execTestEnv(t)
-	defer cleanup()
+	startTestDaemon(t)
 
 	output := captureStdout(func() {
 		cmd := newSearchCmd()
@@ -126,8 +124,7 @@ func TestSearchCmd_NoResults(t *testing.T) {
 }
 
 func TestSearchCmd_WithFilters(t *testing.T) {
-	cleanup := execTestEnv(t)
-	defer cleanup()
+	startTestDaemon(t)
 
 	output := captureStdout(func() {
 		cmd := newSearchCmd()
@@ -154,24 +151,26 @@ func TestChatCmd_ExecuteNoArgs(t *testing.T) {
 }
 
 func TestStatusCmd_Execution(t *testing.T) {
-	// Status may succeed in fallback mode (no eBPF) or fail at storage layer
-	cleanup := execTestEnv(t)
-	defer cleanup()
+	// Status reads the daemon over HTTP (DF-014) — it must render a
+	// snapshot against a running daemon.
+	startTestDaemon(t)
 
 	output := captureStdout(func() {
 		cmd := newStatusCmd()
 		if err := cmd.Execute(); err != nil {
-			t.Logf("status error (may succeed in fallback mode): %v", err)
+			t.Logf("status error: %v", err)
 		}
 	})
 
 	t.Logf("status output: %s", output)
+	if !strings.Contains(output, "Rabbit-Hole") {
+		t.Errorf("status output missing header, got: %q", output)
+	}
 }
 
 func TestListCmd_Execution(t *testing.T) {
-	// List should work in collector fallback mode and return "No active sessions"
-	cleanup := execTestEnv(t)
-	defer cleanup()
+	// List against a running daemon with no sessions → "No active sessions"
+	startTestDaemon(t)
 
 	output := captureStdout(func() {
 		cmd := newListCmd()
@@ -183,16 +182,13 @@ func TestListCmd_Execution(t *testing.T) {
 
 	t.Logf("list output: %s", output)
 	if !strings.Contains(output, "No active sessions") {
-		// May have empty output if fmt.Printf goes to stderr
-		if output != "" {
-			t.Errorf("unexpected list output: %s", output)
-		}
+		t.Errorf("unexpected list output: %s", output)
 	}
 }
 
 func TestListCmd_WithAllFlag(t *testing.T) {
-	cleanup := execTestEnv(t)
-	defer cleanup()
+	// list --all against a running daemon with no sessions → "No sessions found."
+	startTestDaemon(t)
 
 	output := captureStdout(func() {
 		cmd := newListCmd()
@@ -203,6 +199,9 @@ func TestListCmd_WithAllFlag(t *testing.T) {
 	})
 
 	t.Logf("list --all output: %s", output)
+	if !strings.Contains(output, "No sessions found.") {
+		t.Errorf("unexpected list --all output: %s", output)
+	}
 }
 
 func TestDetachCmd_MaximumNArgs(t *testing.T) {

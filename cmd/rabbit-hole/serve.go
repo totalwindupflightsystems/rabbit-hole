@@ -137,6 +137,24 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			// classifies their traces like any other.
 			server.RegisterSessionManager(attach.NewSessionManager(coll, store, logger))
 
+			// Daemon runtime facts for GET /api/v1/stats (`rabbit-hole
+			// status` reads them via the daemon, not the CLI's own config —
+			// DF-014). eBPF counts as disabled when it is unavailable or
+			// explicitly turned off with --no-ebpf.
+			ebpfEnabled := coll.EBPFEnabled()
+			ebpfDetail := "kernel probes attached"
+			if !ebpfEnabled {
+				ebpfDetail = "no kernel probes — telemetry not collected; see README for required privileges"
+			} else if noEBPF {
+				ebpfEnabled = false
+				ebpfDetail = "disabled via --no-ebpf"
+			}
+			server.SetRuntimeInfo(express.RuntimeInfo{
+				LogLevel:    cfg.LogLevel,
+				EBPFEnabled: ebpfEnabled,
+				EBPFDetail:  ebpfDetail,
+			})
+
 			// Wire component-level health checks. Storage and metrics are
 			// reported automatically by the server (they live on the Server
 			// struct). Classifier and collector are wired here because they

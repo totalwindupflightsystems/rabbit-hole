@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
 	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
@@ -42,46 +41,39 @@ Examples:
 				return fmt.Errorf("config: %w", err)
 			}
 
-			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
-			if err != nil {
-				return fmt.Errorf("storage: %w", err)
-			}
-			defer store.Close()
-
 			query := ""
 			if len(args) > 0 {
 				query = args[0]
 			}
 
-			fq := types.FlowQuery{
+			// The daemon owns the database (DF-001); search runs against
+			// the daemon's store over HTTP, never the CLI's local DB path
+			// (DF-014).
+			req := types.SearchRequest{
 				SessionID:     sessionID,
-				Query:         query,
 				MinConfidence: confidence,
 				Limit:         limit,
 			}
 			if intent != "" {
-				fq.Query = intent
+				// --intent is a free-text intent filter: it drives the
+				// full-text query (mirroring the direct-store path it
+				// replaces).
+				req.Query = intent
+			} else {
+				req.Query = query
 			}
 			if phase != "" {
-				fq.Phases = []types.FlowPhase{types.FlowPhase(phase)}
+				req.Categories = []types.FlowPhase{types.FlowPhase(phase)}
 			}
 			if outcome != "" {
-				fq.Outcomes = []types.FlowOutcome{types.FlowOutcome(outcome)}
+				req.Outcomes = []types.FlowOutcome{types.FlowOutcome(outcome)}
 			}
 
-			var flows []types.Flow
-			if query != "" || intent != "" {
-				searchQuery := query
-				if intent != "" {
-					searchQuery = intent
-				}
-				flows, err = store.SearchFlows(cmd.Context(), searchQuery, limit)
-			} else {
-				flows, _, err = store.QueryFlows(cmd.Context(), fq)
-			}
+			resp, err := newDaemonClient(cfg.ListenAddr).searchFlows(cmd.Context(), req)
 			if err != nil {
-				return fmt.Errorf("search: %w", err)
+				return err
 			}
+			flows := resp.Flows
 
 			if jsonOut {
 				enc := json.NewEncoder(os.Stdout)

@@ -258,6 +258,47 @@ func TestSearch_InvalidJSON(t *testing.T) {
 	}
 }
 
+// TestSearch_MinConfidenceFilter proves the structured min_confidence field
+// reaches the store's QueryFlows filter (the CLI `search --confidence` flag
+// routes through this field, DF-014).
+func TestSearch_MinConfidenceFilter(t *testing.T) {
+	srv, cl := newTestServer(t)
+	defer cl()
+	sess := seedSession(t, srv.store)
+	low := &types.Flow{
+		ID: "0191b000-0000-7000-8000-000000000001", SessionID: sess.ID,
+		Intent: "read_file", Phase: types.FlowPhaseObservation,
+		Description: "Read auth.go (247 lines)",
+		Outcome:     types.FlowOutcomeSuccess, Confidence: 0.5,
+		StartTime: time.Now().UTC(), EndTime: time.Now().UTC().Add(2 * time.Millisecond),
+	}
+	if err := srv.store.StoreFlows(context.Background(), []types.Flow{*low}); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	// Above the flow's confidence → no results.
+	resp := doJSON(t, "POST", getURL(srv, "/api/v1/search"),
+		types.SearchRequest{Limit: 50, MinConfidence: 0.9})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("got %d, want 200", resp.StatusCode)
+	}
+	m := decodeMap(t, resp)
+	if flows, _ := m["flows"].([]any); len(flows) != 0 {
+		t.Errorf("expected 0 flows above 0.9 confidence, got %d", len(flows))
+	}
+
+	// Below it → the flow matches.
+	resp2 := doJSON(t, "POST", getURL(srv, "/api/v1/search"),
+		types.SearchRequest{Limit: 50, MinConfidence: 0.1})
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("got %d, want 200", resp2.StatusCode)
+	}
+	m2 := decodeMap(t, resp2)
+	if flows, _ := m2["flows"].([]any); len(flows) != 1 {
+		t.Errorf("expected 1 flow above 0.1 confidence, got %d", len(flows))
+	}
+}
+
 func TestChat_ValidMessage(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()

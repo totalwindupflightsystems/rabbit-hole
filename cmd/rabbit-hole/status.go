@@ -9,10 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
 	"github.com/totalwindupflightsystems/rabbit-hole/internal/config"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -31,66 +28,42 @@ func newStatusCmd() *cobra.Command {
 				cfg.ListenAddr = addr
 			}
 
-			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
+			// Everything below comes from the daemon over HTTP, which owns
+			// the database and the collector (DF-001). The CLI never opens
+			// its local DB path — that may differ from the daemon's and
+			// would show phantom data loss (DF-014).
+			stats, err := newDaemonClient(cfg.ListenAddr).stats(cobraCmd.Context())
 			if err != nil {
-				return fmt.Errorf("storage: %w", err)
-			}
-			defer store.Close()
-
-			stats, err := store.Stats(cobraCmd.Context())
-			if err != nil {
-				return fmt.Errorf("stats: %w", err)
+				return err
 			}
 
-			col, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, nil)
-			if err != nil {
-				return fmt.Errorf("collector: %w", err)
+			serverAddr := stats.ListenAddr
+			if serverAddr == "" {
+				serverAddr = cfg.ListenAddr
 			}
 
 			ebpfStatus := "enabled"
-			if !col.EBPFEnabled() {
-				ebpfStatus = "DISABLED (no kernel probes — telemetry not collected; see README for required privileges)"
-			}
-
-			// Active count comes from the database, not the per-process
-			// collector, so sessions attached by other processes count (DF-001).
-			sessions, err := store.ListSessions(cobraCmd.Context(), 0, listSessionLimit)
-			if err != nil {
-				return fmt.Errorf("sessions: %w", err)
-			}
-
-			activeCount := 0
-			for _, s := range sessions {
-				if s.Status == types.SessionStatusRunning {
-					activeCount++
+			if !stats.EBPFEnabled {
+				ebpfStatus = "DISABLED (" + stats.EBPFDetail + ")"
+				if stats.EBPFDetail == "" {
+					ebpfStatus = "DISABLED (no kernel probes — telemetry not collected; see README for required privileges)"
 				}
 			}
 
-			// The daemon records the ACTUAL bound address in DB metadata at
-			// serve startup, so status reflects what is really listening even
-			// with --addr or an ephemeral :0 port (DF-007). Old DBs have no
-			// such row — fall back to the configured address.
-			serverAddr := cfg.ListenAddr
-			if stored, ok, err := store.GetMetadata(cobraCmd.Context(), "listen_addr"); err != nil {
-				return fmt.Errorf("listen addr: %w", err)
-			} else if ok && stored != "" {
-				serverAddr = stored
-			}
-
 			fmt.Println("🐇 Rabbit-Hole")
-			fmt.Printf("Database:    %s\n", cfg.DBPath)
+			fmt.Printf("Database:    %s\n", stats.DBPath)
 			fmt.Printf("Sessions:    %d (%d active, %d completed)\n",
-				stats.TotalSessions, activeCount, stats.TotalSessions-int64(activeCount))
+				stats.TotalSessions, stats.ActiveSessions, stats.TotalSessions-stats.ActiveSessions)
 			fmt.Printf("Traces:      %d\n", stats.TotalTraces)
 			fmt.Printf("Flows:       %d\n", stats.TotalFlows)
 			fmt.Printf("DB Size:     %s\n", humanizeBytes(stats.DBSizeBytes))
-			if !stats.OldestTrace.IsZero() {
+			if stats.OldestTrace != nil {
 				fmt.Printf("Oldest data: %s (%s ago)\n",
 					stats.OldestTrace.Format("2006-01-02 15:04:05"),
-					time.Since(stats.OldestTrace).Round(time.Second))
+					time.Since(*stats.OldestTrace).Round(time.Second))
 			}
 			fmt.Printf("Server:      %s\n", serverAddr)
-			fmt.Printf("Log Level:   %s\n", cfg.LogLevel)
+			fmt.Printf("Log Level:   %s\n", stats.LogLevel)
 			fmt.Printf("eBPF:        %s\n", ebpfStatus)
 
 			return nil

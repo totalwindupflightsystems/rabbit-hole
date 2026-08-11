@@ -14,6 +14,7 @@ type SearchRequest struct {
 	TimeRange             TimeRange     `json:"time_range"`              // time window
 	Categories            []FlowPhase   `json:"categories"`              // filter by phase
 	Outcomes              []FlowOutcome `json:"outcomes"`                // filter by outcome
+	MinConfidence         float64       `json:"min_confidence"`          // minimum flow confidence (0.0-1.0)
 	Limit                 int           `json:"limit"`                   // max results (default: 50)
 	Cursor                string        `json:"cursor"`                  // pagination cursor
 	IncludeContextWindows bool          `json:"include_context_windows"` // include LLM context snapshots
@@ -112,6 +113,24 @@ type StorageStats struct {
 	WALSizeBytes  int64
 	OldestTrace   time.Time
 	NewestTrace   time.Time
+}
+
+// DaemonStats is the JSON response of GET /api/v1/stats — the daemon-side
+// aggregate view the CLI `status` command renders. The daemon owns the
+// database (DF-001), so every field reflects the daemon's store and
+// runtime, never the CLI's local configuration (DF-014).
+type DaemonStats struct {
+	DBPath         string     `json:"db_path"`                // daemon's SQLite database path
+	ListenAddr     string     `json:"listen_addr"`            // address the daemon is actually bound to
+	TotalSessions  int64      `json:"total_sessions"`         // sessions ever recorded
+	ActiveSessions int64      `json:"active_sessions"`        // sessions currently running
+	TotalTraces    int64      `json:"total_traces"`           // captured traces
+	TotalFlows     int64      `json:"total_flows"`            // classified flows
+	DBSizeBytes    int64      `json:"db_size_bytes"`          // SQLite file size (pages × page size)
+	OldestTrace    *time.Time `json:"oldest_trace,omitempty"` // timestamp of the oldest trace, if any
+	LogLevel       string     `json:"log_level"`              // daemon log level (debug|info|warn|error)
+	EBPFEnabled    bool       `json:"ebpf_enabled"`           // kernel probes active
+	EBPFDetail     string     `json:"ebpf_detail,omitempty"`  // why eBPF is disabled, when it is
 }
 
 // CollectOptions configures trace collection behavior.
