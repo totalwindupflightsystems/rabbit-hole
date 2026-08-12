@@ -31,10 +31,24 @@ default.
 
 ## Authentication
 
-**None.** The server binds to loopback by default and is intended for
-single-machine, self-hosted use. If you bind to a non-loopback interface
-(e.g. `RABBITHOLE_LISTEN_ADDR=0.0.0.0:9734`), you are exposing the API to your
-network — make sure that is what you want. There is no built-in token auth.
+**Opt-in API key auth.** By default the server binds to loopback and accepts
+every request — no authentication is enforced unless you enable it. To turn
+auth on, set `RABBITHOLE_API_KEY` to a secret value before starting the
+server. With the env var set, requests must carry the key in the `X-API-Key`
+header:
+
+```bash
+curl -s -H "X-API-Key: <your-key>" http://127.0.0.1:9734/api/v1/sessions
+```
+
+A missing or incorrect key receives `401 Unauthorized` with a JSON body
+(`{"error": "unauthorized"}`). The Prometheus endpoints `/metrics` and
+`/api/v1/metrics` bypass the check so scrapers keep working; every other
+route — including `/health` — requires the key while auth is enabled.
+
+If you bind to a non-loopback interface (e.g.
+`RABBITHOLE_LISTEN_ADDR=0.0.0.0:9734`) with auth disabled, you are exposing
+the API to your network — make sure that is what you want.
 
 ## Endpoints
 
