@@ -28,7 +28,12 @@ type Scenario struct {
 // Generate builds a dogfood session with nFlows flows starting at start.
 // Flows are generated with realistic intents, phases, durations, outcomes
 // and step metadata so the dashboard waterfall renders meaningful bars.
-func Generate(nFlows int, start time.Time, seed int64) *Scenario {
+//
+// By default flows are packed at a fixed 15s cadence from start. Pass an
+// optional window (spread) to distribute them evenly across
+// [start, start+window) instead, so the seeded session spans the whole
+// window rather than clustering at its beginning.
+func Generate(nFlows int, start time.Time, seed int64, spread ...time.Duration) *Scenario {
 	rng := rand.New(rand.NewSource(seed))
 
 	// Session IDs are UUIDv7 to satisfy the OpenAPI contract
@@ -111,6 +116,13 @@ func Generate(nFlows int, start time.Time, seed int64) *Scenario {
 			4 * time.Millisecond, 30 * time.Millisecond, 0.99},
 	}
 
+	// Default cadence packs flows 15s apart from start. With a spread
+	// window, evenly distribute them across [start, start+window).
+	gap := 15 * time.Second
+	if len(spread) > 0 && spread[0] > 0 && nFlows > 0 {
+		gap = spread[0] / time.Duration(nFlows)
+	}
+
 	now := start
 	var flows []types.Flow
 	for i := 0; i < nFlows; i++ {
@@ -164,7 +176,7 @@ func Generate(nFlows int, start time.Time, seed int64) *Scenario {
 			Duration:    dur,
 			Metadata:    meta,
 		})
-		now = now.Add(15 * time.Second)
+		now = now.Add(gap)
 	}
 
 	return &Scenario{Session: session, Flows: flows}

@@ -104,3 +104,42 @@ func TestGenerate_PhasesCoverAll(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_SpreadDistributesOverWindow(t *testing.T) {
+	const (
+		window = 3 * time.Hour
+		n      = 48
+	)
+	start := time.Now().Add(-window)
+	sc := Generate(n, start, 7, window)
+
+	if len(sc.Flows) != n {
+		t.Fatalf("flows = %d, want %d", len(sc.Flows), n)
+	}
+	if !sc.Flows[0].StartTime.Equal(start) {
+		t.Errorf("first flow starts %v, want %v", sc.Flows[0].StartTime, start)
+	}
+	// With spread the cadence is window/nFlows, so the flows span the
+	// whole window instead of clustering at its start.
+	gap := window / time.Duration(n)
+	for i := 1; i < len(sc.Flows); i++ {
+		if got := sc.Flows[i].StartTime.Sub(sc.Flows[i-1].StartTime); got != gap {
+			t.Fatalf("flow %d gap = %v, want %v", i, got, gap)
+		}
+	}
+	if got := sc.Flows[n-1].StartTime.Sub(start); got != window-gap {
+		t.Errorf("last flow starts %v after start, want %v (near end of window)", got, window-gap)
+	}
+}
+
+func TestGenerate_DefaultCadenceWithoutSpread(t *testing.T) {
+	// No spread window → the fixed 15s cadence must be preserved so
+	// existing callers (serve.go, dashboard tests) keep their shape.
+	start := time.Now().Add(-time.Hour)
+	sc := Generate(10, start, 3)
+	for i := 1; i < len(sc.Flows); i++ {
+		if got := sc.Flows[i].StartTime.Sub(sc.Flows[i-1].StartTime); got != 15*time.Second {
+			t.Fatalf("flow %d gap = %v, want 15s", i, got)
+		}
+	}
+}

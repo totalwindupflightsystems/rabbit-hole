@@ -51,7 +51,11 @@ Use this to dogfood Rabbit-Hole on itself: seed, serve, open /dashboard.`,
 			ctx := cobraCmd.Context()
 
 			start := time.Now().Add(-time.Duration(hoursBack) * time.Hour)
-			sc := demo.Generate(nFlows, start, time.Now().UnixNano())
+			var window time.Duration
+			if spread {
+				window = time.Since(start)
+			}
+			sc := demo.Generate(nFlows, start, time.Now().UnixNano(), window)
 
 			// Store the session as 'running' first: StoreTraces resolves the
 			// session ID from the PID via a status='running' lookup, so a
@@ -141,7 +145,7 @@ Use this to dogfood Rabbit-Hole on itself: seed, serve, open /dashboard.`,
 
 	cmd.Flags().IntVar(&nFlows, "flows", 48, "number of flows to generate")
 	cmd.Flags().IntVar(&hoursBack, "hours-back", 3, "start the session this many hours in the past")
-	cmd.Flags().BoolVar(&spread, "spread", false, "spread flows over the window (not yet used)")
+	cmd.Flags().BoolVar(&spread, "spread", false, "spread flows evenly over the hours-back window")
 
 	return cmd
 }
