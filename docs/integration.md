@@ -42,9 +42,10 @@ curl -s -H "X-API-Key: <your-key>" http://127.0.0.1:9734/api/v1/sessions
 ```
 
 A missing or incorrect key receives `401 Unauthorized` with a JSON body
-(`{"error": "unauthorized"}`). The Prometheus endpoints `/metrics` and
-`/api/v1/metrics` bypass the check so scrapers keep working; every other
-route — including `/health` — requires the key while auth is enabled.
+(`{"error": "unauthorized"}`). The health and Prometheus endpoints
+`/health`, `/metrics`, and `/api/v1/metrics` bypass the check so liveness
+probes and scrapers keep working; every other route requires the key while
+auth is enabled.
 
 If you bind to a non-loopback interface (e.g.
 `RABBITHOLE_LISTEN_ADDR=0.0.0.0:9734`) with auth disabled, you are exposing

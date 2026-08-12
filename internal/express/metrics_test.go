@@ -227,9 +227,13 @@ func TestIsNoAuthPath(t *testing.T) {
 		{"/api/v1/metrics", true},
 		{"/metrics/", true},    // trailing slash still matches
 		{"/metrics/foo", true}, // sub-path still matches (segment-aware)
-		{"/health", false},
+		{"/health", true},
+		{"/health/", true}, // trailing slash still matches
+		{"/health/ready", true},
 		{"/api/v1/sessions", false},
 		{"/metrics_extra", false}, // NOT a bypass — exact-prefix-only
+		{"/healthz", false},       // NOT a bypass — /health is exact-path only
+		{"/api/v1/health", false}, // NOT a bypass — different path
 	}
 	for _, tc := range cases {
 		if got := isNoAuthPath(tc.path); got != tc.want {

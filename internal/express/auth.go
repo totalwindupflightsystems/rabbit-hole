@@ -10,10 +10,12 @@ import (
 )
 
 // noAuthPaths are URL paths that bypass the API-key check entirely.
-// /metrics is included so Prometheus scrapers can poll without an API key
-// (matching how /health behaves). The metrics endpoint is also expected to
-// be reachable from inside a private network.
+// /health and /metrics stay public so liveness probes and Prometheus
+// scrapers can poll without an API key (health probes cannot carry one).
+// The metrics endpoints are also expected to be reachable from inside a
+// private network.
 var noAuthPaths = []string{
+	"/health",
 	"/metrics",
 	"/api/v1/metrics",
 }

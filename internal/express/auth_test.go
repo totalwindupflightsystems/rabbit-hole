@@ -88,6 +88,47 @@ func TestAPIKeyMiddleware_EnvVarSet_MissingHeader_Returns401(t *testing.T) {
 	}
 }
 
+func TestAPIKeyMiddleware_EnvVarSet_NoAuthPaths_PassWithoutKey(t *testing.T) {
+	// /health, /metrics, and /api/v1/metrics must stay public so liveness
+	// probes and Prometheus scrapers work without an API key (openapi.yaml
+	// declares each of them with security: []).
+	t.Setenv("RABBITHOLE_API_KEY", "secret-key")
+	handler := apiKeyMiddleware(http.HandlerFunc(testEchoHandler))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	publicPaths := []string{"/health", "/metrics", "/api/v1/metrics"}
+	for _, path := range publicPaths {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Errorf("%s without key: got %d, want 200", path, resp.StatusCode)
+		}
+	}
+}
+
+func TestAPIKeyMiddleware_EnvVarSet_HealthLookalike_Returns401(t *testing.T) {
+	// The /health exemption is exact-path only: a lookalike like /healthz
+	// must still require the key (segment-aware prefix match).
+	t.Setenv("RABBITHOLE_API_KEY", "secret-key")
+	handler := apiKeyMiddleware(http.HandlerFunc(testEchoHandler))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	req, _ := http.NewRequest("GET", ts.URL+"/healthz", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Errorf("/healthz without key: got %d, want 401", resp.StatusCode)
+	}
+}
+
 func TestAPIKeyMiddleware_EnvVarSet_WrongKey_Returns401(t *testing.T) {
 	t.Setenv("RABBITHOLE_API_KEY", "secret-key")
 	handler := apiKeyMiddleware(http.HandlerFunc(testEchoHandler))
