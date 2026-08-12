@@ -20,7 +20,10 @@ import (
 const listSessionLimit = 10000
 
 func newListCmd() *cobra.Command {
-	var showAll bool
+	var (
+		showAll bool
+		addr    string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -31,6 +34,10 @@ func newListCmd() *cobra.Command {
 			cfg, err := loadConfig()
 			if err != nil {
 				return fmt.Errorf("config: %w", err)
+			}
+
+			if addr != "" {
+				cfg.ListenAddr = addr
 			}
 
 			// Sessions are read from the daemon over HTTP, which owns the
@@ -77,6 +84,7 @@ func newListCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&showAll, "all", false, "Show all sessions including completed")
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 
 	return cmd
 }

@@ -59,6 +59,58 @@ func TestNewListCmd_NoArgs(t *testing.T) {
 	}
 }
 
+func TestNewListCmd_AddrFlag(t *testing.T) {
+	// DF-017: list accepts --addr; help must mention the
+	// RABBITHOLE_LISTEN_ADDR fallback (same contract as status, DF-006).
+	cmd := newListCmd()
+
+	f := cmd.Flags().Lookup("addr")
+	if f == nil {
+		t.Fatal("flag --addr not registered")
+	}
+	if f.DefValue != "" {
+		t.Errorf("flag --addr default = %q, want %q", f.DefValue, "")
+	}
+	if !strings.Contains(f.Usage, "RABBITHOLE_LISTEN_ADDR") {
+		t.Errorf("--addr help should mention RABBITHOLE_LISTEN_ADDR fallback, got: %q", f.Usage)
+	}
+
+	if err := cmd.Flags().Set("addr", "127.0.0.1:9999"); err != nil {
+		t.Fatalf("failed to set --addr: %v", err)
+	}
+	addr, err := cmd.Flags().GetString("addr")
+	if err != nil {
+		t.Fatalf("GetString(addr): %v", err)
+	}
+	if addr != "127.0.0.1:9999" {
+		t.Errorf("addr = %q, want %q", addr, "127.0.0.1:9999")
+	}
+}
+
+// TestListCmd_AddrFlagRoutesToDaemon proves --addr overrides the env/default
+// daemon address (DF-017): RABBITHOLE_LISTEN_ADDR points at a DEAD port, yet
+// `list --addr <real daemon> --all` still reaches the daemon.
+func TestListCmd_AddrFlagRoutesToDaemon(t *testing.T) {
+	server, _ := startTestDaemon(t)
+
+	// Point the env at a dead port; only --addr knows the real daemon.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	deadAddr := ln.Addr().String()
+	ln.Close()
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", deadAddr)
+
+	out, err := executeCLI(t, newListCmd(), "--addr", server.Addr(), "--all")
+	if err != nil {
+		t.Fatalf("list --addr failed: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "No sessions found.") {
+		t.Errorf("list --addr --all against empty daemon should say 'No sessions found.', got:\n%s", out)
+	}
+}
+
 // TestListCmd_SeesDaemonSessions_WithDifferentLocalDBPath is the DF-014
 // regression: the CLI's RABBITHOLE_DB_PATH differs from the daemon's, yet
 // `list --all` must still show the daemon's sessions (they are read over

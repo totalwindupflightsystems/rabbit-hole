@@ -22,6 +22,7 @@ func newSearchCmd() *cobra.Command {
 		confidence float64
 		jsonOut    bool
 		limit      int
+		addr       string
 	)
 
 	cmd := &cobra.Command{
@@ -39,6 +40,10 @@ Examples:
 			cfg, err := loadConfig()
 			if err != nil {
 				return fmt.Errorf("config: %w", err)
+			}
+
+			if addr != "" {
+				cfg.ListenAddr = addr
 			}
 
 			query := ""
@@ -114,6 +119,7 @@ Examples:
 	cmd.Flags().Float64Var(&confidence, "confidence", 0, "Minimum confidence threshold (0.0-1.0)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
 	cmd.Flags().IntVar(&limit, "limit", 50, "Maximum results")
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 
 	return cmd
 }
