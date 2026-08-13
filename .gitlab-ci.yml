@@ -27,7 +27,14 @@ before_script:
 build:
   stage: build
   script:
-    - go build $GOFLAGS -o bin/rabbit-hole ./cmd/rabbit-hole/
+    # Inject build metadata so `rabbit-hole version` and GET /health
+    # report the real version/commit/date of this build (DF-021).
+    # Shallow clones without tags fall back to v0.0.0-<sha>.
+    - VERSION=$(git describe --tags 2>/dev/null || printf 'v0.0.0-%s' "$(git rev-parse --short HEAD 2>/dev/null)")
+    - COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+    - BUILD_DATE=$(git log -1 --format=%cd --date=iso-strict 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
+    - export GOFLAGS="-ldflags=-s -w -X main.Version=$VERSION -X main.Commit=$COMMIT -X main.BuildTime=$BUILD_DATE"
+    - go build -o bin/rabbit-hole ./cmd/rabbit-hole/
     - file bin/rabbit-hole
   artifacts:
     paths:

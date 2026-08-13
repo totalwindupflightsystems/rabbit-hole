@@ -130,6 +130,10 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			)
 			server := express.NewServer(store, logger, cfg.ListenAddr, rl)
 
+			// Publish the CLI build version so GET /health reports the same
+			// version string as `rabbit-hole version` (DF-021).
+			wireHealthVersion()
+
 			// Session lifecycle: the attach/detach CLI commands hand sessions
 			// to the daemon over HTTP. The daemon owns the collector and the
 			// database, so sessions persist across CLI invocations (DF-001).
@@ -268,3 +272,8 @@ func parseRemoteFlag(s string) (endpoint, token string, err error) {
 	}
 	return endpoint, token, nil
 }
+
+// wireHealthVersion publishes the CLI build version (main.Version, set
+// via -ldflags at build time) to the express package, so GET /health and
+// `rabbit-hole version` always agree (DF-021).
+func wireHealthVersion() { express.SetVersion(Version) }

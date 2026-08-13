@@ -8,6 +8,15 @@ FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache ca-certificates tzdata
 
+# Build metadata (DF-021). .git is excluded from the build context, so
+# these cannot be derived here — pass them at build time, e.g.:
+#   docker build --build-arg VERSION=$(git describe --tags) \
+#     --build-arg COMMIT=$(git rev-parse --short HEAD) \
+#     --build-arg BUILD_DATE=$(git log -1 --format=%cd --date=iso-strict) .
+ARG VERSION=unknown
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+
 WORKDIR /app
 
 # Cache dependency downloads in a separate layer
@@ -18,7 +27,7 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_DATE}" \
     -o /app/bin/rabbit-hole \
     ./cmd/rabbit-hole/
 

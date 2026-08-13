@@ -30,8 +30,16 @@ type healthResponse struct {
 }
 
 // healthVersion is the version string reported by /health. It is a
-// package-level constant so tests can assert against it.
-const healthVersion = "1.0.0"
+// package-level variable so tests can assert against it and so the serve
+// command can set it from the same ldflags-injected build metadata the
+// CLI `version` command prints — keeping both surfaces in lockstep
+// (DF-021).
+var healthVersion = "1.0.0"
+
+// SetVersion overrides the version string reported by /health. The serve
+// command calls it with the CLI build version (main.Version), so /health
+// and `rabbit-hole version` always agree (DF-021).
+func SetVersion(v string) { healthVersion = v }
 
 // handleHealth reports the server's overall status plus per-component
 // health. Components are probed in registration order:

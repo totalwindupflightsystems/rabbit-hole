@@ -28,6 +28,24 @@ func decodeHealth(t *testing.T, srv *Server) healthResponse {
 	return hr
 }
 
+// TestHealth_SetVersion verifies that SetVersion drives the version
+// string reported by /health (DF-021) — the seam the serve command uses
+// to keep /health in lockstep with `rabbit-hole version`.
+func TestHealth_SetVersion(t *testing.T) {
+	old := healthVersion
+	t.Cleanup(func() { healthVersion = old })
+
+	SetVersion("v9.9.9-test")
+
+	srv, cl := newTestServer(t)
+	defer cl()
+
+	hr := decodeHealth(t, srv)
+	if hr.Version != "v9.9.9-test" {
+		t.Errorf("version: got %q, want %q", hr.Version, "v9.9.9-test")
+	}
+}
+
 // TestHealth_NoExtraComponents_StorageAndMetrics verifies that a fresh
 // server (no extra checks registered) reports storage + metrics as ok
 // and does NOT emit classifier/collector entries.
