@@ -14,13 +14,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/attach"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/classify"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/demo"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/express"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/attach"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/classify"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/collector"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/demo"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/express"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 func newServeCmd() *cobra.Command {

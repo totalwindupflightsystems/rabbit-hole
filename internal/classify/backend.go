@@ -6,7 +6,7 @@ package classify
 import (
 	"context"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // ClassificationBackend is the pluggable model that turns trace groups into

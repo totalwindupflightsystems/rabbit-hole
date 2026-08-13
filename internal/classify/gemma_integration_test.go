@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // ollamaTestAddr is the Ollama server exercised by the integration test.

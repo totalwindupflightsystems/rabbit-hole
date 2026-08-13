@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/collector"
 )
 
 // TestStress_MemoryLeak runs 1000 attach/detach cycles through the

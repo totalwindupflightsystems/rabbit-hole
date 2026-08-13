@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // BufferStats holds ring buffer performance counters.

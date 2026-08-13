@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 func TestNewAttachCmd_Structure(t *testing.T) {

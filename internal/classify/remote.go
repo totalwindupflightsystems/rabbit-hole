@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	classifierpb "github.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	classifierpb "gitlab.readydedis.com/rabbit-hole/rabbit-hole/api/proto/classifier/v1"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // RemoteBackend connects to a centralized classifier over gRPC.

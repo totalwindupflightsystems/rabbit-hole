@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {

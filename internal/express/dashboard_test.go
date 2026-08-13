@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/demo"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/demo"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage"
 )
 
 func TestDashboardRoutes_ServesSPA(t *testing.T) {

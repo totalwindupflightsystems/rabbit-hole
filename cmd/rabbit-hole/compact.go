@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/config"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/config"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage"
 )
 
 func newCompactCmd() *cobra.Command {

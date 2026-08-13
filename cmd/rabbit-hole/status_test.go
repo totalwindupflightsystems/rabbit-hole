@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/express"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/express"
 )
 
 func TestHumanizeBytes(t *testing.T) {

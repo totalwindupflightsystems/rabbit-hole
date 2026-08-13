@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/demo"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/demo"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // TestHandleChat_StubFlagSet verifies the server marks chat responses

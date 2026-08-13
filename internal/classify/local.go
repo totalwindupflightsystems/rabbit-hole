@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // LocalBackend wraps a GemmaModel behind the ClassificationBackend

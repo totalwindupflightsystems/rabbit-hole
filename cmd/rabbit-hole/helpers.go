@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/config"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/config"
 )
 
 func loadConfig() (config.Config, error) {

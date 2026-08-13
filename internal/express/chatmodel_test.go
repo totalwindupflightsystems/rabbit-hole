@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // stubChatServer is a tiny OpenAI-compatible chat completions endpoint

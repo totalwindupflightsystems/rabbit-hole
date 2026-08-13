@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/web"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/web"
 )
 
 // dashboardRoutes registers the dashboard SPA and its API endpoint on the

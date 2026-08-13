@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 func TestNewChatCmd_Structure(t *testing.T) {

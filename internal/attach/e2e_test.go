@@ -18,11 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/classify"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/express"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/classify"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/collector"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/express"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // --- E2E Mock Collector ---

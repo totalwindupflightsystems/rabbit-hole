@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // ModelInfo describes the currently loaded classification model.

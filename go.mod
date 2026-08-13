@@ -1,4 +1,4 @@
-module github.com/totalwindupflightsystems/rabbit-hole
+module gitlab.readydedis.com/rabbit-hole/rabbit-hole
 
 go 1.26.0
 

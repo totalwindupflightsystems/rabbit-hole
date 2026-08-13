@@ -586,7 +586,7 @@ const file_api_proto_classifier_v1_classifier_proto_rawDesc = "" +
 	"Classifier\x12K\n" +
 	"\bClassify\x12\x1e.classifier.v1.ClassifyRequest\x1a\x1f.classifier.v1.ClassifyResponse\x12?\n" +
 	"\x04Ping\x12\x1a.classifier.v1.PingRequest\x1a\x1b.classifier.v1.PingResponse\x12?\n" +
-	"\x04Info\x12\x1a.classifier.v1.InfoRequest\x1a\x1b.classifier.v1.InfoResponseBVZTgithub.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1;classifierpbb\x06proto3"
+	"\x04Info\x12\x1a.classifier.v1.InfoRequest\x1a\x1b.classifier.v1.InfoResponseBTZRgitlab.readydedis.com/rabbit-hole/rabbit-hole/api/proto/classifier/v1;classifierpbb\x06proto3"
 
 var (
 	file_api_proto_classifier_v1_classifier_proto_rawDescOnce sync.Once

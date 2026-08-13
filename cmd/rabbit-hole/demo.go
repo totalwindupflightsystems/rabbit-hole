@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/config"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/demo"
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/storage"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/config"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/demo"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // newDemoCmd seeds a realistic dogfood session so the dashboard, chat, and

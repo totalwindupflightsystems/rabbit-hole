@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/collector"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/collector"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // SessionManager is the daemon-side session lifecycle surface used by the

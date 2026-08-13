@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package classifier.v1;
 
-option go_package = "github.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1;classifierpb";
+option go_package = "gitlab.readydedis.com/rabbit-hole/rabbit-hole/api/proto/classifier/v1;classifierpb";
 
 // Classifier is a remote classification service for Rabbit-Hole trace groups.
 // It provides gRPC-based classification that can run as an alternative or

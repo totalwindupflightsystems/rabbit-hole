@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/internal/demo"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/demo"
 )
 
 func TestDashboardSummary_Empty(t *testing.T) {

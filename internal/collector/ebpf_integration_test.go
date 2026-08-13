@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // ebpLoadFailureLogSnippet is the substring emitted by NewEBPFCollector when

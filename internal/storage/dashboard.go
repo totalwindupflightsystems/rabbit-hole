@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // DashboardSummary aggregates the metrics the web dashboard renders on its

@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM alpine:latest
 
 # OCI labels
-LABEL org.opencontainers.image.source="https://github.com/totalwindupflightsystems/rabbit-hole"
+LABEL org.opencontainers.image.source="https://gitlab.readydedis.com/rabbit-hole/rabbit-hole"
 LABEL org.opencontainers.image.description="Rabbit-Hole — Agent Legibility Daemon. Attach eBPF probes to agent processes, classify syscall traces, and inspect via chat."
 LABEL org.opencontainers.image.licenses="MIT"
 

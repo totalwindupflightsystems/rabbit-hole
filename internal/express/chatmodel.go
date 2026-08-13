@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // ChatModelConfig configures a RealChatModel.

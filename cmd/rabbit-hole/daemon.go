@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // daemonClient is a small HTTP client for talking to a running

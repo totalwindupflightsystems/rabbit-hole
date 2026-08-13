@@ -9,8 +9,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	classifierpb "github.com/totalwindupflightsystems/rabbit-hole/api/proto/classifier/v1"
-	"github.com/totalwindupflightsystems/rabbit-hole/pkg/types"
+	classifierpb "gitlab.readydedis.com/rabbit-hole/rabbit-hole/api/proto/classifier/v1"
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // testClassifierServer implements classifierpb.ClassifierServer for the
