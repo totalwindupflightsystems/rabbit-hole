@@ -320,5 +320,44 @@ func TestRemoteBackend_unmarshalClassifyResponse(t *testing.T) {
 	}
 }
 
+// TestRemoteBackend_Status verifies the effective backend mode reported
+// for /health (DF-022): the endpoint is named, and an unreachable remote
+// degrades the status with the ping failure as detail.
+func TestRemoteBackend_Status(t *testing.T) {
+	t.Run("reachable", func(t *testing.T) {
+		client := &mockClassifierClient{
+			pingFn: func(_ context.Context, _ *classifierpb.PingRequest, _ ...grpc.CallOption) (*classifierpb.PingResponse, error) {
+				return &classifierpb.PingResponse{}, nil
+			},
+		}
+		b := &RemoteBackend{endpoint: "classify.example.com:50051", client: client}
+
+		status, detail := b.Status(context.Background())
+		if want := "ok — remote gRPC classify.example.com:50051"; status != want {
+			t.Errorf("status: got %q, want %q", status, want)
+		}
+		if detail != "" {
+			t.Errorf("detail: got %q, want empty", detail)
+		}
+	})
+
+	t.Run("unreachable", func(t *testing.T) {
+		client := &mockClassifierClient{
+			pingFn: func(_ context.Context, _ *classifierpb.PingRequest, _ ...grpc.CallOption) (*classifierpb.PingResponse, error) {
+				return nil, errors.New("connection refused")
+			},
+		}
+		b := &RemoteBackend{endpoint: "classify.example.com:50051", client: client}
+
+		status, detail := b.Status(context.Background())
+		if want := "degraded — remote gRPC classify.example.com:50051"; status != want {
+			t.Errorf("status: got %q, want %q", status, want)
+		}
+		if !strings.Contains(detail, "unreachable") || !strings.Contains(detail, "connection refused") {
+			t.Errorf("detail: got %q, want it to contain the unreachable error", detail)
+		}
+	})
+}
+
 // Ensure RemoteBackend implements ClassificationBackend.
 var _ ClassificationBackend = (*RemoteBackend)(nil)

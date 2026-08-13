@@ -22,6 +22,14 @@ type ClassificationBackend interface {
 	// Info returns metadata about the backend.
 	Info(ctx context.Context) (ModelInfo, error)
 
+	// Status describes the EFFECTIVE backend mode for health/status
+	// reporting, e.g. "pattern-only (model not loaded)", "gemma via
+	// ollama http://…", or "remote gRPC …". The status VALUE leads with
+	// a machine token ("ok", "degraded", "error") so consumers can keep
+	// doing simple prefix/equality checks; detail carries supporting
+	// context (model name, endpoint, load or unreachable error).
+	Status(ctx context.Context) (status, detail string)
+
 	// Close releases backend resources.
 	Close() error
 }

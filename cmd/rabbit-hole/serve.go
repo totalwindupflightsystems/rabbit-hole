@@ -159,16 +159,18 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			// reported automatically by the server (they live on the Server
 			// struct). Classifier and collector are wired here because they
 			// are constructed in the serve command.
+			//
+			// The classifier uses a Status func so /health reports the
+			// EFFECTIVE backend mode truthfully (DF-022): "pattern-only
+			// (model not loaded)" on zero-config installs and load failures,
+			// "gemma via ollama <url>" when the local model is loaded, or
+			// "remote gRPC <endpoint>" — never a static "local model
+			// backend" claim while no model is actually loaded.
 			if cls != nil {
-				classifierDetail := "local model backend"
-				if remote != "" {
-					classifierDetail = "remote gRPC backend"
-				}
 				clsRef := cls
 				server.RegisterHealthCheck(express.HealthCheck{
 					Name:   "classifier",
-					Detail: classifierDetail,
-					Check:  clsRef.Health,
+					Status: clsRef.Status,
 				})
 			}
 			collRef := coll

@@ -145,6 +145,10 @@ func (m *mockClassifier) Health(ctx context.Context) error {
 	return m.healthErr
 }
 
+func (m *mockClassifier) Status(context.Context) (string, string) {
+	return "ok — mock classifier", ""
+}
+
 func (m *mockClassifier) ModelInfo(ctx context.Context) (classify.ModelInfo, error) {
 	if m.modelInfoErr != nil {
 		return classify.ModelInfo{}, m.modelInfoErr

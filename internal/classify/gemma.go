@@ -37,6 +37,7 @@ type GemmaModel struct {
 	ollamaURL  string
 	loadedAt   time.Time
 	loaded     atomic.Bool
+	loadErr    error // last Load() failure; nil when loaded or never attempted
 	mu         sync.RWMutex
 	httpClient *http.Client
 	metrics    gemmaMetrics
@@ -84,35 +85,61 @@ func (g *GemmaModel) Load(ctx context.Context) error {
 		return nil // already loaded
 	}
 
+	// Reset any prior load failure; the retry below decides the new state.
+	g.loadErr = nil
+
 	body, err := json.Marshal(map[string]string{"name": g.modelName})
 	if err != nil {
-		return fmt.Errorf("load: marshal request: %w", err)
+		g.loadErr = fmt.Errorf("load: marshal request: %w", err)
+		return g.loadErr
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		g.ollamaURL+"/api/show", bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("load: create request: %w", err)
+		g.loadErr = fmt.Errorf("load: create request: %w", err)
+		return g.loadErr
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("load: ollama unreachable at %s: %w", g.ollamaURL, err)
+		g.loadErr = fmt.Errorf("load: ollama unreachable at %s: %w", g.ollamaURL, err)
+		return g.loadErr
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return types.ErrModelNotLoaded{}
+		g.loadErr = types.ErrModelNotLoaded{}
+		return g.loadErr
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("load: ollama returned %d: %s", resp.StatusCode, string(b))
+		g.loadErr = fmt.Errorf("load: ollama returned %d: %s", resp.StatusCode, string(b))
+		return g.loadErr
 	}
 
 	g.loadedAt = time.Now()
 	g.loaded.Store(true)
+	g.loadErr = nil
 	return nil
+}
+
+// LoadError returns the last Load() failure, or nil if the model is
+// loaded or Load was never attempted. Used for honest health/status
+// reporting: a model that failed to load means classification is
+// running in pattern-only mode, and the operator should see why.
+func (g *GemmaModel) LoadError() error {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.loadErr
+}
+
+// OllamaURL returns the configured Ollama server URL.
+func (g *GemmaModel) OllamaURL() string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.ollamaURL
 }
 
 // Unload marks the model as not loaded. Ollama manages model memory

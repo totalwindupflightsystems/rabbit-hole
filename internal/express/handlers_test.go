@@ -293,6 +293,66 @@ func TestHealth_StorageFailure_DegradesOverall(t *testing.T) {
 	}
 }
 
+// TestHealth_StatusFunc_DegradedMode verifies the Status-func path used
+// by the classifier (DF-022): the component status VALUE carries the
+// effective backend mode, and a non-ok value degrades the top-level
+// status so monitoring hooks never mistake pattern-only for healthy.
+func TestHealth_StatusFunc_DegradedMode(t *testing.T) {
+	srv, cl := newTestServer(t)
+	defer cl()
+
+	srv.RegisterHealthCheck(HealthCheck{
+		Name: "classifier",
+		Status: func(ctx context.Context) (string, string) {
+			return "degraded — pattern-only (model not loaded)", "gemma load failed: load: ollama unreachable"
+		},
+	})
+
+	hr := decodeHealth(t, srv)
+
+	if hr.Status != "degraded" {
+		t.Errorf("top status: got %q, want \"degraded\"", hr.Status)
+	}
+	cs, ok := hr.Components["classifier"]
+	if !ok {
+		t.Fatal("classifier component missing")
+	}
+	if cs.Status != "degraded — pattern-only (model not loaded)" {
+		t.Errorf("classifier status: got %q, want %q", cs.Status, "degraded — pattern-only (model not loaded)")
+	}
+	if !strings.Contains(cs.Detail, "gemma load failed") {
+		t.Errorf("classifier detail: got %q, want it to contain the load failure", cs.Detail)
+	}
+}
+
+// TestHealth_StatusFunc_OkMode verifies a healthy mode value ("ok —
+// gemma via ollama …") keeps the top-level status "ok" while surfacing
+// the mode as the component's status VALUE.
+func TestHealth_StatusFunc_OkMode(t *testing.T) {
+	srv, cl := newTestServer(t)
+	defer cl()
+
+	srv.RegisterHealthCheck(HealthCheck{
+		Name: "classifier",
+		Status: func(ctx context.Context) (string, string) {
+			return "ok — gemma via ollama http://localhost:11434", "model gemma-3-4b loaded"
+		},
+	})
+
+	hr := decodeHealth(t, srv)
+
+	if hr.Status != "ok" {
+		t.Errorf("top status: got %q, want \"ok\"", hr.Status)
+	}
+	cs, ok := hr.Components["classifier"]
+	if !ok {
+		t.Fatal("classifier component missing")
+	}
+	if cs.Status != "ok — gemma via ollama http://localhost:11434" {
+		t.Errorf("classifier status: got %q, want %q", cs.Status, "ok — gemma via ollama http://localhost:11434")
+	}
+}
+
 // TestHealth_RegisterAfterStart verifies that a check registered after
 // NewServer (the realistic serve-command wiring pattern) is picked up on
 // the next /health request.

@@ -1,6 +1,10 @@
 package classify
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -199,13 +203,117 @@ func TestClassificationEngineClassifyUnknown(t *testing.T) {
 
 // --- TestClassifierHealth ---
 
+// TestClassifierHealth verifies Health reflects the EFFECTIVE classifier
+// state (DF-022): pattern-only (no backend or unloaded model) is NOT
+// healthy; only a loaded model backend is.
 func TestClassifierHealth(t *testing.T) {
+	// No backend: pattern-only mode must not report as operational.
 	engine := NewClassificationEngine(nil, nil, nil)
 	c := NewClassifier(engine)
 
-	if err := c.Health(t.Context()); err != nil {
-		t.Errorf("expected nil error from Health, got %v", err)
+	if err := c.Health(t.Context()); err == nil {
+		t.Error("expected error from Health with no backend (pattern-only), got nil")
 	}
+
+	// Local backend with an unloaded model — the zero-config default
+	// where Load() failed because no Ollama is reachable.
+	model := NewGemmaModel("/fake/path", "gemma-3-4b", "")
+	engine2 := NewClassificationEngine(NewLocalBackend(model), nil, nil)
+	c2 := NewClassifier(engine2)
+
+	if err := c2.Health(t.Context()); err == nil {
+		t.Error("expected error from Health with unloaded model, got nil")
+	}
+
+	// Local backend with a loaded model is operational.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "gemma-3-4b"})
+	}))
+	defer srv.Close()
+
+	m := newTestGemmaModel(srv.URL, "gemma-3-4b")
+	if err := m.Load(t.Context()); err != nil {
+		t.Fatalf("test model Load failed: %v", err)
+	}
+	engine3 := NewClassificationEngine(NewLocalBackend(m), nil, nil)
+	c3 := NewClassifier(engine3)
+
+	if err := c3.Health(t.Context()); err != nil {
+		t.Errorf("expected nil error from Health with loaded model, got %v", err)
+	}
+}
+
+// --- TestClassifierStatus ---
+
+// TestClassifierStatus verifies the classifier's effective backend mode
+// is reported truthfully for /health (DF-022): never "ok / local model
+// backend" while no model is actually loaded.
+func TestClassifierStatus(t *testing.T) {
+	t.Run("no backend — pattern only", func(t *testing.T) {
+		c := NewClassifier(NewClassificationEngine(nil, nil, nil))
+		status, detail := c.Status(t.Context())
+		if status != "degraded — pattern-only (no model loaded)" {
+			t.Errorf("status: got %q, want %q", status, "degraded — pattern-only (no model loaded)")
+		}
+		if detail != "" {
+			t.Errorf("detail: got %q, want empty", detail)
+		}
+	})
+
+	t.Run("unloaded local model — pattern only", func(t *testing.T) {
+		model := NewGemmaModel("/fake/path", "gemma-3-4b", "")
+		c := NewClassifier(NewClassificationEngine(NewLocalBackend(model), nil, nil))
+		status, detail := c.Status(t.Context())
+		if status != "degraded — pattern-only (model not loaded)" {
+			t.Errorf("status: got %q, want %q", status, "degraded — pattern-only (model not loaded)")
+		}
+		if detail != "" {
+			t.Errorf("detail: got %q, want empty", detail)
+		}
+	})
+
+	t.Run("load failure — pattern only with failure detail", func(t *testing.T) {
+		// Ollama returns 404 for the model: Load fails, LoadError is set.
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		model := newTestGemmaModel(srv.URL, "nonexistent-model")
+		if err := model.Load(t.Context()); err == nil {
+			t.Fatal("expected Load to fail")
+		}
+		c := NewClassifier(NewClassificationEngine(NewLocalBackend(model), nil, nil))
+		status, detail := c.Status(t.Context())
+		if status != "degraded — pattern-only (model not loaded)" {
+			t.Errorf("status: got %q, want %q", status, "degraded — pattern-only (model not loaded)")
+		}
+		if !strings.Contains(detail, "gemma load failed") {
+			t.Errorf("detail: got %q, want it to contain the load failure", detail)
+		}
+	})
+
+	t.Run("loaded local model — gemma via ollama", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"name": "gemma-3-4b"})
+		}))
+		defer srv.Close()
+
+		model := newTestGemmaModel(srv.URL, "gemma-3-4b")
+		if err := model.Load(t.Context()); err != nil {
+			t.Fatalf("test model Load failed: %v", err)
+		}
+		c := NewClassifier(NewClassificationEngine(NewLocalBackend(model), nil, nil))
+		status, detail := c.Status(t.Context())
+		if want := "ok — gemma via ollama " + srv.URL; status != want {
+			t.Errorf("status: got %q, want %q", status, want)
+		}
+		if !strings.Contains(detail, "gemma-3-4b loaded") {
+			t.Errorf("detail: got %q, want it to mention the loaded model", detail)
+		}
+	})
 }
 
 // --- TestClassifierModelInfo ---

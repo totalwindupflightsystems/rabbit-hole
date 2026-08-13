@@ -70,10 +70,19 @@ type Server struct {
 // Detail string is surfaced verbatim in the per-component status object
 // when non-empty. Check must return nil when the component is healthy and
 // a descriptive error otherwise.
+//
+// Status, when set, takes precedence over Check/Detail: it returns the
+// component's status VALUE and detail directly. The status VALUE leads
+// with a machine token — "ok", "degraded", or "error" — optionally
+// followed by a human description (e.g. "degraded — pattern-only (model
+// not loaded)"). Any value not starting with the "ok" token marks the
+// server's top-level status degraded. This is how the classifier reports
+// its effective backend mode truthfully (DF-022).
 type HealthCheck struct {
 	Name   string
 	Detail string
 	Check  func(ctx context.Context) error
+	Status func(ctx context.Context) (status, detail string)
 }
 
 // RegisterHealthCheck adds a component probe to the server's health

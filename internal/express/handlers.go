@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
@@ -75,6 +76,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	// --- extra registered components (classifier, collector, ...) ---
 	for _, hc := range s.snapshotHealthChecks() {
+		// A Status func overrides the ok/error probe heuristic: it
+		// supplies the component's status VALUE directly (e.g. the
+		// classifier's effective backend mode). Values that do not
+		// lead with the "ok" token degrade the server so monitoring
+		// hooks never mistake a pattern-only/failed component for a
+		// healthy model backend.
+		if hc.Status != nil {
+			status, detail := hc.Status(ctx)
+			if !strings.HasPrefix(status, "ok") {
+				degraded = true
+			}
+			components[hc.Name] = componentStatus{Status: status, Detail: detail}
+			continue
+		}
 		if hc.Check == nil {
 			// Defensive: a registered check with no Check func is
 			// treated as healthy-but-passive and surfaced with detail.

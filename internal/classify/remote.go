@@ -99,6 +99,17 @@ func (b *RemoteBackend) Info(ctx context.Context) (ModelInfo, error) {
 	}, nil
 }
 
+// Status reports the effective backend mode: "remote gRPC <endpoint>",
+// degraded with an unreachable detail when the Ping probe fails. The
+// status VALUE is what /health surfaces for the classifier component.
+func (b *RemoteBackend) Status(ctx context.Context) (string, string) {
+	if err := b.Health(ctx); err != nil {
+		return fmt.Sprintf("degraded — remote gRPC %s", b.endpoint),
+			fmt.Sprintf("unreachable: %v", err)
+	}
+	return fmt.Sprintf("ok — remote gRPC %s", b.endpoint), ""
+}
+
 // Close releases the underlying gRPC connection.
 func (b *RemoteBackend) Close() error {
 	if b.conn == nil {

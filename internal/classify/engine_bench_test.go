@@ -49,6 +49,10 @@ func (*mockClassificationBackend) Info(context.Context) (ModelInfo, error) {
 	return ModelInfo{Name: "mock", Kind: "bench", Version: "1.0", Ready: true}, nil
 }
 
+func (*mockClassificationBackend) Status(context.Context) (string, string) {
+	return "ok — mock backend", ""
+}
+
 func (*mockClassificationBackend) Close() error {
 	return nil
 }

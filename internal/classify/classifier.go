@@ -41,6 +41,13 @@ type Classifier interface {
 	// Health reports whether the classifier is operational.
 	Health(ctx context.Context) error
 
+	// Status describes the EFFECTIVE backend mode for health/status
+	// reporting: "pattern-only (model not loaded)", "gemma via ollama
+	// http://…", or "remote gRPC …". The status VALUE leads with a
+	// machine token ("ok", "degraded", "error"); detail carries the
+	// supporting context (model name, endpoint, load/unreachable error).
+	Status(ctx context.Context) (status, detail string)
+
 	// ModelInfo returns metadata about the loaded model.
 	ModelInfo(ctx context.Context) (ModelInfo, error)
 }
@@ -129,14 +136,26 @@ func (c *classifierImpl) ClassifyStream(ctx context.Context, sessionID string, t
 	return out, nil
 }
 
-// Health returns nil if the classifier is operational. Currently this
-// means the engine has a pattern catalog (always true). If a model is
-// configured, it should be loadable.
-func (c *classifierImpl) Health(_ context.Context) error {
-	if c.engine == nil {
+// Health returns nil if the classifier is operational. This now
+// reflects the EFFECTIVE state: no engine, no backend (pattern-only by
+// design), or an unhealthy backend is reported as not operational — a
+// health hook must not see "ok" while no model is loaded.
+func (c *classifierImpl) Health(ctx context.Context) error {
+	if c.engine == nil || c.engine.backend == nil {
 		return types.ErrModelNotLoaded{}
 	}
-	return nil
+	return c.engine.backend.Health(ctx)
+}
+
+// Status describes the effective backend mode for /health. With no
+// backend the classifier is in degraded pattern-only mode; otherwise the
+// backend reports its own mode (loaded Gemma via Ollama, or remote gRPC,
+// including load/unreachable failures).
+func (c *classifierImpl) Status(ctx context.Context) (string, string) {
+	if c.engine == nil || c.engine.backend == nil {
+		return "degraded — pattern-only (no model loaded)", ""
+	}
+	return c.engine.backend.Status(ctx)
 }
 
 // ModelInfo returns metadata about the loaded model. If no backend is

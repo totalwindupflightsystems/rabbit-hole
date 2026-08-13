@@ -46,6 +46,27 @@ func (b *LocalBackend) Info(ctx context.Context) (ModelInfo, error) {
 	return b.model.ModelInfo(), nil
 }
 
+// Status reports the EFFECTIVE backend mode truthfully: a loaded Gemma
+// model reports the Ollama endpoint; an unloaded model (including one
+// whose Load() failed) reports the degraded pattern-only state with the
+// load failure as detail. This is what /health surfaces — a fresh or
+// zero-config install must never claim "ok / local model backend" while
+// classification is actually deterministic pattern matching.
+func (b *LocalBackend) Status(_ context.Context) (string, string) {
+	if b.model == nil {
+		return "degraded — pattern-only (no model loaded)", ""
+	}
+	if b.model.IsLoaded() {
+		return fmt.Sprintf("ok — gemma via ollama %s", b.model.OllamaURL()),
+			fmt.Sprintf("model %s loaded", b.model.ModelInfo().Name)
+	}
+	if err := b.model.LoadError(); err != nil {
+		return "degraded — pattern-only (model not loaded)",
+			fmt.Sprintf("gemma load failed: %v", err)
+	}
+	return "degraded — pattern-only (model not loaded)", ""
+}
+
 // Close unloads the underlying model and releases resources.
 func (b *LocalBackend) Close() error {
 	if b.model == nil {
