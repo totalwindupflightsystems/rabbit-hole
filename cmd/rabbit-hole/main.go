@@ -41,6 +41,7 @@ Self-hosted. One binary. Zero SDK.`,
 		newStatusCmd(),
 		newVersionCmd(),
 		newCompletionCmd(),
+		newClassifyServerCmd(),
 	)
 
 	// Cobra's Execute prints "Error: ..." for RunE failures but returns the

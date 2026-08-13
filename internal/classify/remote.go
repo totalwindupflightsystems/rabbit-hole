@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	classifierpb "gitlab.readydedis.com/rabbit-hole/rabbit-hole/api/proto/classifier/v1"
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
@@ -28,14 +29,25 @@ type RemoteBackend struct {
 }
 
 // NewRemoteBackend dials the gRPC endpoint and returns a ready RemoteBackend.
+// When token is non-empty, every RPC carries an "authorization: Bearer <token>"
+// metadata header, matching the token slot of the serve --remote flag and the
+// reference classify-server's token auth.
 func NewRemoteBackend(endpoint, token string) (*RemoteBackend, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, endpoint,
+	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
-	)
+	}
+	if token != "" {
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}))
+	}
+
+	conn, err := grpc.DialContext(ctx, endpoint, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("remote backend dial %s: %w", endpoint, err)
 	}
