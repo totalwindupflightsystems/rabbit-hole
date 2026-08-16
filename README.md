@@ -19,6 +19,11 @@ make build
 ./bin/rabbit-hole serve
 # (no root/eBPF? use: ./bin/rabbit-hole serve --no-ebpf)
 
+# Remote classification backend (optional — fleet/centralized setup):
+# run classify-server on a backend host, point serve at it with --remote.
+./bin/rabbit-hole classify-server --addr :50051
+./bin/rabbit-hole serve --no-ebpf --remote localhost:50051
+
 # In a second terminal: attach to an agent process.
 # The session is started on the daemon and persisted to the database.
 ./bin/rabbit-hole attach --pid <PID> --no-ebpf
@@ -78,6 +83,27 @@ env vars below.
 All three are required to enable the real model; if any is unset, the server
 logs a warning and uses built-in stub answers. Set `RABBITHOLE_CHAT_ENABLED=false`
 to force the stub even when the env vars are present.
+
+### Remote classification backend
+
+Classification can also run on a remote host: start `classify-server` (a gRPC
+server that wraps the same pattern-matching catalog as the local backend) and
+point `serve` at it with `--remote`. This is the fleet/centralized setup —
+edge hosts send traces over gRPC instead of classifying locally.
+
+```bash
+# Backend host: run the reference classifier (blocks until SIGINT/SIGTERM)
+./bin/rabbit-hole classify-server --addr :50051
+# (optional auth: --token s3cret — the client passes it as localhost:50051@s3cret)
+
+# Edge host: point the daemon at the remote backend
+./bin/rabbit-hole serve --no-ebpf --remote localhost:50051
+```
+
+With a remote backend configured, `/health` reports the classifier as
+`"detail": "remote gRPC backend"`. See
+[docs/classify-server.md](docs/classify-server.md) for the full reference
+(tokens, wire-format caveats, RPC list, optional grpcurl verification).
 
 ## Requirements
 
