@@ -41,7 +41,11 @@ make build
 ./bin/rabbit-hole chat "What did the agent do in the last hour?"
 
 # Search flows
-./bin/rabbit-hole search "sql error"
+# Note: search queries recorded flows. On a fresh unprivileged install the
+# only data is the --demo-stream demo session, which covers llm/patch/memory/
+# network intents — so `search "patch"` matches, while `search "sql error"`
+# returns "No results found." until you record real flows.
+./bin/rabbit-hole search "patch"
 
 # Compact old data
 ./bin/rabbit-hole compact --before 720h
