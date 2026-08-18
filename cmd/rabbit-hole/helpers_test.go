@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -62,20 +63,26 @@ func TestParseDuration(t *testing.T) {
 		input   string
 		want    time.Duration
 		wantErr bool
+		errMsg  string // substring expected in the error when wantErr
 	}{
-		{"5 hours", "5h", 5 * time.Hour, false},
-		{"2 days", "2d", 48 * time.Hour, false},
-		{"negative 3 hours", "-3h", -3 * time.Hour, false},
-		{"zero hours", "0h", 0, false},
-		{"1 day is 24 hours", "1d", 24 * time.Hour, false},
-		{"negative days", "-7d", -7 * 24 * time.Hour, false},
-		{"empty string returns error", "", 0, true},
-		{"single char returns error", "h", 0, true},
-		{"single char returns error (digit)", "5", 0, true},
-		{"unsupported suffix returns error", "5m", 0, true},
-		{"unsupported suffix s", "30s", 0, true},
-		{"non-numeric prefix", "abch", 0, true},
-		{"negative with bad suffix", "-5m", 0, true},
+		{"5 hours", "5h", 5 * time.Hour, false, ""},
+		{"1 hour", "1h", time.Hour, false, ""},
+		{"2 days", "2d", 48 * time.Hour, false, ""},
+		{"negative 3 hours", "-3h", -3 * time.Hour, false, ""},
+		{"zero hours", "0h", 0, false, ""},
+		{"1 day is 24 hours", "1d", 24 * time.Hour, false, ""},
+		{"negative days", "-7d", -7 * 24 * time.Hour, false, ""},
+		{"10 minutes", "10m", 10 * time.Minute, false, ""},
+		{"5 minutes", "5m", 5 * time.Minute, false, ""},
+		{"90 seconds", "90s", 90 * time.Second, false, ""},
+		{"30 seconds", "30s", 30 * time.Second, false, ""},
+		{"negative 5 minutes", "-5m", -5 * time.Minute, false, ""},
+		{"empty string returns error", "", 0, true, ""},
+		{"single char returns error", "h", 0, true, ""},
+		{"single char returns error (digit)", "5", 0, true, ""},
+		{"unsupported suffix x", "5x", 0, true, "use s, m, h or d"},
+		{"unsupported suffix w", "-5w", 0, true, "use s, m, h or d"},
+		{"non-numeric prefix", "abch", 0, true, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,6 +90,9 @@ func TestParseDuration(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseDuration(%q) error = %v, wantErr = %v", tt.input, err, tt.wantErr)
 				return
+			}
+			if err != nil && tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+				t.Errorf("parseDuration(%q) error = %q, want it to contain %q", tt.input, err, tt.errMsg)
 			}
 			if got != tt.want {
 				t.Errorf("parseDuration(%q) = %v, want %v", tt.input, got, tt.want)

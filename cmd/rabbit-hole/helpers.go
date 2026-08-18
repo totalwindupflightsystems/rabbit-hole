@@ -74,12 +74,16 @@ func parseDuration(s string) (time.Duration, error) {
 	}
 	var d time.Duration
 	switch suffix {
+	case 's':
+		d = time.Duration(num) * time.Second
+	case 'm':
+		d = time.Duration(num) * time.Minute
 	case 'h':
 		d = time.Duration(num) * time.Hour
 	case 'd':
 		d = time.Duration(num) * 24 * time.Hour
 	default:
-		return 0, fmt.Errorf("unsupported duration suffix: %c (use h or d)", suffix)
+		return 0, fmt.Errorf("unsupported duration suffix: %c (use s, m, h or d)", suffix)
 	}
 	if neg {
 		d = -d
