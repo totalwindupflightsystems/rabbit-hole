@@ -24,9 +24,10 @@ type SessionStore interface {
 // the eBPF collector and persistent storage so that session metadata
 // survives process restarts.
 type SessionManager struct {
-	coll   collector.Collector
-	store  SessionStore
-	logger *slog.Logger
+	coll    collector.Collector
+	store   SessionStore
+	logger  *slog.Logger
+	monitor *processMonitor
 }
 
 // NewSessionManager creates a session manager backed by the given
@@ -39,11 +40,23 @@ func NewSessionManager(
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &SessionManager{
+	sm := &SessionManager{
 		coll:   coll,
 		store:  store,
 		logger: logger,
 	}
+	sm.monitor = newProcessMonitor(coll, store, logger)
+	return sm
+}
+
+// StartExitMonitor runs the process-exit monitor until ctx is cancelled.
+// The collector emits no exit events in degraded mode (--no-ebpf), so
+// without this an attached process that dies naturally would leave its
+// session 'running' forever (DF-028). The monitor transitions tracked
+// sessions whose process exited to a terminal state (completed/crashed)
+// with an honest label. Run it on the daemon: `go sm.StartExitMonitor(ctx)`.
+func (m *SessionManager) StartExitMonitor(ctx context.Context) {
+	m.monitor.run(ctx)
 }
 
 // StartSession attaches the eBPF collector to a target PID, persists
@@ -66,6 +79,11 @@ func (m *SessionManager) StartSession(
 		_ = m.coll.Detach(ctx, session.ID)
 		return nil, err
 	}
+
+	// Track the session so the monitor transitions it to a terminal
+	// state when the attached process exits (DF-028). The monitor only
+	// acts when running.
+	m.monitor.track(session.ID, session.AgentPID)
 
 	m.logger.Info("session: started",
 		"session", session.ID,
@@ -94,6 +112,9 @@ func (m *SessionManager) StopSession(ctx context.Context, sessionID string) erro
 	}
 
 	m.logger.Info("session: stopped", "session", sessionID)
+	// The user detached — stop watching so the monitor cannot overwrite
+	// this outcome with a process-exit label (DF-028).
+	m.monitor.untrack(sessionID)
 	return nil
 }
 

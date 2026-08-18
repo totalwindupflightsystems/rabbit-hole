@@ -139,7 +139,17 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			// database, so sessions persist across CLI invocations (DF-001).
 			// The pipeline above picks up sessions started this way and
 			// classifies their traces like any other.
-			server.RegisterSessionManager(attach.NewSessionManager(coll, store, logger))
+			sessionMgr := attach.NewSessionManager(coll, store, logger)
+			server.RegisterSessionManager(sessionMgr)
+
+			// Process-exit monitor: in degraded mode (--no-ebpf) the
+			// collector emits no exit events, so without a monitor an
+			// attached process that dies naturally leaves its session
+			// 'running' forever (DF-028). The monitor observes tracked
+			// PIDs and transitions dead sessions to an honest terminal
+			// state. Run unconditionally — it only acts on sessions
+			// whose attached process is actually gone.
+			go sessionMgr.StartExitMonitor(cobraCmd.Context())
 
 			// Daemon runtime facts for GET /api/v1/stats (`rabbit-hole
 			// status` reads them via the daemon, not the CLI's own config —
