@@ -54,6 +54,22 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
+	// Read loop: detect client disconnect promptly. Without a dedicated
+	// reader, the handler never notices a dead peer until a write fails
+	// (up to the 10s write deadline), leaving the subscriber registered
+	// and buffering — the "WS client connects then disconnects" leg of
+	// the DF-027 wedge combo. A failed read cancels the handler context,
+	// which the write loop observes immediately and the deferred cleanup
+	// removes the subscriber right away.
+	go func() {
+		defer cancel()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
 	// Write loop: push flows to WebSocket
 	ticker := time.NewTicker(30 * time.Second) // ping interval
 	defer ticker.Stop()
