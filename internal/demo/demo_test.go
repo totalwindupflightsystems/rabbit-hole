@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"testing"
 	"time"
+
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 // uuidV7RE matches the canonical UUIDv7 shape: version nibble 7 and a
@@ -129,6 +131,31 @@ func TestGenerate_SpreadDistributesOverWindow(t *testing.T) {
 	}
 	if got := sc.Flows[n-1].StartTime.Sub(start); got != window-gap {
 		t.Errorf("last flow starts %v after start, want %v (near end of window)", got, window-gap)
+	}
+}
+
+func TestGenerate_CompletedSessionHasEndTime(t *testing.T) {
+	// DF-032: a completed session with nil end_time is contradictory
+	// data — dashboards computing duration from it get garbage. Every
+	// session Generate returns is completed, so it must always carry a
+	// non-nil EndTime, set from a single source that covers both the
+	// serve --demo-stream path (stored as-is) and the demo seeding path
+	// (status flipped via UpdateSession).
+	start := time.Now().Add(-30 * time.Minute)
+	sc := Generate(10, start, 1234)
+
+	if sc.Session.Status != types.SessionStatusCompleted {
+		t.Fatalf("status = %q, want %q", sc.Session.Status, types.SessionStatusCompleted)
+	}
+	if sc.Session.EndTime == nil {
+		t.Fatal("EndTime is nil on a completed session (DF-032)")
+	}
+	if !sc.Session.EndTime.After(sc.Session.StartTime) {
+		t.Errorf("EndTime %v is not after StartTime %v", *sc.Session.EndTime, sc.Session.StartTime)
+	}
+	// The Scenario doc describes "~30 minutes of work".
+	if got := sc.Session.EndTime.Sub(sc.Session.StartTime); got != 30*time.Minute {
+		t.Errorf("session duration = %v, want 30m", got)
 	}
 }
 

@@ -39,11 +39,19 @@ func Generate(nFlows int, start time.Time, seed int64, spread ...time.Duration) 
 	// Session IDs are UUIDv7 to satisfy the OpenAPI contract
 	// (specs/openapi.yaml declares Session.id as UUIDv7).
 	sessionID := uuid.Must(uuid.NewV7()).String()
+	// A completed session must carry a real end time (DF-032): the
+	// Scenario doc says this is "~30 minutes of work", so the session
+	// ends 30 minutes after it starts. Setting it here covers every
+	// caller — the serve --demo-stream path stores the session as-is and
+	// the demo seeding command flips the status to completed via
+	// UpdateSession, both persisting whatever EndTime Generate set.
+	end := start.Add(30 * time.Minute)
 	session := types.Session{
 		ID:        sessionID,
 		AgentPID:  4242,
 		AgentName: "hermes",
 		StartTime: start,
+		EndTime:   &end,
 		Status:    types.SessionStatusCompleted,
 		Metadata: types.SessionMetadata{
 			CommandLine: "hermes chat -q 'fix rate limiter race'",
