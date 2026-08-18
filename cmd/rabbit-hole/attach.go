@@ -84,7 +84,7 @@ running for collection; stop the session with 'rabbit-hole detach <id>'.`,
 			fmt.Println()
 			fmt.Println("Collection active. Use 'rabbit-hole status' to monitor or 'rabbit-hole chat' to query.")
 			fmt.Printf("Detach with: rabbit-hole detach %s\n", session.ID)
-			fmt.Printf("Session persisted to %s — visible via 'list --all', 'status', and GET /api/v1/sessions.\n", cfg.DBPath)
+			fmt.Println("Session persisted via daemon — visible via 'list --all', 'status', and GET /api/v1/sessions.")
 			fmt.Println("Collection runs in the daemon ('rabbit-hole serve') — keep it running.")
 
 			return nil
