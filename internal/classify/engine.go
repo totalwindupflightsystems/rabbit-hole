@@ -52,9 +52,13 @@ func NewClassificationEngine(backend ClassificationBackend, store Storage, logge
 //  1. Group traces by temporal proximity and semantic boundaries.
 //  2. Attempt fast pattern matching on each group.
 //  3. Send unmatched groups to the model (if loaded).
-//  4. Store all resulting flows.
 //
 // Returns the classified flows. An empty input yields nil flows.
+//
+// The engine is pure classification: it never persists. The attach
+// pipeline's processSession is the single store path for classified
+// flows (DF-033) — persisting here as well double-stores every flow
+// and trips the flows.id UNIQUE constraint.
 func (e *ClassificationEngine) Classify(ctx context.Context, sessionID string, traces []types.Trace) ([]types.Flow, error) {
 	if len(traces) == 0 {
 		return nil, nil
@@ -111,13 +115,6 @@ func (e *ClassificationEngine) Classify(ctx context.Context, sessionID string, t
 		for _, group := range unmatched {
 			flow := makeUnknownFlow(sessionID, group)
 			flows = append(flows, flow)
-		}
-	}
-
-	// Persist flows if a store is configured.
-	if e.store != nil && len(flows) > 0 {
-		if err := e.store.StoreFlows(ctx, flows); err != nil {
-			e.logger.Error("failed to store flows", "error", err, "count", len(flows))
 		}
 	}
 

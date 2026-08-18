@@ -191,8 +191,9 @@ func (p *Pipeline) sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// processSession drains the flow channel for a single session,
-// persisting each classified flow to storage.
+// processSession drains the flow channel for a single session and
+// persists each classified flow exactly once — the engine does not
+// persist; this is the single store path (DF-033).
 func (p *Pipeline) processSession(ctx context.Context, sessionID string, flowCh <-chan types.Flow) {
 	for flow := range flowCh {
 		if err := p.store.StoreFlows(ctx, []types.Flow{flow}); err != nil {

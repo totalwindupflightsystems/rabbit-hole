@@ -227,14 +227,20 @@ func TestE2E_ServeAttachSearchDetach(t *testing.T) {
 		},
 	}
 
-	// 7. Classify synchronously (deterministic). The engine auto-persists
-	// flows, so we don't call StoreFlows separately.
+	// 7. Classify synchronously (deterministic). The engine is pure
+	// classification and NO longer auto-persists (DF-033) — the attach
+	// pipeline's processSession is the single store path for classified
+	// flows — so persist the classified flows here explicitly, standing
+	// in for the pipeline.
 	flows, err := cls.Classify(ctx, session.ID, traces)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
 	if len(flows) == 0 {
 		t.Fatal("Classify returned no flows")
+	}
+	if err := store.StoreFlows(ctx, flows); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
 	}
 
 	// 8. POST /api/v1/search {"query":"read","limit":50} via real HTTP.
