@@ -30,3 +30,33 @@ failure, NL chat failure x3, jq nulls from docs, stale :8080 hint, /dashboard 30
 **Left behind:** docs/dogfood/2026-08-08-integration.md, docs/dogfood/diagnostics.md,
 skills/rabbit-hole-usage/SKILL.md, 4 board tasks (DF-001..004). Foreman not paused (cooldown
 7200s) — will pick up tasks next tick.
+
+## 2026-08-18 — rabbit-hole — 🟡 PROMISING-BUT-ROUGH (was 🔴 on 08-08)
+
+**Promise:** *"A user can attach to a real agent process (zero SDK, eBPF), have Rabbit-Hole
+collect kernel-level telemetry, classify it, and ask 'what did the agent do at 3am?' in plain
+language — self-hosted, one binary."*
+
+**Reality:** The promise now HOLDS in degraded mode (unprivileged host). Every DF-001..DF-026
+fix re-verified live: attach→daemon persistence + list/status/detach, NL chat with time
+window (50 flows, honest stub), snake_case wire format, remote gRPC classify-server with
+token auth, truthful /health + real version identity, opt-in API-key auth, WS live stream
+(5 msgs/10s), dashboard 200, compact, demo --spread, persistence + SIGKILL survival (WAL,
+integrity ok), tests 6s. **But:** the serve daemon wedged after ~15 min of documented use
+(681% CPU / 19.7 GB RSS, HTTP dead, SIGQUIT useless → SIGKILL) — a P0 for a 24/7 watcher.
+
+**Time-to-first-success:** ~2 min. **Friction count:** 6.
+
+**Top 3 findings (board tasks):**
+1. DF-027 (P0) — daemon wedge under demo-stream+remote+WS+attach use; silent collection
+   stop; needs soak test + bounded RSS.
+2. DF-028 (P1) — session lifecycle unreliable in --no-ebpf mode (ghost "running" after
+   process exit; one false "crashed").
+3. DF-029 (P2) — compact rejects `10m` ("use h or d") — natural unit missing.
+
+**Also:** DF-030/031/032 (P3) — stale demo hint, attach message names wrong DB path,
+completed sessions with end_time=null.
+
+**Left behind:** docs/dogfood/2026-08-18-integration.md, diagnostics.md §5-8 updated,
+skills/rabbit-hole-usage/SKILL.md refreshed (state 08-18 + pitfalls 9-11 + new probes),
+6 board tasks (DF-027..032). Foreman cooldown 21600s ≥ 14400 → woken to 900s to work DF-027.

@@ -12,12 +12,18 @@ version: 1.0.0
 Rabbit-Hole is a Go binary that watches AI agents and explains their activity: eBPF collect →
 pattern/ML classify → HTTP/WebSocket + chat express. Self-hosted, one binary, zero SDK.
 
-**Current state (2026-08-09):** Express/Storage layers work well. `attach` sessions persist
-via the daemon-side SessionManager — the CLI hands the session to a running `serve` over
-`POST /api/v1/sessions/attach` (DF-001 fixed). NL chat applies time/category filters
-(DF-002 fixed). The wire format is snake_case and matches the OpenAPI spec (DF-003/DF-004
-fixed). The `--demo-stream` daemon is still the easiest data source; see `docs/dogfood/`
-for the full trail.
+**Current state (2026-08-18):** Express/Storage/Collect layers all work in real
+use on an unprivileged host (degraded mode). `attach` sessions persist via the
+daemon-side SessionManager (DF-001). NL chat applies time/category filters and
+returns flows in stub mode too (DF-002). Wire format is snake_case and matches
+the OpenAPI spec (DF-003). `classify-server` subcommand works end-to-end with
+token auth + `serve --remote` (DF-023); `/health` reports the truth
+(DF-022); version identity is real (DF-021); auth via `RABBITHOLE_API_KEY`
+(DF-018/DF-020); `go test -short` ≈ 6s (DF-013); `/dashboard` = 200 (GAP-006).
+**Known hazards (dogfood 2026-08-18):** the demo-stream daemon wedged after
+~15 min under load (681% CPU / 19.7 GB RSS, HTTP dead, SIGQUIT useless, DF-027
+P0 — soak-test before trusting it long-running); attached sessions may not
+transition when the process exits (DF-028 P1). See `docs/dogfood/2026-08-18-integration.md`.
 
 ## Entry points
 
@@ -26,7 +32,8 @@ for the full trail.
 | `./bin/rabbit-hole serve --demo-stream --no-ebpf` | full pipeline daemon, demo flows every 3s, HTTP+WS on 127.0.0.1:9734 | ✅ (no root needed) |
 | `./bin/rabbit-hole serve` | same, with eBPF (needs CAP_SYS_RESOURCE + kernel 5.11+) | ✅ hard-fails honestly without privileges |
 | `./bin/rabbit-hole attach --pid X [--no-ebpf]` | attach to a real process; session handed to a running serve via POST /api/v1/sessions/attach | ✅ (DF-001 fixed, commit 7545df4) |
-| `./bin/rabbit-hole demo --flows N --hours-back M` | batch-seed realistic data | ✅ |
+| `./bin/rabbit-hole demo --flows N --hours-back M` | batch-seed realistic data (--spread works) | ✅ |
+| `./bin/rabbit-hole classify-server --addr :50051 [--token T]` | remote gRPC classifier backend (fleet setup) | ✅ (DF-023) |
 | `./bin/rabbit-hole chat/search/status/list/detach/compact` | CLI over the daemon/DB | ✅ |
 | HTTP API | `/health`, `/api/v1/sessions|flows|search|chat|metrics|dashboard/summary`, `/api/v1/ws/sessions/{id}` | ✅ |
 | `/dashboard/` | embedded SPA (trailing slash required) | ✅ |
@@ -55,7 +62,8 @@ Without all three env vars the server answers from a keyword stub — API respon
 
 1. **`attach` sessions live in the daemon.** `attach` hands the session to a running `serve`
    via `POST /api/v1/sessions/attach` (DF-001 fixed) — the printed session id now shows up in
-   `list`/`detach`/`status`. Use `demo`/`--demo-stream` for bulk data.
+   `list`/`detach`/`status`. Use `demo`/`--demo-stream` for bulk data. The attach success
+   message names the CLI's local DB path (DF-031) — trust `list`/`status`, not the message.
 2. **Wire format is snake_case end-to-end.** Requests: `query`, `limit`, `session_id` (wire
    names). Flow responses: `id`, `session_id`, `intent`, `description`, `outcome`,
    `confidence`, `duration` (ns). Sessions + search envelope: `id`, `agent_name`, `total`,
@@ -63,16 +71,28 @@ Without all three env vars the server answers from a keyword stub — API respon
    jq against a live response first.
 3. **NL chat questions** ("what did the agent do in the last hour?") apply time/category
    filters and return matching flows (DF-002 fixed). Keyword-style queries (`write_file`,
-   `sql`, `patch`) are still the most reliable for precise hits.
+   `sql`, `patch`) are still the most reliable for precise hits. In stub mode the API
+   answers are canned but honest (`"stub": true`).
 4. **Chat with a local CPU model is slow:** 3–35s per question (two LLM round-trips:
    translate + summarize). Budget for it.
-5. **Dashboard needs the trailing slash:** `/dashboard` → 301; `/dashboard/` → SPA (GAP-006).
+5. **Dashboard needs the trailing slash:** `/dashboard` → 200 SPA (GAP-006); `/dashboard/`
+   is the canonical path.
 6. **WS stream is live-only:** flows are pushed to subscribers connected at publish time; no
    replay. Ping every 30s; clients must pong or the server drops them.
 7. **Compact is destructive:** `compact --before 1h` deletes flows/traces older than 1h
-   (verified: 25 flows + 150 traces gone). Point it at a copy first if unsure.
+   (verified). Point it at a copy first if unsure. **Duration suffixes are h/d only** —
+   `compact --before 10m` fails with "unsupported duration suffix: m" (DF-029).
 8. **Data dir:** default `~/.rabbit-hole/rabbit-hole.db`; use `RABBITHOLE_DB_PATH` for
-   hermetic runs. SQLite WAL — data survives restarts (verified).
+   hermetic runs. SQLite WAL — data survives restarts and even SIGKILL (verified).
+9. **Daemon wedge (DF-027, P0):** the `--demo-stream` daemon (esp. with `--remote` + WS +
+   attach cycles) can burn CPU/RAM until unresponsive and may not die on SIGQUIT. Health-
+   check it (`curl -m 2 /health`) if you run it long; capture `/proc/<pid>/status` before
+   SIGKILL. Soak-test before trusting in production.
+10. **Session lifecycle in degraded mode (DF-028):** sessions may stay `running` after the
+    attached process exits, or (rarely) flip to `crashed` early. Verify with `list --all`
+    rather than assuming status accuracy.
+11. **Remote backend:** `classify-server --addr :50051 [--token T]` + client side
+    `serve --remote host:port@T`; `/health` then shows `ok — remote gRPC <endpoint>`.
 
 ## Useful internals map
 
@@ -92,3 +112,9 @@ Without all three env vars the server answers from a keyword stub — API respon
 - DF-003: `jq '.flows[0].session_id'` on a live search returns a value.
 - DF-004: `demo` output references the real listen addr.
 - GAP-006: `curl -o /dev/null -w '%{http_code}' http://127.0.0.1:9734/dashboard` → 200.
+- DF-021: `rabbit-hole version` shows a real commit hash; `/health` version == CLI version.
+- DF-022: zero-config `serve` → `/health` classifier says `degraded — pattern-only (model not loaded)`.
+- DF-023: `classify-server :50051` + `serve --remote` → `/health` classifier `ok — remote gRPC …`.
+- DF-026: `search "patch"` against `--demo-stream` data returns ≥1 result.
+- DF-027 (P0, open): 30-min soak of demo-stream + remote + WS + attach → RSS bounded, `/health` fast, SIGQUIT exits.
+- DF-028 (P1, open): attach to `sleep 30` → session reaches a terminal state ≤60s after exit.
