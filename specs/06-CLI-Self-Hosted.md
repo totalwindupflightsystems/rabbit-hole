@@ -272,7 +272,14 @@ rabbit-hole search --json --limit 100                    # structured output
 rabbit-hole compact                          # compact now (default 30-day retention)
 rabbit-hole compact --before 2026-06-01      # delete data before date
 rabbit-hole compact --retention 7d           # delete older than 7 days
+rabbit-hole compact --addr 127.0.0.1:9734    # compact via the running daemon
 ```
+
+By default `compact` operates on the standalone local database. Pass
+`--addr` to target a running daemon (`rabbit-hole serve`) instead — the
+daemon owns the database, so the CLI compacts the daemon's store over
+`POST /api/v1/compact`, never its own DB path. `rabbit-hole demo` accepts
+the same `--addr` flag (seeding via `POST /api/v1/demo/seed`).
 
 ### 1.8 `rabbit-hole status`
 

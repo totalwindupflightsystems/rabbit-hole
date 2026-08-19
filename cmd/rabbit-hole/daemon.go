@@ -128,6 +128,81 @@ func (d *daemonClient) listSessions(ctx context.Context) ([]types.SessionSummary
 	return body.Sessions, nil
 }
 
+// compact asks the daemon to delete data older than cutoffRFC3339 from its
+// own store. The daemon owns the database (DF-014: the CLI never opens the
+// SQLite file itself — compacting the CLI's local DB path could hit a
+// different file than the one the daemon serves).
+func (d *daemonClient) compact(ctx context.Context, cutoffRFC3339 string) error {
+	body, err := json.Marshal(struct {
+		Cutoff string `json:"cutoff"`
+	}{Cutoff: cutoffRFC3339})
+	if err != nil {
+		return fmt.Errorf("encode compact request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		d.baseURL+"/api/v1/compact", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if d.apiKey != "" {
+		httpReq.Header.Set("X-API-Key", d.apiKey)
+	}
+
+	resp, err := d.http.Do(httpReq)
+	if err != nil {
+		return d.unreachable(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return d.decodeError(resp)
+	}
+	return nil
+}
+
+// seedDemo asks the daemon to generate and persist a realistic dogfood
+// session in its own store, returning the seeded session ID. Seeding via the
+// daemon (rather than the CLI's local DB) is what keeps the dashboard, chat,
+// and search from showing phantom data (DF-014).
+func (d *daemonClient) seedDemo(ctx context.Context, flows, hoursBack int, spread bool) (string, error) {
+	body, err := json.Marshal(struct {
+		Flows     int  `json:"flows"`
+		HoursBack int  `json:"hours_back"`
+		Spread    bool `json:"spread"`
+	}{Flows: flows, HoursBack: hoursBack, Spread: spread})
+	if err != nil {
+		return "", fmt.Errorf("encode demo request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		d.baseURL+"/api/v1/demo/seed", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if d.apiKey != "" {
+		httpReq.Header.Set("X-API-Key", d.apiKey)
+	}
+
+	resp, err := d.http.Do(httpReq)
+	if err != nil {
+		return "", d.unreachable(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", d.decodeError(resp)
+	}
+
+	var out struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode demo response: %w", err)
+	}
+	return out.SessionID, nil
+}
+
 // unreachable wraps transport-level failures with a hint to start the
 // daemon, which is the fix for the DF-001 failure mode.
 func (d *daemonClient) unreachable(err error) error {

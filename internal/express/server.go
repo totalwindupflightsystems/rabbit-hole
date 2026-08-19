@@ -168,6 +168,13 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 	// Daemon aggregate stats for the CLI `status` command (DF-014).
 	s.mux.HandleFunc("GET /api/v1/stats", s.handleStats)
 
+	// Admin operations for the CLI `compact` and `demo` commands (GAP-007).
+	// Both route through the daemon so the CLI never opens its own DB path
+	// (DF-014). The CLI parses durations; the server receives resolved
+	// timestamps.
+	s.mux.HandleFunc("POST /api/v1/compact", s.handleCompact)
+	s.mux.HandleFunc("POST /api/v1/demo/seed", s.handleDemoSeed)
+
 	// Flows
 	s.mux.HandleFunc("GET /api/v1/flows/{id}", s.handleGetFlow)
 	s.mux.HandleFunc("GET /api/v1/flows/{id}/context-window", s.handleGetContextWindow)

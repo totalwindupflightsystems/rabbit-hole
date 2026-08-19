@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -14,6 +15,7 @@ import (
 
 func newCompactCmd() *cobra.Command {
 	var (
+		addr          string
 		beforeStr     string
 		retentionDays int
 	)
@@ -29,11 +31,9 @@ func newCompactCmd() *cobra.Command {
 				return fmt.Errorf("config: %w", err)
 			}
 
-			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
-			if err != nil {
-				return fmt.Errorf("storage: %w", err)
+			if addr != "" {
+				cfg.ListenAddr = addr
 			}
-			defer store.Close()
 
 			var durStr string
 			if beforeStr != "" {
@@ -53,6 +53,24 @@ func newCompactCmd() *cobra.Command {
 
 			fmt.Printf("Compacting data older than %s ago...\n", durStr)
 			cutoff := nowFunc().Add(-dur)
+
+			// Route through the daemon (GAP-007): the daemon owns the
+			// database, so compacting the CLI's own DB path could hit a
+			// different file than the one the daemon serves (DF-014).
+			if addr != "" {
+				if err := newDaemonClient(cfg.ListenAddr).compact(cobraCmd.Context(), cutoff.UTC().Format(time.RFC3339)); err != nil {
+					return err
+				}
+				fmt.Println("Compact complete.")
+				return nil
+			}
+
+			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
+			if err != nil {
+				return fmt.Errorf("storage: %w", err)
+			}
+			defer store.Close()
+
 			if err := store.Compact(cobraCmd.Context(), cutoff); err != nil {
 				return fmt.Errorf("compact: %w", err)
 			}
@@ -62,6 +80,7 @@ func newCompactCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 	cmd.Flags().StringVar(&beforeStr, "before", "", "Delete data before this duration (e.g., -30d, -720h)")
 	cmd.Flags().IntVar(&retentionDays, "retention", 0, "Delete data older than N days")
 

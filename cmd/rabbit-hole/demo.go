@@ -22,6 +22,7 @@ import (
 // dashboard and watch the trace explorer light up.
 func newDemoCmd() *cobra.Command {
 	var (
+		addr      string
 		nFlows    int
 		hoursBack int
 		spread    bool
@@ -42,13 +43,43 @@ Use this to dogfood Rabbit-Hole on itself: seed, serve, open /dashboard.`,
 				return fmt.Errorf("config: %w", err)
 			}
 
+			if addr != "" {
+				cfg.ListenAddr = addr
+			}
+
+			ctx := cobraCmd.Context()
+
+			// Route through the daemon (GAP-007): the daemon owns the
+			// database, so seeding the CLI's own DB path would leave the
+			// dashboard with phantom data the daemon never sees (DF-014).
+			if addr != "" {
+				sessionID, err := newDaemonClient(cfg.ListenAddr).seedDemo(ctx, nFlows, hoursBack, spread)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("Seeded dogfood session %s\n", sessionID)
+				fmt.Println()
+
+				// Point the hint at the address the server actually binds
+				// (cfg.ListenAddr honors RABBITHOLE_LISTEN_ADDR), not a
+				// hardcoded port. 0.0.0.0 is not a reachable URL host, so
+				// print localhost in that case.
+				host, port, err := net.SplitHostPort(cfg.ListenAddr)
+				if err != nil {
+					return fmt.Errorf("config: invalid listen addr %q: %w", cfg.ListenAddr, err)
+				}
+				if host == "" || host == "0.0.0.0" {
+					host = "localhost"
+				}
+				fmt.Printf("Next: run `rabbit-hole serve` and open http://%s:%s/dashboard\n", host, port)
+				return nil
+			}
+
 			store, err := storage.NewSQLiteStore(cfg.DBPath, nil)
 			if err != nil {
 				return fmt.Errorf("storage: %w", err)
 			}
 			defer store.Close()
-
-			ctx := cobraCmd.Context()
 
 			start := time.Now().Add(-time.Duration(hoursBack) * time.Hour)
 			var window time.Duration
@@ -143,6 +174,7 @@ Use this to dogfood Rabbit-Hole on itself: seed, serve, open /dashboard.`,
 		},
 	}
 
+	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
 	cmd.Flags().IntVar(&nFlows, "flows", 48, "number of flows to generate")
 	cmd.Flags().IntVar(&hoursBack, "hours-back", 3, "start the session this many hours in the past")
 	cmd.Flags().BoolVar(&spread, "spread", false, "spread flows evenly over the hours-back window")
