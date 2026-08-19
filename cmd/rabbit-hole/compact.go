@@ -81,7 +81,7 @@ func newCompactCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
-	cmd.Flags().StringVar(&beforeStr, "before", "", "Delete data before this duration (e.g., -30d, -720h)")
+	cmd.Flags().StringVar(&beforeStr, "before", "", "Delete data before this duration (e.g., -30d, -720h, -10m, -90s)")
 	cmd.Flags().IntVar(&retentionDays, "retention", 0, "Delete data older than N days")
 
 	return cmd

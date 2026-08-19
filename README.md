@@ -49,6 +49,7 @@ make build
 
 # Compact old data
 ./bin/rabbit-hole compact --before 720h
+# Or use minutes/seconds: --before 10m, --before 90s
 ```
 
 Sessions are **persistent**: `attach` hands the session to the running daemon,
