@@ -43,9 +43,13 @@ make build
 # Search flows
 # Note: search queries recorded flows. On a fresh unprivileged install the
 # only data is the --demo-stream demo session, which covers llm/patch/memory/
-# network intents — so `search "patch"` matches, while `search "sql error"`
-# returns "No results found." until you record real flows.
-./bin/rabbit-hole search "patch"
+# network intents — so `search "write"` matches right away, while
+# `search "sql error"` returns "No results found." until you record real flows.
+# Warm-up window: each demo intent's first flow lands within ~30-60s of serve
+# start, so searching for a term from a just-published intent (e.g. "patch")
+# can return "No results found." until its first flow lands — re-run the
+# search after ~30s if that happens.
+./bin/rabbit-hole search "write"
 
 # Compact old data
 ./bin/rabbit-hole compact --before 720h
