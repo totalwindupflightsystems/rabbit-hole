@@ -54,3 +54,10 @@ internal/collector/bpf/vmlinux.h
 .coding-hermes/board/board.db.wal
 .coding-hermes/board/*.parquet
 .coding-hermes/board/*.duckdb
+
+# Foreman scratch scripts (regenerated per tick)
+.coding-hermes/_*
+# Stray build artifact + DAGger scratch DB
+cmd/rabbit-hole/rabbit-hole
+dagger.db
+.gitreins/usage.jsonl
