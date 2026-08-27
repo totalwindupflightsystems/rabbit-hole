@@ -130,6 +130,14 @@ With a remote backend configured, `/health` reports the classifier as
 - **Linux** with eBPF support (kernel 5.11+) and **CAP_SYS_RESOURCE** for full telemetry collection
 - **SQLite** (embedded via `modernc.org/sqlite` — no CGO required)
 
+### Go toolchain
+
+Rabbit-Hole is a Go project — install Go 1.26+ and `make` before building:
+
+- **Ubuntu/Debian**: `sudo apt-get install -y golang-go` (add `build-essential` for `make`)
+- **Alternative**: official Go tarball from https://go.dev/dl/ — extract to `/usr/local` and add `/usr/local/go/bin` to your `PATH`
+- **Verify**: `go version` prints 1.26+; `make --version` works (else `sudo apt-get install -y build-essential`)
+
 ### eBPF privileges
 
 Full kernel telemetry (the Collect layer) requires:
