@@ -40,8 +40,10 @@ See `docs/dogfood/2026-08-27-integration.md` for the full report.
 | `./bin/rabbit-hole demo --flows N --hours-back M` | batch-seed realistic data (--spread works) | ✅ |
 | `./bin/rabbit-hole classify-server --addr :50051 [--token T]` | remote gRPC classifier backend (fleet setup) | ✅ (DF-023) |
 | `./bin/rabbit-hole chat/search/status/list/detach/compact` | CLI over the daemon/DB | ✅ |
-| HTTP API | `/health`, `/api/v1/sessions|flows|search|chat|metrics|dashboard/summary`, `/api/v1/ws/sessions/{id}` | ✅ |
+| HTTP API | `/health`, `/api/v1/sessions|search|chat|metrics|dashboard/summary`, `/api/v1/flows/{id}`, `/api/v1/flows/{id}/context-window`, `/api/v1/ws/sessions/{id}` | ✅ |
 | `/dashboard/` | embedded SPA (trailing slash required) | ✅ |
+
+Note: there is no `GET /api/v1/flows` list endpoint — use `POST /api/v1/search` instead (it returns flows).
 
 ## Fast start (unprivileged host)
 
