@@ -388,11 +388,14 @@ func (s *SQLiteStore) QueryFlows(ctx context.Context, req types.FlowQuery) ([]ty
 		args = append(args, "%"+req.Query+"%", "%"+req.Query+"%")
 	}
 	if !req.TimeRange.Start.IsZero() {
-		q += " AND start_time >= ?"
+		// Compare via unixepoch() so stored LOCAL-offset timestamps and
+		// UTC "Z" query timestamps normalize to the same seconds (DF-034).
+		// Raw TEXT comparison would sort 'Z' before '-05:00' for the same instant.
+		q += " AND unixepoch(start_time) >= unixepoch(?)"
 		args = append(args, req.TimeRange.Start.Format(time.RFC3339Nano))
 	}
 	if !req.TimeRange.End.IsZero() {
-		q += " AND start_time <= ?"
+		q += " AND unixepoch(start_time) <= unixepoch(?)"
 		args = append(args, req.TimeRange.End.Format(time.RFC3339Nano))
 	}
 	if req.MinConfidence > 0 {
@@ -669,7 +672,7 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 		s.logger.Info("deleted old traces", "count", n)
 	}
 
-	result, err = s.db.ExecContext(ctx, `DELETE FROM flows WHERE start_time < ?`, cutoff)
+	result, err = s.db.ExecContext(ctx, `DELETE FROM flows WHERE unixepoch(start_time) < unixepoch(?)`, cutoff)
 	if err != nil {
 		return fmt.Errorf("delete old flows: %w", err)
 	}
