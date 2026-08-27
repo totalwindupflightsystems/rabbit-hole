@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -17,6 +18,12 @@ import (
 
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
+
+// defaultChatTimeout is the per-request timeout for real chat model
+// calls. Local CPU models (Ollama et al.) routinely exceed 30s on their
+// first load, so the default is generous; the warm-up call at serve
+// startup absorbs most of that penalty (DF-035).
+const defaultChatTimeout = 120 * time.Second
 
 // ChatModelConfig configures a RealChatModel.
 //
@@ -27,7 +34,7 @@ type ChatModelConfig struct {
 	Endpoint string        // RABBITHOLE_CHAT_MODEL_ENDPOINT
 	Model    string        // RABBITHOLE_CHAT_MODEL_NAME
 	APIKey   string        // RABBITHOLE_CHAT_MODEL_API_KEY
-	Timeout  time.Duration // per-request timeout (default 30s)
+	Timeout  time.Duration // per-request timeout (default 120s — cold local models need headroom, DF-035)
 	Logger   *slog.Logger
 }
 
@@ -38,6 +45,7 @@ type ChatModelConfig struct {
 //   - RABBITHOLE_CHAT_MODEL_ENDPOINT (required)
 //   - RABBITHOLE_CHAT_MODEL_NAME     (required)
 //   - RABBITHOLE_CHAT_MODEL_API_KEY  (required)
+//   - RABBITHOLE_CHAT_MODEL_TIMEOUT  (optional, Go duration, default 120s)
 func ChatConfigFromEnv() (ChatModelConfig, error) {
 	endpoint := strings.TrimRight(os.Getenv("RABBITHOLE_CHAT_MODEL_ENDPOINT"), "/")
 	model := os.Getenv("RABBITHOLE_CHAT_MODEL_NAME")
@@ -53,11 +61,21 @@ func ChatConfigFromEnv() (ChatModelConfig, error) {
 		return ChatModelConfig{}, errors.New("RABBITHOLE_CHAT_MODEL_API_KEY is not set")
 	}
 
+	// Per-request timeout, defaulting to 120s. An unparseable or
+	// non-positive value falls back to the default instead of failing:
+	// a misconfigured timeout must not silently disable the model.
+	timeout := defaultChatTimeout
+	if v := strings.TrimSpace(os.Getenv("RABBITHOLE_CHAT_MODEL_TIMEOUT")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			timeout = d
+		}
+	}
+
 	return ChatModelConfig{
 		Endpoint: endpoint,
 		Model:    model,
 		APIKey:   apiKey,
-		Timeout:  30 * time.Second,
+		Timeout:  timeout,
 	}, nil
 }
 
@@ -80,7 +98,7 @@ func NewRealChatModel(cfg ChatModelConfig, client *http.Client) *RealChatModel {
 	if client == nil {
 		timeout := cfg.Timeout
 		if timeout <= 0 {
-			timeout = 30 * time.Second
+			timeout = defaultChatTimeout
 		}
 		client = &http.Client{Timeout: timeout}
 	}
@@ -93,6 +111,24 @@ func NewRealChatModel(cfg ChatModelConfig, client *http.Client) *RealChatModel {
 		client: client,
 		logger: logger,
 	}
+}
+
+// WarmUp pre-loads the model with a minimal chat completion so the first
+// user query doesn't pay the cold-start penalty (DF-035). It is
+// best-effort: failures are logged as warnings and never returned —
+// serving must not depend on the model being reachable at startup.
+func (m *RealChatModel) WarmUp(ctx context.Context, message string) {
+	body := chatRequest{
+		Model: m.cfg.Model,
+		Messages: []chatMessage{
+			{Role: "user", Content: message},
+		},
+	}
+	if _, err := m.complete(ctx, body); err != nil {
+		m.logger.Warn("chat model warm-up failed (non-fatal)", "err", err)
+		return
+	}
+	m.logger.Info("chat model warmed up", "model", m.cfg.Model)
 }
 
 // --- TranslateQuery ---
@@ -302,6 +338,12 @@ type chatResponse struct {
 }
 
 // complete posts the chat request and returns the assistant text.
+//
+// Timeout-class failures (context deadline exceeded, net timeouts) are
+// retried ONCE with a fresh context: cold local models can exceed the
+// first attempt's budget while loading, and the second attempt usually
+// succeeds with the model already resident (DF-035). Non-timeout
+// failures (auth, 4xx/5xx) are never retried.
 func (m *RealChatModel) complete(ctx context.Context, req chatRequest) (string, error) {
 	endpoint := m.cfg.Endpoint + "/chat/completions"
 
@@ -310,18 +352,33 @@ func (m *RealChatModel) complete(ctx context.Context, req chatRequest) (string, 
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if m.cfg.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+m.cfg.APIKey)
+	// do performs one attempt with the given context. The request is
+	// rebuilt per attempt so a retry gets a genuinely fresh context.
+	do := func(reqCtx context.Context) (*http.Response, error) {
+		httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint, bytes.NewReader(payload))
+		if err != nil {
+			return nil, fmt.Errorf("build request: %w", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		if m.cfg.APIKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+m.cfg.APIKey)
+		}
+		resp, err := m.client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("http call: %w", err)
+		}
+		return resp, nil
 	}
 
-	resp, err := m.client.Do(httpReq)
+	resp, err := do(ctx)
+	if err != nil && isTimeoutError(err) {
+		m.logger.Warn("chat request timed out; retrying once with a fresh context", "err", err)
+		retryCtx, cancel := m.freshRetryContext()
+		defer cancel()
+		resp, err = do(retryCtx)
+	}
 	if err != nil {
-		return "", fmt.Errorf("http call: %w", err)
+		return "", err
 	}
 	defer resp.Body.Close()
 
@@ -350,6 +407,29 @@ func (m *RealChatModel) complete(ctx context.Context, req chatRequest) (string, 
 		return "", errors.New("chat API returned empty content")
 	}
 	return text, nil
+}
+
+// freshRetryContext returns a context for a retry attempt, independent
+// of the original request context (which may be near its deadline or
+// canceled by the client). Bounded by the client's own timeout when one
+// is set, so the retry gets a full per-request budget.
+func (m *RealChatModel) freshRetryContext() (context.Context, context.CancelFunc) {
+	if m.client.Timeout > 0 {
+		return context.WithTimeout(context.Background(), m.client.Timeout)
+	}
+	return context.WithCancel(context.Background())
+}
+
+// isTimeoutError reports whether err is a timeout-class failure: a
+// context deadline exceeded, a deadline-exceeded poll error, or a
+// net.Error with Timeout() true. Used to decide retry-eligibility and
+// the retryable flag on the chat error body (DF-035).
+func isTimeoutError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 // --- helpers ---

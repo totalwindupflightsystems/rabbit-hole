@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -56,6 +57,12 @@ func newChatCmd() *cobra.Command {
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
+				// Surface the daemon's structured error message when present
+				// (DF-035): a bare status code loses the retry hint. Falls
+				// back to the status code for legacy/plain-text error bodies.
+				if msg := errorMessageFromBody(resp.Body); msg != "" {
+					return fmt.Errorf("chat: %s", msg)
+				}
 				return fmt.Errorf("chat: server returned %d", resp.StatusCode)
 			}
 
@@ -89,4 +96,31 @@ func newChatCmd() *cobra.Command {
 	cmd.Flags().StringVar(&sessionID, "session", "", "Filter by session ID")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "JSON output")
 	return cmd
+}
+
+// errorMessageFromBody extracts a human-readable message from a daemon
+// error response body. Handles both the structured shape
+// {"error":{"message":...,"retryable":...}} introduced by DF-035 and
+// the legacy bare-string shape {"error":"..."}. Returns "" when no
+// message can be parsed (the caller then falls back to the status code).
+func errorMessageFromBody(r io.Reader) string {
+	body, err := io.ReadAll(io.LimitReader(r, 64<<10))
+	if err != nil {
+		return ""
+	}
+	var structured struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &structured); err == nil && structured.Error.Message != "" {
+		return structured.Error.Message
+	}
+	var legacy struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &legacy); err == nil && legacy.Error != "" {
+		return legacy.Error
+	}
+	return ""
 }

@@ -88,10 +88,20 @@ env vars below.
 - `RABBITHOLE_CHAT_MODEL_NAME` — the model name to use (e.g. `llama3.1`).
 - `RABBITHOLE_CHAT_MODEL_API_KEY` — API key for the endpoint (any value works
   for local endpoints like Ollama).
+- `RABBITHOLE_CHAT_MODEL_TIMEOUT` — per-request timeout as a Go duration
+  (e.g. `120s`, `2m`). Default `120s`.
 
-All three are required to enable the real model; if any is unset, the server
-logs a warning and uses built-in stub answers. Set `RABBITHOLE_CHAT_ENABLED=false`
-to force the stub even when the env vars are present.
+All three required vars are needed to enable the real model; if any is unset,
+the server logs a warning and uses built-in stub answers. Set
+`RABBITHOLE_CHAT_ENABLED=false` to force the stub even when the env vars are
+present.
+
+Latency with local models: a CPU-backed model (Ollama and friends) can take
+tens of seconds to load on its first call. The daemon fires a warm-up call at
+startup so the first real query usually misses that penalty, and a timed-out
+call is retried once before the chat API answers `503` with a retryable error
+("chat model timed out — the model may still be loading; please retry"). If
+your model is unusually slow to load, raise `RABBITHOLE_CHAT_MODEL_TIMEOUT`.
 
 ### Remote classification backend
 

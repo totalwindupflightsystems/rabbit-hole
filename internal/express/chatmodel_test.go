@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -614,5 +615,173 @@ func TestStubChatModel_TranslateQuery_PlainKeyword(t *testing.T) {
 		if req.Limit != 50 {
 			t.Errorf("Limit=%d, want 50", req.Limit)
 		}
+	}
+}
+
+// --- DF-035: configurable timeout, retry-once, warm-up ---
+
+// TestChatConfigFromEnv_Timeout verifies RABBITHOLE_CHAT_MODEL_TIMEOUT
+// parsing: unset → 120s default, explicit value → honored, invalid value
+// → falls back to the default without failing. DF-035.
+func TestChatConfigFromEnv_Timeout(t *testing.T) {
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", "http://example.invalid/v1")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	// Unset → default 120s (cold local models need headroom).
+	os.Unsetenv("RABBITHOLE_CHAT_MODEL_TIMEOUT")
+	cfg, err := ChatConfigFromEnv()
+	if err != nil {
+		t.Fatalf("ChatConfigFromEnv: %v", err)
+	}
+	if cfg.Timeout != 120*time.Second {
+		t.Errorf("Timeout=%v, want default 120s", cfg.Timeout)
+	}
+
+	// Explicit value wins.
+	t.Setenv("RABBITHOLE_CHAT_MODEL_TIMEOUT", "45s")
+	cfg, err = ChatConfigFromEnv()
+	if err != nil {
+		t.Fatalf("ChatConfigFromEnv: %v", err)
+	}
+	if cfg.Timeout != 45*time.Second {
+		t.Errorf("Timeout=%v, want 45s", cfg.Timeout)
+	}
+
+	// Invalid value → default, no crash: a misconfigured timeout must
+	// not disable the model.
+	t.Setenv("RABBITHOLE_CHAT_MODEL_TIMEOUT", "not-a-duration")
+	cfg, err = ChatConfigFromEnv()
+	if err != nil {
+		t.Fatalf("ChatConfigFromEnv: %v", err)
+	}
+	if cfg.Timeout != 120*time.Second {
+		t.Errorf("Timeout=%v, want default 120s for invalid value", cfg.Timeout)
+	}
+}
+
+// TestNewRealChatModel_DefaultTimeoutFallback verifies the <=0 config
+// fallback in NewRealChatModel now lands at 120s, not 30s. DF-035.
+func TestNewRealChatModel_DefaultTimeoutFallback(t *testing.T) {
+	m := NewRealChatModel(ChatModelConfig{Endpoint: "http://x", Model: "m", APIKey: "k"}, nil)
+	if m.client.Timeout != 120*time.Second {
+		t.Errorf("client.Timeout=%v, want default 120s", m.client.Timeout)
+	}
+	m2 := NewRealChatModel(ChatModelConfig{Endpoint: "http://x", Model: "m", APIKey: "k", Timeout: 7 * time.Second}, nil)
+	if m2.client.Timeout != 7*time.Second {
+		t.Errorf("client.Timeout=%v, want 7s", m2.client.Timeout)
+	}
+}
+
+// roundTripperFunc adapts a func to http.RoundTripper for tests.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestRealChatModel_RetryOnceOnTimeout proves the retry-once behavior:
+// a timeout-class failure on the first attempt is retried once with a
+// fresh context and the second attempt's success is surfaced. DF-035.
+func TestRealChatModel_RetryOnceOnTimeout(t *testing.T) {
+	ts := stubChatServer(t, defaultTranslateHandler(t, "ping", 50, nil, nil))
+	tsClient := ts.Client()
+
+	calls := 0
+	client := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			// First attempt dies with a timeout-class error — exactly what
+			// happens when a cold local model exceeds the request budget.
+			return nil, &url.Error{Op: "Post", URL: r.URL.String(), Err: context.DeadlineExceeded}
+		}
+		return tsClient.Transport.RoundTrip(r)
+	})}
+
+	m := NewRealChatModel(ChatModelConfig{Endpoint: ts.URL, Model: "m", APIKey: "sk"}, client)
+	got, err := m.TranslateQuery(context.Background(), "ping")
+	if err != nil {
+		t.Fatalf("TranslateQuery after retry: %v", err)
+	}
+	if got.Query != "ping" {
+		t.Errorf("Query=%q, want ping", got.Query)
+	}
+	if calls != 2 {
+		t.Errorf("calls=%d, want exactly 2 (initial attempt + one retry)", calls)
+	}
+}
+
+// TestRealChatModel_NoRetryOnNonTimeout verifies non-timeout failures
+// (HTTP 401 here) are never retried — the retry is reserved for the
+// cold-start timeout class. DF-035.
+func TestRealChatModel_NoRetryOnNonTimeout(t *testing.T) {
+	ts := stubChatServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"error":{"message":"bad key"}}`)
+	})
+	tsClient := ts.Client()
+
+	calls := 0
+	client := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		return tsClient.Transport.RoundTrip(r)
+	})}
+
+	m := NewRealChatModel(ChatModelConfig{Endpoint: ts.URL, Model: "m", APIKey: "sk"}, client)
+	if _, err := m.TranslateQuery(context.Background(), "x"); err == nil {
+		t.Error("expected error on HTTP 401")
+	}
+	if calls != 1 {
+		t.Errorf("calls=%d, want exactly 1 — non-timeout failures must not be retried", calls)
+	}
+}
+
+// TestRealChatModel_WarmUp verifies WarmUp fires one minimal chat
+// completion against the endpoint and never surfaces an error. DF-035.
+func TestRealChatModel_WarmUp(t *testing.T) {
+	var called bool
+	ts := stubChatServer(t, func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": "ok"}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	m := NewRealChatModel(ChatModelConfig{Endpoint: ts.URL, Model: "m", APIKey: "sk"}, ts.Client())
+	m.WarmUp(context.Background(), "ping") // must complete without error
+	if !called {
+		t.Error("WarmUp did not call the chat completions endpoint")
+	}
+}
+
+// TestServerStart_WarmUpFailureNonFatal verifies serve still starts and
+// answers /health when the real chat model's endpoint is down — the
+// warm-up is best-effort and must never block or break startup. DF-035.
+func TestServerStart_WarmUpFailureNonFatal(t *testing.T) {
+	// A dead endpoint: warm-up fails fast with connection refused.
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	dead.Close()
+
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "true")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", dead.URL)
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	store := newTestStore(t)
+	defer store.Close()
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	defer srv.Shutdown(context.Background())
+
+	if err := srv.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	resp, err := http.Get("http://" + srv.Addr() + "/health")
+	if err != nil {
+		t.Fatalf("health probe: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("health status=%d, want 200 despite failed warm-up", resp.StatusCode)
 	}
 }

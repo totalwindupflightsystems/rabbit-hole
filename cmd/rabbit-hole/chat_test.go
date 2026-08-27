@@ -252,3 +252,82 @@ func TestChatCmd_StubWarning_KeepsJSONStdoutClean(t *testing.T) {
 		t.Errorf("stdout polluted with warning text, got: %q", stdout)
 	}
 }
+
+// --- DF-035: CLI surfaces structured daemon errors ---
+
+// TestChatCmd_SurfacesStructuredError verifies the chat CLI prints the
+// daemon's structured error message ({"error":{"message":...}}) instead
+// of only "server returned <code>". DF-035.
+func TestChatCmd_SurfacesStructuredError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"error":{"message":"chat model timed out — the model may still be loading; please retry","retryable":true}}`)
+	}))
+	defer ts.Close()
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	var gotErr error
+	captureStdout(func() {
+		cmd := newChatCmd()
+		cmd.SetArgs([]string{"what failed?"})
+		gotErr = cmd.Execute()
+	})
+	if gotErr == nil {
+		t.Fatal("expected error for 503 response")
+	}
+	if !strings.Contains(gotErr.Error(), "model may still be loading") {
+		t.Errorf("error should carry the daemon's message, got: %v", gotErr)
+	}
+	if strings.Contains(gotErr.Error(), "server returned 503") {
+		t.Errorf("error should not fall back to the bare status code, got: %v", gotErr)
+	}
+}
+
+// TestChatCmd_LegacyErrorBodyFallback verifies the legacy {"error":"..."}
+// string shape is still surfaced — the parse must handle both forms.
+// DF-035.
+func TestChatCmd_LegacyErrorBodyFallback(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, `{"error":"invalid request body: boom"}`)
+	}))
+	defer ts.Close()
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	var gotErr error
+	captureStdout(func() {
+		cmd := newChatCmd()
+		cmd.SetArgs([]string{"x"})
+		gotErr = cmd.Execute()
+	})
+	if gotErr == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(gotErr.Error(), "invalid request body: boom") {
+		t.Errorf("legacy error message not surfaced, got: %v", gotErr)
+	}
+}
+
+// TestChatCmd_BareStatusCodeFallback verifies a non-JSON error body
+// still falls back to the status-code message.
+func TestChatCmd_BareStatusCodeFallback(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	var gotErr error
+	captureStdout(func() {
+		cmd := newChatCmd()
+		cmd.SetArgs([]string{"x"})
+		gotErr = cmd.Execute()
+	})
+	if gotErr == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(gotErr.Error(), "server returned 500") {
+		t.Errorf("non-JSON body should fall back to the status code, got: %v", gotErr)
+	}
+}

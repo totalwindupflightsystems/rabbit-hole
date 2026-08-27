@@ -10,6 +10,21 @@ import (
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
+// chatErrorBody is the structured error payload returned by the chat
+// endpoint on translate failure. The CLI parses error.message to
+// surface it to the user instead of a bare status code (DF-035).
+type chatErrorBody struct {
+	Error chatErrorDetail `json:"error"`
+}
+
+// chatErrorDetail carries the human message plus a machine-readable
+// retryable flag so clients (and the CLI) can tell a "try again — the
+// model may still be loading" case apart from a permanent failure.
+type chatErrorDetail struct {
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+}
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	var req types.ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -28,7 +43,20 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	searchReq, err := s.chatModel.TranslateQuery(ctx, req.Message)
 	if err != nil {
 		s.logger.Error("query translation failed", "err", err, "message", req.Message)
-		writeError(w, http.StatusInternalServerError, "failed to understand query")
+		// Structured error body (DF-035): timeout-class failures are
+		// retryable — the model may still be loading — and get 503;
+		// other failures (bad key, rejected endpoint) get 500. The CLI
+		// parses error.message to surface it to the user.
+		retryable := isTimeoutError(err)
+		status := http.StatusInternalServerError
+		message := "failed to understand query"
+		if retryable {
+			status = http.StatusServiceUnavailable
+			message = "chat model timed out — the model may still be loading; please retry"
+		}
+		writeJSON(w, status, chatErrorBody{
+			Error: chatErrorDetail{Message: message, Retryable: retryable},
+		})
 		return
 	}
 

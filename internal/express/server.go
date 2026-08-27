@@ -208,6 +208,15 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.srv.Addr = ln.Addr().String() // capture actual bound address
 	s.logger.Info("starting expression server", "addr", s.srv.Addr)
+
+	// Pre-load a real chat model in the background so the first user
+	// query doesn't pay the cold-start penalty (DF-035). Non-fatal: the
+	// warm-up never blocks startup and failures are logged as warnings
+	// only — serving works fine while the model warms up.
+	if real, ok := s.chatModel.(*RealChatModel); ok {
+		go real.WarmUp(ctx, "ping")
+	}
+
 	go func() {
 		if err := s.srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("server error", "err", err)

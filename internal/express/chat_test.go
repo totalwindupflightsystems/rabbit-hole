@@ -224,3 +224,88 @@ func TestHandleChat_StubTimeWindowFallbackToRecent(t *testing.T) {
 		t.Error("Stub = false, want true — stub model active")
 	}
 }
+
+// --- DF-035: structured error body on translate failure ---
+
+// TestHandleChat_TranslateTimeout_Retryable503 verifies the cold-start
+// failure mode end to end: a chat completions endpoint that never
+// answers within the client timeout makes translate fail with a
+// timeout-class error, and the API must answer 503 with a retryable
+// structured error body — never a bare 500. DF-035.
+func TestHandleChat_TranslateTimeout_Retryable503(t *testing.T) {
+	// The endpoint accepts the connection but never responds in time.
+	// 300ms sleep vs 50ms client timeout → both the attempt and the
+	// retry time out (retry-once, DF-035).
+	ts := stubChatServer(t, func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+	})
+
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "true")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", ts.URL)
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_TIMEOUT", "50ms")
+
+	store := newTestStore(t)
+	defer store.Close()
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	defer srv.Shutdown(context.Background())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat",
+		strings.NewReader(`{"message":"what failed?"}`))
+	rr := httptest.NewRecorder()
+	srv.handleChat(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d, want 503 (body: %s)", rr.Code, rr.Body.String())
+	}
+	var body chatErrorBody
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if !body.Error.Retryable {
+		t.Error("Retryable=false, want true for a timeout-class failure")
+	}
+	if !strings.Contains(strings.ToLower(body.Error.Message), "timed out") {
+		t.Errorf("message=%q, want a timed-out retry hint", body.Error.Message)
+	}
+}
+
+// TestHandleChat_TranslateFailure_NotRetryable verifies non-timeout
+// translate failures (endpoint unreachable here) return 500 with
+// retryable=false — clients must only retry the loading-model case.
+// DF-035.
+func TestHandleChat_TranslateFailure_NotRetryable(t *testing.T) {
+	// Dead endpoint: connection refused, not a timeout.
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	dead.Close()
+
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "true")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", dead.URL)
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	store := newTestStore(t)
+	defer store.Close()
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	defer srv.Shutdown(context.Background())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat",
+		strings.NewReader(`{"message":"what failed?"}`))
+	rr := httptest.NewRecorder()
+	srv.handleChat(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d, want 500 (body: %s)", rr.Code, rr.Body.String())
+	}
+	var body chatErrorBody
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if body.Error.Retryable {
+		t.Error("Retryable=true, want false for a non-timeout failure")
+	}
+	if body.Error.Message == "" {
+		t.Error("message is empty, want a human-readable message")
+	}
+}

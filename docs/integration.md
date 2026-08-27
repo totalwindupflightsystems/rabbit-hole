@@ -241,6 +241,7 @@ Rabbit-Hole is configured entirely through environment variables:
 | `RABBITHOLE_CHAT_MODEL_ENDPOINT` | — | OpenAI-compatible chat completions base URL (e.g. `http://127.0.0.1:11434/v1` for Ollama) |
 | `RABBITHOLE_CHAT_MODEL_NAME` | — | Model name (e.g. `llama3.1`) |
 | `RABBITHOLE_CHAT_MODEL_API_KEY` | — | API key (any value for local endpoints) |
+| `RABBITHOLE_CHAT_MODEL_TIMEOUT` | `120s` | Per-request timeout for chat model calls (Go duration). Cold local models can exceed 30s on first load; the daemon warms the model at startup, retries once on timeout, and answers `503` retryable when both attempts time out (DF-035) |
 | `RABBITHOLE_CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `RABBITHOLE_RATE_LIMIT_ENABLED` | `true` | Per-endpoint rate limiting |
 | `RABBITHOLE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
