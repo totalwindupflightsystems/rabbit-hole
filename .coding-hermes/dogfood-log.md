@@ -60,3 +60,39 @@ completed sessions with end_time=null.
 **Left behind:** docs/dogfood/2026-08-18-integration.md, diagnostics.md §5-8 updated,
 skills/rabbit-hole-usage/SKILL.md refreshed (state 08-18 + pitfalls 9-11 + new probes),
 6 board tasks (DF-027..032). Foreman cooldown 21600s ≥ 14400 → woken to 900s to work DF-027.
+
+## 2026-08-27 — rabbit-hole — 🟡 PROMISING-BUT-ROUGH (first real-LLM run; DF-027..032 all fixed)
+
+**Promise:** *"A user can attach to a real agent process (zero SDK, eBPF), have Rabbit-Hole
+collect kernel-level telemetry, classify it, and ask 'what did the agent do at 3am?' in plain
+language — self-hosted, one binary."*
+
+**Reality:** Every finding from the 08-18 run re-verified FIXED in real use: DF-027 daemon
+wedge (15+ min soak with heavier load: 28 MB RSS, 0-1% CPU, /health instant — vs 19.7 GB
+before), DF-028 session lifecycle (sleep 45 → completed ~1 s after exit), DF-029
+`compact --before 10m`, DF-030/031/032. Remote classify-server + token auth, WS live
+stream, real-LLM keyword chat (12 actions w/ success marks), search "write", dashboard,
+metrics, exit codes — all verified. **BUT the first run with a REAL LLM (Ollama
+gpt-oss:20b) exposed the core-promise bug the stub had been masking:** time-window
+questions return 0 flows because flows are stored with local-offset timestamps while
+filters compare TEXT lexically against UTC ("Z") timestamps (which the translate prompt
+instructs the LLM to emit). `chat "What did the agent did in the last hour?"` → "no
+matching activity" with 70+ live flows. Also: first LLM chat after daemon start 500s
+(30 s client timeout < cold-model latency).
+
+**Time-to-first-success:** ~2 min (daemon+search). **Friction count:** 4 (NL time chat
+broken, cold-start 500, 18-50 s/questions with no progress UI, /api/v1/flows doc drift).
+
+**Top 3 findings (board tasks):**
+1. DF-034 (P0) — time-window search/chat broken for UTC timestamps; core "at 3am" promise
+   fails with a real model (stub fallback masked it; repro at raw API level).
+2. DF-035 (P1) — first real-LLM chat after daemon start → 30 s timeout → HTTP 500, no
+   guidance; retry after warm-up works.
+3. DF-036 (P3) — docs list a /api/v1/flows list endpoint that doesn't exist (404).
+
+**Also:** DF-037 (P3) — chat CLI silent for 18-50 s per question.
+
+**Left behind:** docs/dogfood/2026-08-27-integration.md (full journey + repros + soak
+table), docs/dogfood/diagnostics.md §9-13 (how it's built, why it breaks, right way),
+skills/rabbit-hole-usage/SKILL.md refreshed (state 08-27, new hazards + probes),
+4 board tasks (DF-034..037). Foreman cooldown 21600s ≥ 14400 → woken to 900s to work DF-034/035.

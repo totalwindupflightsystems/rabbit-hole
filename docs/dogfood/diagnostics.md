@@ -146,3 +146,86 @@ records the new failure modes (DF-027..DF-032). Companion: `2026-08-18-integrati
   REL-003 (external dev verification — human-gated), plus DF-027..DF-032 from
   this run. The E2E battery has never covered session-lifecycle transitions or
   daemon soak — both are now board tasks (DF-027/DF-028).
+
+---
+
+# Follow-up run 2026-08-27 — first real-LLM run; the time-window bug surfaces
+
+## 9. What changed since 08-18 (all verified live this run)
+
+- **DF-027 (daemon wedge) FIXED.** 15+ min soak with a heavier load than the
+  08-18 wedge (demo-stream + real LLM + WS subscriber + search/chat loadgen
+  + a second remote-backend daemon on :19734): RSS stayed ~27-29 MB, CPU
+  ~0-1 %, `/health` instant, SIGQUIT clean exit (see §10 table).
+- **DF-028 (session lifecycle) FIXED.** Attached `sleep 45` → `completed`
+  ~1 s after exit; the "parent reaped first" race is handled by marking the
+  session completed instead of leaving a ghost `running`.
+- **DF-029 (compact 10m) FIXED.** `compact --before 10m` now works and
+  deleted exactly the 15 seeded 24 h-old flows + 90 traces.
+- **Real LLM path verified for keyword questions** (Ollama gpt-oss:20b):
+  `chat "patch"` → 12 actions with success/failure marks and follow-up
+  suggestions. This is the first run where the real model (not the stub)
+  answered.
+
+## 10. The time-window bug — how it's built, why it breaks, the right way
+
+**How it's built:** the demo stream (and attach pipeline) write
+`start_time` as Go `time.Now().Format(time.RFC3339Nano)` — i.e. **local
+offset** (`-05:00` on this host). `QueryFlows` filters with
+`AND start_time >= ?` binding `req.TimeRange.Start.Format(time.RFC3339Nano)`.
+SQLite compares TEXT lexically. Two RFC3339Nano strings with *different
+offsets do not compare correctly*: `'…T05:11:39.436-05:00'` (10:11 UTC)
+sorts *before* `'…T08:11:26Z'` because '5' < '8'.
+
+**The trap that hid it:** chat stub mode has a fallback — time-only stub
+questions returning 0 flows fall back to "recent flows" (chat.go:61-70).
+So the DF-002 acceptance probe (stub, "50 flows") passed while the filter
+itself was never exercised. Real-model requests skip the fallback. This is
+the premature-completion pattern from the research pack: the acceptance
+probe tested the stub's fallback, not the store's filter.
+
+**Repro ladder (user-level → store-level):**
+1. `chat "What did the agent do in the last hour?"` (real model) → 0 flows.
+2. `POST /api/v1/search` with `time_range.start` in `Z` → 0 flows.
+3. Same window expressed with `-05:00` offset → flows returned.
+4. `SELECT start_time FROM flows LIMIT 1` → shows the `-05:00` storage.
+
+**The right way:** one of —
+- write timestamps normalized to UTC (`time.Now().UTC().Format(RFC3339Nano)`)
+  at every insert site (demo stream, attach pipeline, session manager); or
+- compare numerically in SQL: `AND unixepoch(start_time) >= unixepoch(?)`
+  (modernc sqlite supports `unixepoch()`); or
+- store epoch seconds/nanos and format only at the API edge.
+Plus a regression test that inserts mixed-offset rows and queries with a
+UTC window. After the fix, the stub fallback can stay (it's honest UX) but
+the acceptance probe must run against the real model AND the raw API, not
+just the stub.
+
+## 11. The LLM cold-start 500 — how it breaks, the right way
+
+`RealChatModel.complete` runs with a 30 s HTTP client timeout. A cold local
+model (first call after daemon start: process load + tokenization) exceeds
+30 s → `translate: http call: … context deadline exceeded` → chat handler
+500s → CLI prints `Error: chat: server returned 500`. Warm model: 200 in
+~20-25 s per round-trip (translate + summarize = 18-50 s per question).
+
+**The right way:** warm-up request at `serve` startup when a real model is
+configured; make the timeout configurable (e.g. `RABBITHOLE_CHAT_TIMEOUT`)
+or retry once on timeout; return a JSON error body that tells the user the
+model timed out and to retry, instead of a bare 500.
+
+## 12. Soak table (DF-027 acceptance probe, 2026-08-27)
+
+Daemon: `serve --demo-stream --no-ebpf` + real chat model, plus loadgen
+(WS subscriber + search/8s + chat/24s), plus second remote daemon :19734.
+Baseline at 4:36 = 27,212 KB RSS. Sampled again at 5:51 = 28,096 KB.
+No drift over the run; see integration report §5 for the end state.
+
+## 13. History notes (updated)
+
+- DF-027..DF-032 complete + judge-passed; this run re-verified all of them
+  live. DF-033 (P3, double-store WARN) still open.
+- New: DF-034 (P0 time-window UTC filter), DF-035 (P1 LLM cold-start 500),
+  DF-036 (P3 flows-list doc drift), DF-037 (P3 chat latency/no-progress UX).
+- The E2E battery still does not cover: real-model chat, mixed-offset
+  timestamp queries, daemon soak — worth adding once DF-034 lands.
