@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
@@ -329,5 +330,69 @@ func TestChatCmd_BareStatusCodeFallback(t *testing.T) {
 	}
 	if !strings.Contains(gotErr.Error(), "server returned 500") {
 		t.Errorf("non-JSON body should fall back to the status code, got: %v", gotErr)
+	}
+}
+
+// --- DF-037: chat CLI progress indication ---
+
+// TestChatCmd_PrintsThinkingProgress verifies the CLI prints "Thinking..."
+// to stderr while the server round-trip is in flight, and clears the line
+// with the ESC[K escape once the response arrives. The delayed server
+// simulates a slow local LLM (two sequential model calls). DF-037.
+func TestChatCmd_PrintsThinkingProgress(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(300 * time.Millisecond) // simulate a slow local model
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(types.ChatResponse{Answer: "done thinking"})
+	}))
+	defer ts.Close()
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	var stdout string
+	stderr := captureStderr(func() {
+		stdout = captureStdout(func() {
+			cmd := newChatCmd()
+			cmd.SetArgs([]string{"what happened?"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("chat: %v", err)
+			}
+		})
+	})
+
+	if !strings.Contains(stderr, "Thinking...") {
+		t.Errorf("stderr missing \"Thinking...\" progress line, got: %q", stderr)
+	}
+	if !strings.Contains(stderr, "\x1b[K") {
+		t.Errorf("stderr missing clear-line escape (\\r ESC[K), got: %q", stderr)
+	}
+	// The progress output must not leak into stdout.
+	if !strings.Contains(stdout, "done thinking") {
+		t.Errorf("stdout missing the answer, got: %q", stdout)
+	}
+	if strings.Contains(stdout, "Thinking") {
+		t.Errorf("stdout polluted with progress text, got: %q", stdout)
+	}
+}
+
+// TestChatCmd_NoThinkingProgressWithJSON verifies --json mode skips the
+// progress line (and its clear escape) so redirected stderr stays clean.
+// DF-037.
+func TestChatCmd_NoThinkingProgressWithJSON(t *testing.T) {
+	ts := chatTestServer(t, types.ChatResponse{Answer: "json answer"})
+	t.Setenv("RABBITHOLE_LISTEN_ADDR", strings.TrimPrefix(ts.URL, "http://"))
+
+	stderr := captureStderr(func() {
+		cmd := newChatCmd()
+		cmd.SetArgs([]string{"--json", "what happened?"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("chat: %v", err)
+		}
+	})
+
+	if strings.Contains(stderr, "Thinking") {
+		t.Errorf("--json mode must not print the progress line, got: %q", stderr)
+	}
+	if strings.Contains(stderr, "\x1b[K") {
+		t.Errorf("--json mode must not print the clear escape, got: %q", stderr)
 	}
 }

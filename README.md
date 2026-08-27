@@ -103,6 +103,10 @@ call is retried once before the chat API answers `503` with a retryable error
 ("chat model timed out — the model may still be loading; please retry"). If
 your model is unusually slow to load, raise `RABBITHOLE_CHAT_MODEL_TIMEOUT`.
 
+Local models (e.g., via Ollama) may take 10-50s per question due to
+cold starts and two sequential LLM calls (query translation + summarization).
+The CLI prints "Thinking..." during processing.
+
 ### Remote classification backend
 
 Classification can also run on a remote host: start `classify-server` (a gRPC

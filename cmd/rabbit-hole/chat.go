@@ -49,12 +49,24 @@ func newChatCmd() *cobra.Command {
 				return fmt.Errorf("marshal: %w", err)
 			}
 
+			// DF-037: local models take 10-50s per question — show progress
+			// instead of looking hung. Skipped in --json mode to keep the
+			// progress line out of redirected stderr streams.
+			if !jsonOut {
+				fmt.Fprint(os.Stderr, "Thinking...")
+			}
+
 			url := fmt.Sprintf("http://%s/api/v1/chat", cfg.ListenAddr)
 			resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
 			if err != nil {
 				return fmt.Errorf("connect to %s: %w\n  Is 'rabbit-hole serve' running?", cfg.ListenAddr, err)
 			}
 			defer resp.Body.Close()
+
+			// Response arrived — clear the "Thinking..." line (DF-037).
+			if !jsonOut {
+				fmt.Fprint(os.Stderr, "\r\033[K")
+			}
 
 			if resp.StatusCode != http.StatusOK {
 				// Surface the daemon's structured error message when present
