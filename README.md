@@ -236,6 +236,13 @@ For a consumer-oriented walkthrough of the HTTP API (endpoints, curl examples,
 WebSocket streaming, configuration), see [docs/integration.md](docs/integration.md).
 The machine-readable contract lives in [specs/openapi.yaml](specs/openapi.yaml).
 
+## Disposable Cache
+
+`.vfs/` is a hilo-generated cache (dependency graph, edges). It is gitignored
+and regenerates automatically when deleted (`hilo graph discover`). Do not
+commit it. If corrupted, delete the directory and re-run `hilo graph discover`
+to regenerate.
+
 ## License
 
 MIT
