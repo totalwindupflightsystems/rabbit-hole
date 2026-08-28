@@ -60,4 +60,6 @@ internal/collector/bpf/vmlinux.h
 # Stray build artifact + DAGger scratch DB
 cmd/rabbit-hole/rabbit-hole
 dagger.db
+dagger.db-shm
+dagger.db-wal
 .gitreins/usage.jsonl
