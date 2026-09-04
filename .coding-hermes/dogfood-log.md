@@ -96,3 +96,5 @@ broken, cold-start 500, 18-50 s/questions with no progress UI, /api/v1/flows doc
 table), docs/dogfood/diagnostics.md §9-13 (how it's built, why it breaks, right way),
 skills/rabbit-hole-usage/SKILL.md refreshed (state 08-27, new hazards + probes),
 4 board tasks (DF-034..037). Foreman cooldown 21600s ≥ 14400 → woken to 900s to work DF-034/035.
+2026-09-04 | PROMISING-BUT-ROUGH | 7s t2fs | friction 5 | 5 findings
+
