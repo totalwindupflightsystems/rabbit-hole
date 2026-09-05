@@ -98,3 +98,42 @@ skills/rabbit-hole-usage/SKILL.md refreshed (state 08-27, new hazards + probes),
 4 board tasks (DF-034..037). Foreman cooldown 21600s ≥ 14400 → woken to 900s to work DF-034/035.
 2026-09-04 | PROMISING-BUT-ROUGH | 7s t2fs | friction 5 | 5 findings
 
+## 2026-09-05 — rabbit-hole — 🟡 PROMISING-BUT-ROUGH (first REAL-eBPF attempt; Collect layer hits a kernel wall)
+
+**Promise:** *"A user can attach to a real agent process with zero SDK, and Rabbit-Hole
+collects kernel-level (eBPF) telemetry, classifies it, and answers 'what did the agent
+do?' — self-hosted, one binary."*
+
+**Reality:** Every prior run (08-08→09-04) tested only `--no-ebpf`/demo degraded mode.
+Today the host had root + all caps + kernel 7.0.0-29 + BTF, so the headline Collect layer
+was exercised for the first time — and it cannot start: `map stack_map: map create:
+invalid argument` even as root. An isolation probe (standalone cilium/ebpf program)
+proved THIS KERNEL rejects ANY BPF_MAP_TYPE_STACK_TRACE map (suspect
+perf_event_paranoid=4), and `attach` misattributes the failure ("requires CAP_SYS_RESOURCE
+and kernel 5.11+" — both satisfied; hint to regen objects can't help). Meanwhile Express/
+Storage remain solid: DF-034's UTC-window search verified FIXED in real use (first
+re-verification), DF-028/029/032 re-verified, 18-min soak clean (5.5 MB RSS). Bunker
+install leg: documented path is root-only for Go install (new P1), clone impossible
+without credentials (recorded, access NOT widened), smoke passed after workarounds;
+agent destroyed cleanly.
+
+**Time-to-first-success:** ~25 s (build+serve+health). **Friction count:** 6 (misleading
+eBPF error, useless regen hint, compact errno, root-only install docs, GOTMPDIR trap,
+undocumented session-scoped WS path).
+
+**Top 3 findings (board tasks):**
+1. DF-RABBIT-HOLE-6 (P0) — eBPF Collect cannot start even WITH full privileges on
+   kernel 7.0 (stack_map EINVAL at the map layer); error message misattributes cause.
+2. DF-RABBIT-HOLE-7 (P1) — README's Go toolchain install is root-only; unprivileged
+   users (the degraded-mode audience) dead at step one of the documented install.
+3. DF-RABBIT-HOLE-8 (P1) — compact vs daemon-owned DB prints raw SQLite
+   `readonly database (8)` with no ownership guidance (normal systemd self-host shape).
+
+**Also:** DF-RABBIT-HOLE-9 (P3, GOTMPDIR/`no space left` docs); partial
+SKIPPED-install-bunker row (fresh-clone untestable without credentials — policy for Bane).
+
+**Left behind:** docs/dogfood/2026-09-05-integration.md, diagnostics.md §14-16 (how the
+collector is built, the stack-map failure mechanism, the isolation-probe method, install
+traps), skills/rabbit-hole-usage/SKILL.md v1.1.0, 4 board tasks, this log.
+2026-09-05 | PROMISING-BUT-ROUGH | 25s t2fs | friction 6 | 4 findings
+

@@ -4,7 +4,7 @@ description: >-
   How to actually USE the rabbit-hole project (agent legibility: collect → classify →
   express). Entry points, run recipes, current state, and the working demo/API patterns.
   Load this before touching the repo.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Rabbit-Hole Usage Skill
@@ -12,30 +12,28 @@ version: 1.0.0
 Rabbit-Hole is a Go binary that watches AI agents and explains their activity: eBPF collect →
 pattern/ML classify → HTTP/WebSocket + chat express. Self-hosted, one binary, zero SDK.
 
-**Current state (2026-08-27):** every prior finding DF-001..DF-032 is
-complete and re-verified live; DF-027 (daemon wedge), DF-028 (session
-lifecycle), DF-029 (compact m/s) fixes confirmed in real use. Real LLM chat
-works for keyword questions (Ollama gpt-oss:20b, 18-50 s/question).
-**Known hazards (dogfood 2026-08-27 — first real-LLM run):**
-- **DF-034 (P0, open): time-window search is broken for UTC timestamps.**
-  Flows are stored with LOCAL offset (`…T05:11:39.436-05:00`) but filters
-  compare TEXT lexically, so any UTC (`Z`) window — exactly what the real
-  LLM emits, per the translate prompt — matches 0 flows.
-  `chat "What did the agent do in the last hour?"` with a real model says
-  "no matching activity" while 70+ flows are live. Stub mode masked this
-  via a fallback (chat.go:61-70). **Workaround until fixed:** pass windows
-  in the same offset as storage, or use keyword queries (`chat "write"`).
-- **DF-035 (P1, open): first LLM chat after daemon start → 500.** Cold local
-  model exceeds the 30 s HTTP client timeout → `translate: context deadline
-  exceeded` → `Error: chat: server returned 500`. Retry after warm-up works.
-See `docs/dogfood/2026-08-27-integration.md` for the full report.
+**Current state (2026-09-05):** DF-001..DF-037 all complete; 09-04 findings
+DF-RABBIT-HOLE-1..5 pending on the board. Verified fixed live: DF-028
+(session terminal ≤60 s), DF-029 (`compact --before 10m`), DF-032
+(end_time non-null), and DF-034's raw-API leg (UTC-window search returns
+flows — first re-verification). 18-min soak: 5.5 MB RSS, 0 % CPU.
+**NEW hazard (dogfood 2026-09-05 — first REAL-eBPF attempt, DF-RABBIT-HOLE-6
+P0): the Collect layer cannot start even WITH full privileges on kernel
+7.0.0-29.** `map stack_map: map create: invalid argument` as root (all caps
+present, BTF present); an isolation probe shows THIS KERNEL rejects ANY
+`BPF_MAP_TYPE_STACK_TRACE` map (suspect: `kernel.perf_event_paranoid=4`).
+Worse, `attach` misattributes the failure: "requires CAP_SYS_RESOURCE and
+kernel 5.11+" — both satisfied on the test host — and the regen-objects hint
+cannot help. **Do not burn time on privileges or `go generate` for this;
+see diagnostics.md §14 for the probe method.** Full report:
+`docs/dogfood/2026-09-05-integration.md`.
 
 ## Entry points
 
 | Entry | What it is | Works? |
 |---|---|---|
 | `./bin/rabbit-hole serve --demo-stream --no-ebpf` | full pipeline daemon, demo flows every 3s, HTTP+WS on 127.0.0.1:9734 | ✅ (no root needed) |
-| `./bin/rabbit-hole serve` | same, with eBPF (needs CAP_SYS_RESOURCE + kernel 5.11+) | ✅ hard-fails honestly without privileges |
+| `./bin/rabbit-hole serve` | same, with eBPF (needs CAP_SYS_RESOURCE + kernel 5.11+) | ❌ on kernel 7.0: stack_map EINVAL even as root (DF-RABBIT-HOLE-6); degrades to pattern-only |
 | `./bin/rabbit-hole attach --pid X [--no-ebpf]` | attach to a real process; session handed to a running serve via POST /api/v1/sessions/attach | ✅ (DF-001 fixed, commit 7545df4) |
 | `./bin/rabbit-hole demo --flows N --hours-back M` | batch-seed realistic data (--spread works) | ✅ |
 | `./bin/rabbit-hole classify-server --addr :50051 [--token T]` | remote gRPC classifier backend (fleet setup) | ✅ (DF-023) |
@@ -87,19 +85,29 @@ Without all three env vars the server answers from a keyword stub — API respon
 6. **WS stream is live-only:** flows are pushed to subscribers connected at publish time; no
    replay. Ping every 30s; clients must pong or the server drops them.
 7. **Compact is destructive:** `compact --before 1h` deletes flows/traces older than 1h
-   (verified). Point it at a copy first if unsure. **Duration suffixes are h/d only** —
-   `compact --before 10m` fails with "unsupported duration suffix: m" (DF-029).
+   (verified). Point it at a copy first if unsure. `--before 10m` now works (DF-029 fixed).
+   **Run compact as the daemon's user:** against a daemon-owned data dir it fails with raw
+   SQLite `attempt to write a readonly database (8)` when run as a different user — the
+   normal systemd self-host shape (DF-RABBIT-HOLE-8).
 8. **Data dir:** default `~/.rabbit-hole/rabbit-hole.db`; use `RABBITHOLE_DB_PATH` for
    hermetic runs. SQLite WAL — data survives restarts and even SIGKILL (verified).
-9. **Daemon wedge (DF-027, P0):** the `--demo-stream` daemon (esp. with `--remote` + WS +
-   attach cycles) can burn CPU/RAM until unresponsive and may not die on SIGQUIT. Health-
-   check it (`curl -m 2 /health`) if you run it long; capture `/proc/<pid>/status` before
-   SIGKILL. Soak-test before trusting in production.
-10. **Session lifecycle in degraded mode (DF-028):** sessions may stay `running` after the
-    attached process exits, or (rarely) flip to `crashed` early. Verify with `list --all`
-    rather than assuming status accuracy.
+9. **Daemon wedge (DF-027): FIXED + re-verified (08-27, 09-05: 18 min, 5.5 MB RSS,
+   0 % CPU).** Still health-check long runs (`curl -m 2 /health`) — the 08-18 wedge was
+   silent.
+10. **Session lifecycle in degraded mode (DF-028): FIXED + re-verified 09-05** (natural
+    exit → `completed` with real end_time well under 60 s). Demo sessions now complete
+    with non-null end_time (DF-032).
 11. **Remote backend:** `classify-server --addr :50051 [--token T]` + client side
-    `serve --remote host:port@T`; `/health` then shows `ok — remote gRPC <endpoint>`.
+     `serve --remote host:port@T`; `/health` then shows `ok — remote gRPC <endpoint>`.
+12. **eBPF on kernel 7.x is blocked at the map layer (DF-RABBIT-HOLE-6, P0):** stack-trace
+    map creation EINVALs even as root with all caps. Ignore the printed privilege/regen
+    advice; confirm with the isolation probe in diagnostics.md §14 before debugging deeper.
+13. **Fresh-machine install:** README's Go install steps are root-only (sudo apt / tarball
+    → /usr/local). Unprivileged: user-space tarball into $HOME works (verified in bunker).
+    If `make build` dies with `no space left on device` while df shows space, /tmp is a
+    small tmpfs — set `GOTMPDIR`/`TMPDIR` to a disk-backed dir (DF-RABBIT-HOLE-7/-9).
+14. **WS route is session-scoped:** `/api/v1/ws/sessions/{id}` (HTTP 101). There is no
+    global `/api/v1/ws` — probing it 404s and nothing advertises the real path.
 
 ## Useful internals map
 
@@ -127,9 +135,8 @@ Without all three env vars the server answers from a keyword stub — API respon
   bounded (~28 MB), `/health` fast, SIGQUIT exits.
 - DF-028 (fixed, re-verified 08-27): attach to `sleep 30` → session terminal ≤60s after exit.
 - DF-029 (fixed, re-verified 08-27): `compact --before 10m` accepted and deletes only old rows.
-- **DF-034 (P0, open):** `POST /api/v1/search` with `time_range.start` in UTC (`Z`) over
-  local-offset stored flows → must return the flows (today: 0). Also `chat` with a REAL model
-  (not stub): "What did the agent do in the last hour?" → `flows>0`. Probe both offsets —
-  the stub fallback does not exercise the filter.
+- **DF-034 (fixed; raw-API leg re-verified 09-05):** `POST /api/v1/search` with
+  `time_range.start` in UTC (`Z`) now returns the flows. Real-model chat leg (LLM emits
+  UTC windows) still unproven end-to-end since the fix — probe it if a model is handy.
 - **DF-035 (P1, open):** fresh `serve` with real chat model → first `chat` must not 500
   (warm-up/retry/timeout).

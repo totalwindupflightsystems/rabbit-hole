@@ -229,3 +229,103 @@ No drift over the run; see integration report §5 for the end state.
   DF-036 (P3 flows-list doc drift), DF-037 (P3 chat latency/no-progress UX).
 - The E2E battery still does not cover: real-model chat, mixed-offset
   timestamp queries, daemon soak — worth adding once DF-034 lands.
+  (Update 09-05: DF-034 verified fixed in real use — UTC-window search returns
+  flows. Real-model chat + soak still absent from the battery; the soak has now
+  been done three times by dogfood runs, twice clean, once 08-18 wedge.)
+
+# Follow-up run 2026-09-05 — first REAL-eBPF attempt; the Collect layer's
+# kernel-level wall surfaces
+
+## 14. How the Collect layer is built, why it cannot start on kernel 7.0, and the right way to diagnose it
+
+**How it's built.** `internal/collector/` ships pre-compiled eBPF objects
+(`bpf_x86_bpfel.o`, generated from `bpf/collector.bpf.c` via `go generate` with
+clang). The C side defines, among others:
+
+```c
+struct {
+    __uint(type, BPF_MAP_TYPE_STACK_TRACE);
+    __uint(max_entries, 10240);
+    __type(key, __u32);
+} stack_map SEC(".maps");
+```
+
+`trace_enter_syscall` calls `bpf_get_stackid(ctx, &stack_map, BPF_F_USER_STACK)`
+— every syscall event wants a user stack ID. The Go side loads all objects in
+one `cilium/ebpf` Collection; any single map/program failure aborts the whole
+load (all-or-nothing), which is why one bad map kills the entire collector.
+
+**Why it breaks on kernel 7.0.** `load bpf objects: ... map stack_map:
+map create: invalid argument` (EINVAL) — even as root with all 38 caps
+(cap_bpf, cap_perfmon, cap_sys_admin, cap_sys_resource all present, verified
+via `capsh --print`), with BTF present, clang 21 and matching headers
+installed. The isolation probe settles the attribution: a standalone Go
+program using the *same* `cilium/ebpf v0.17.3` cannot create **any**
+`BPF_MAP_TYPE_STACK_TRACE` map on this kernel (tried the project's exact spec,
++ValueSize 4, and MaxEntries 256 — all EINVAL). `kernel.perf_event_paranoid=4`
+is the host's most conspicuous suspect: stack-trace maps allocate perf events
+internally, and paranoid=4 restricts exactly that layer. It may also be a
+distributor patch or namespaced/perfserver restriction — but the probe proves
+the failure belongs to the *kernel/map-type interaction*, not to the project's
+objects and not to missing privileges.
+
+**Why the user-facing message is wrong (DF-RABBIT-HOLE-6, P0).** `attach`
+refuses with `requires CAP_SYS_RESOURCE and kernel 5.11+` — both demonstrably
+satisfied — and the WARN hint sends the user to regenerate BPF objects, which
+cannot help. The message is *assumed*, not *checked*: nothing inspects CapEff
+or kernel version before printing it. A capable user follows the printed
+advice, fails twice, and concludes the product is broken — the worst outcome
+for the layer the README sells as the differentiator.
+
+**The right way to diagnose this class** (worked here in ~10 minutes):
+1. Read the verbatim error; note WHICH map failed and the errno.
+2. Isolate: minimal program, same library, create ONLY that map type. If a
+   bare spec fails, the cause is environmental (kernel), not the object file.
+3. Vary one axis at a time: value_size, max_entries, then (if it passes)
+   the program that references the map.
+4. Check the knobs that govern that map type (for stack traces:
+   perf_event_paranoid, unprivileged_bpf_disabled, CAP_PERFMON/CAP_BPF).
+5. Only then consider `go generate` regeneration — and verify clang/kernel
+   headers exist first.
+
+**The right fix** (task text carries this): normalize/probe the stack_map spec
+for modern kernels (consider making the user-stack capture optional at load
+time so a stack_map failure degrades to flows-without-stacks instead of no
+collector at all); gate the privilege/kernel message on an actual CapEff
+check; surface the real errno; add a CI/e2e smoke that loads the collector on
+a 7.x kernel.
+
+## 15. The install leg (bunker) — where the documented path stops being a path
+
+The README's Go toolchain section offers only root routes (`sudo apt-get`,
+tarball→`/usr/local`). On a bare Debian user (the bunker agent): sudo demands a
+password, /usr/local is root-owned → `make build` dies with `go: not found` at
+the very first documented step. The degraded `--no-ebpf` mode the README
+markets is *for* unprivileged users, yet unprivileged users cannot reach the
+build. Right fix: document the user-space tarball install
+(`mkdir -p ~/go && tar -C ~/go -xzf …; PATH=$HOME/go/bin:$PATH`), which was
+verified working in the bunker.
+
+Two further fresh-machine traps, both reproduced live:
+- **GOTMPDIR:** Go compiles into `/tmp`; on a host whose /tmp is a small or
+  shared tmpfs, `make build` fails with `no space left on device` while `df`
+  shows gigabytes free. Document the GOTMPDIR/TMPDIR remedy.
+- **DB ownership:** CLI maintenance commands (`compact`) against a
+  daemon-owned data dir fail with raw SQLite `attempt to write a readonly
+  database (8)` when run as a different user — the *normal* shape of a
+  systemd self-host. Wrap SQLITE_READONLY into an ownership/permission
+  message naming RABBITHOLE_DATA_DIR.
+
+## 16. History notes (updated 09-05)
+
+- 09-05: DF-001..037 all complete. This run re-verified DF-028 (session
+  terminal state ≤60 s), DF-029 (`compact --before 10m`), DF-032
+  (end_time non-null), and — first re-verification — DF-034 (UTC time-window
+  search). Still open from 09-04: DF-RABBIT-HOLE-1 (test-all races/SLOs),
+  -2 (memlock WARN noise), -3 (/health doc drift), -4 (non-window chat
+  dead-end), -5 (pagination total) — -2/-4/-5 re-confirmed verbatim this run.
+- New this run: DF-RABBIT-HOLE-6 (P0 eBPF stack-map EINVAL + wrong error),
+  -7 (P1 root-only install docs), -8 (P1 compact SQLITE_READONLY UX),
+  -9 (P3 GOTMPDIR docs).
+- Soak: 18 min degraded daemon at 5.5 MB RSS / 0 % CPU — third clean soak
+  since the 08-18 wedge.
