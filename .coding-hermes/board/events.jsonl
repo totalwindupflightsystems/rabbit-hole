@@ -757,3 +757,13 @@
 {"id":435,"timestamp":"2026-10-27T17:31:30Z","event_type":"task_created","task_id":"DOC-9","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-9\",\"status\":\"pending\"}"}
 {"id":436,"timestamp":"2026-10-27T17:31:30Z","event_type":"task_created","task_id":"DOC-10","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-10\",\"status\":\"pending\"}"}
 {"id":437,"timestamp":"2026-10-27T17:31:42Z","event_type":"task_created","task_id":"DOC-11","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-11\",\"status\":\"pending\"}"}
+{"id":438,"timestamp":"2026-11-03T19:14:14Z","event_type":"task_created","task_id":"DOC-12","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-12\",\"status\":\"pending\"}"}
+{"id":439,"timestamp":"2026-11-03T19:14:14Z","event_type":"task_created","task_id":"DOC-13","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-13\",\"status\":\"pending\"}"}
+{"id":440,"timestamp":"2026-11-03T19:14:14Z","event_type":"task_created","task_id":"DOC-14","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-14\",\"status\":\"pending\"}"}
+{"id":441,"timestamp":"2026-11-03T19:14:14Z","event_type":"task_created","task_id":"DOC-15","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-15\",\"status\":\"pending\"}"}
+{"id":442,"timestamp":"2026-11-03T19:14:14Z","event_type":"task_created","task_id":"DOC-16","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-16\",\"status\":\"pending\"}"}
+{"id":443,"timestamp":"2026-11-03T19:14:14Z","event_type":"task_created","task_id":"DOC-17","actor":"foreman","tick_number":null,"detail":"{\"id\":\"DOC-17\",\"status\":\"pending\"}"}
+{"id":444,"timestamp":"2026-11-03T19:14:48Z","event_type":"task_updated","task_id":"DF-RABBIT-HOLE-3","actor":"foreman","tick_number":null,"detail":"{\"title\":\"[dogfood:P4] docs/integration.md /health example contradicts every no-root run\"}"}
+{"id":445,"timestamp":"2026-11-03T19:14:48Z","event_type":"task_updated","task_id":"DF-RABBIT-HOLE-1-R3","actor":"foreman","tick_number":null,"detail":"{\"title\":\"[dogfood:P4] /health returns \\\"degraded\\\" in demo mode, contradicting the \\\"ok\\\" example in docs/integration.md\"}"}
+{"id":446,"timestamp":"2026-11-03T19:14:48Z","event_type":"task_updated","task_id":"DF-RABBIT-HOLE-5-R3","actor":"foreman","tick_number":null,"detail":"{\"title\":\"[dogfood:P4] Pagination and compaction semantics look broken without docs\"}"}
+{"id":447,"timestamp":"2026-11-03T19:14:49Z","event_type":"task_updated","task_id":"DF-RABBIT-HOLE-9","actor":"foreman","tick_number":null,"detail":"{\"title\":\"[dogfood:P4] builds on machines with a tight /tmp fail with a cryptic `no space left on device` — add GOTMPDIR/TMPDIR troubleshooting note\"}"}
