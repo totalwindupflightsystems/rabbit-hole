@@ -21,10 +21,19 @@ make lint
 ### Requirements
 
 - **Go 1.26+** (uses `go tool` and `testing/synctest`)
-- **Linux kernel 5.8+** (eBPF ring buffer support)
-- **libbpf** for eBPF compilation
-- **CAP_BPF** and **CAP_SYS_ADMIN** for collector attachment
+- **Linux kernel 5.11+** for full eBPF telemetry collection
+- **CAP_SYS_RESOURCE** for collector attachment (typically root — run `sudo ./bin/rabbit-hole attach --pid <PID>`)
 - **Ollama** (optional, for local Gemma classification)
+
+`clang`, `bpftool`, and the **libbpf development headers** are needed only to
+regenerate the eBPF objects (`go generate ./internal/collector/`) when changing
+`internal/collector/bpf/`. The generated objects are committed and embed the
+BPF ELF directly, so libbpf is a **build-only** dependency — nothing links it
+at runtime.
+
+Without kernel 5.11+ and `CAP_SYS_RESOURCE`, `attach` and `serve` refuse to
+start and exit non-zero (`eBPF unavailable — telemetry DISABLED`); pass
+`--no-ebpf` for explicit degraded mode.
 
 ## Architecture
 
