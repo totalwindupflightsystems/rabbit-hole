@@ -4,7 +4,13 @@
 # =============================================================================
 # Build stage
 # -----------------------------------------------------------------------------
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
+
+# The builder toolchain must match go.mod's `go` directive (1.26.0) and must
+# never be auto-downloaded inside the image: an air-gapped/offline builder
+# would otherwise fail the build, and a silently fetched toolchain makes the
+# image non-reproducible.
+ENV GOTOOLCHAIN=local
 
 RUN apk add --no-cache ca-certificates tzdata
 
