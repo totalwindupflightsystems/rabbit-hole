@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Rabbit-Hole core spec — collection + classification (Auger format, urn:auger:spec:1).
+
+  Authored from specs/02-Collection-Layer.md, specs/03-Classification-Layer.md and
+  specs/05-Storage-Data-Model.md. Verification blocks declare method="test" as INTENT;
+  machine-checked citations (runner/path/selector) are pending the Auger go-runner
+  (see requirement RH-TOOLING-001 — auger's runner registry is pytest-only today).
+
+  Edge convention: requirement -verifies-> verification blocks; acceptance
+  -verifies-> its requirement (inverse edge joins it into the closure). (inverse edge joins it into the closure).
+-->
+<spec xmlns="urn:auger:spec:1" id="RH-CORE-SPEC-1" version="1.0.0" schema-version="1.0">
+
+  <requirement id="RH-ATTACH-001" kind="requirement" status="active" version="1.0.0"
+               applies-to="rabbit-hole.attach rabbit-hole.collect"
+               verification="test" verifies="RH-ATTACH-001-V1">
+    A user can attach rabbit-hole to ANY AI agent process — closed-source binaries included,
+    zero SDK — and collect kernel-level telemetry of that agent's actions. Attach works in a
+    degraded `--no-ebpf` mode on hosts without eBPF privileges, and the degraded mode is
+    honest: no scary eBPF warnings after the user has opted out (dogfood friction F1,
+    foreman row DF-RABBIT-HOLE-2).
+  </requirement>
+
+  <acceptance id="RH-ATTACH-001-A1" kind="acceptance" status="active" version="1.0.0"
+              applies-to="rabbit-hole.attach"
+              verification="test" verifies="RH-ATTACH-001">
+    Attaching to a live process in `--no-ebpf` mode produces a session that transitions to
+    `completed` (never a false `crashed`) within one poll interval of process exit; a
+    long-lived session stays `running` with no false crash.
+  </acceptance>
+
+  <verification id="RH-ATTACH-001-V1" kind="verification" status="active" version="1.0.0"
+               applies-to="rabbit-hole.attach"
+               method="test" type="test">
+    Go tests: internal/attach/monitor_test.go (session lifecycle monitor),
+    internal/attach/e2e_test.go (real-TCP serve/attach/detach walk). Machine-checked
+    citation deferred until the auger go-runner lands (RH-TOOLING-001).
+  </verification>
+
+  <requirement id="RH-CLASSIFY-001" kind="requirement" status="active" version="1.0.0"
+               applies-to="rabbit-hole.classify"
+               verification="test" verifies="RH-CLASSIFY-001-V1">
+    Classification runs against three interchangeable backends with one contract:
+    pattern-only (zero-config default, /health truthfully reports
+    "degraded — pattern-only"), a local LLM (gemma via ollama), and a remote gRPC classifier
+    (serve --remote, token-authenticated, contract in api/proto/classifier/v1).
+  </requirement>
+
+  <acceptance id="RH-CLASSIFY-001-A1" kind="acceptance" status="active" version="1.0.0"
+              applies-to="rabbit-hole.classify"
+              verification="test" verifies="RH-CLASSIFY-001">
+    /health names the ACTIVE backend and its mode truthfully for all three configurations;
+    the remote gRPC path serves Classify/Ping/Info under token auth.
+  </acceptance>
+
+  <verification id="RH-CLASSIFY-001-V1" kind="verification" status="active" version="1.0.0"
+               applies-to="rabbit-hole.classify"
+               method="test" type="test">
+    Go tests: internal/classify/remote_test.go, internal/classify/server_integration_test.go,
+    cmd/rabbit-hole/health_version_test.go. Machine-checked citation deferred
+    (RH-TOOLING-001).
+  </verification>
+
+  <requirement id="RH-STORAGE-001" kind="requirement" status="active" version="1.0.0"
+               applies-to="rabbit-hole.storage"
+               verification="test" verifies="RH-STORAGE-001-V1">
+    Sessions, flows and traces persist in SQLite with migration idempotency: applying
+    migration001 twice is a no-op, and concurrent daemon starts do not fail on
+    "table already exists" (foreman row DF-009, commit 0ccd188).
+  </requirement>
+
+  <acceptance id="RH-STORAGE-001-A1" kind="acceptance" status="active" version="1.0.0"
+              applies-to="rabbit-hole.storage"
+              verification="test" verifies="RH-STORAGE-001">
+    `go test ./internal/storage/...` proves double-apply idempotency and that time-range
+    queries/compaction are timezone-agnostic (unixepoch comparison, foreman row DF-034).
+  </acceptance>
+
+  <verification id="RH-STORAGE-001-V1" kind="verification" status="active" version="1.0.0"
+               applies-to="rabbit-hole.storage"
+               method="test" type="test">
+    Go tests: internal/storage/sqlite_test.go (TestMigrate_ApplyTwiceIsNoOp,
+    TestQueryFlows_TimezoneAgnosticTimeRange, TestCompact_TimezoneAgnosticCutoff),
+    internal/storage/storage_test.go. Machine-checked citation deferred (RH-TOOLING-001).
+  </verification>
+
+  <requirement id="RH-TOOLING-001" kind="requirement" status="active" version="1.0.0"
+               applies-to="auger.spec.check rabbit-hole.spec"
+               verification="analysis" verifies="RH-TOOLING-001-V1">
+    GAP (recorded 2026-11-16): Auger's test-obligation validator cannot machine-check this
+    repo's tests. The runner registry (auger.py SPEC_RUNNERS) holds pytest only; a
+    runner="go" citation is refused `invalid-test-ref`, and the selector resolution parses
+    the cited file as a PYTHON AST, so a Go test file cannot resolve a selector at all.
+    This corpus therefore declares method="test" as intent without runner/path/selector.
+    UNBLOCK: an Auger feature row registering a "go" runner (go test -run) with a
+    Go-declaration selector check (func TestXxx), then re-author these verification blocks
+    with type="test" runner="go" path="internal/..." selector="TestName".
+  </requirement>
+
+  <verification id="RH-TOOLING-001-V1" kind="verification" status="active" version="1.0.0"
+               applies-to="auger.spec.check"
+               method="analysis">
+    Evidence: auger.py:13315 SPEC_RUNNERS = {"pytest": ...}; auger.py:13793-13796
+    invalid-test-ref on non-registered runner; auger.py:13822-13838 selector resolution via
+    ast.parse (Python-only). Re-verify when the go-runner lands by citing
+    internal/storage/sqlite_test.go::TestMigrate_ApplyTwiceIsNoOp and requiring spec check
+    to pass at rabbit-hole --repo-root.
+  </verification>
+
+</spec>

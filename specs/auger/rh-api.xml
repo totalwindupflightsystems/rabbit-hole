@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Rabbit-Hole REST/CLI contract spec (Auger format, urn:auger:spec:1).
+
+  Authored from specs/04-Expression-Layer.md, specs/06-CLI-Self-Hosted.md and
+  specs/openapi.yaml. The machine-checkable REST contract lives in openapi.yaml —
+  these blocks cite it by prose; obligation citations are deferred to the auger
+  go-runner (RH-TOOLING-001 in rh-core.xml).
+
+  Edge convention: requirement -verifies-> verification blocks; acceptance
+  -verifies-> its requirement (inverse edge joins it into the closure). (inverse edge joins it into the closure).
+-->
+<spec xmlns="urn:auger:spec:1" id="RH-API-SPEC-1" version="1.0.0" schema-version="1.0">
+
+  <requirement id="RH-API-001" kind="requirement" status="active" version="1.0.0"
+               applies-to="rabbit-hole.rest rabbit-hole.auth"
+               verification="test" verifies="RH-API-001-V1">
+    The daemon serves the v1 REST contract of specs/openapi.yaml: /health, /api/v1/sessions,
+    /api/v1/stats, /api/v1/metrics, POST /api/v1/search, POST /api/v1/chat. Non-v1 paths
+    (/api/sessions, /api/flows, /api/search, /api/chat) return 404. With RABBITHOLE_API_KEY
+    set, every protected route requires the key and exactly /health plus the two metrics
+    paths stay public (auth.go noAuthPaths).
+  </requirement>
+
+  <acceptance id="RH-API-001-A1" kind="acceptance" status="active" version="1.0.0"
+              applies-to="rabbit-hole.rest rabbit-hole.auth"
+              verification="test" verifies="RH-API-001">
+    Live probe of a hermetic server: all six v1 routes answer 200, all four non-v1 routes
+    answer 404, protected routes answer 401 without the key and 200 with it, /health answers
+    200 without the key (foreman row DF-020, commit 419aaca).
+  </acceptance>
+
+  <verification id="RH-API-001-V1" kind="verification" status="active" version="1.0.0"
+               applies-to="rabbit-hole.rest rabbit-hole.auth"
+               method="test" type="test">
+    Go tests: internal/express/auth_test.go, internal/express/server_test.go,
+    cmd/rabbit-hole/execution_test.go (daemonClient routing). Machine-checked citation
+    deferred (RH-TOOLING-001).
+  </verification>
+
+  <requirement id="RH-API-002" kind="requirement" status="active" version="1.0.0"
+               applies-to="rabbit-hole.chat"
+               verification="test" verifies="RH-API-002-V1">
+    Chat over REST matches the CLI: with a model loaded both answer non-time-window
+    questions from recorded flows; without a model both return the stub answer with
+    stub:true. LLM cold starts do not surface bare 500s: the client timeout is configurable
+    (RABBITHOLE_CHAT_MODEL_TIMEOUT, default 120s), a warm-up runs at serve start, timeouts
+    retry once and answer 503 with a structured retryable error body (foreman row DF-035,
+    commit ca4516c).
+  </requirement>
+
+  <acceptance id="RH-API-002-A1" kind="acceptance" status="active" version="1.0.0"
+              applies-to="rabbit-hole.chat"
+              verification="test" verifies="RH-API-002">
+    A mock slow LLM endpoint yields 503 + retryable message within the configured timeout,
+    never a bare 500; the CLI surfaces the structured message. Dogfood friction F3 (REST
+    chat dead-ending where CLI chat answers) is closed or explicitly re-scoped.
+  </acceptance>
+
+  <verification id="RH-API-002-V1" kind="verification" status="active" version="1.0.0"
+               applies-to="rabbit-hole.chat"
+               method="test" type="test">
+    Go tests: internal/express/chatmodel_test.go, internal/express/chat_test.go,
+    cmd/rabbit-hole/chat_test.go. Machine-checked citation deferred (RH-TOOLING-001).
+  </verification>
+
+  <requirement id="RH-CLI-001" kind="requirement" status="active" version="1.0.0"
+               applies-to="rabbit-hole.cli"
+               verification="test" verifies="RH-CLI-001-V1">
+    The CLI never opens its local DB path when talking to a daemon: status, list, search,
+    compact and demo all accept --addr and route through the daemon HTTP API (foreman rows
+    DF-014/GAP-007), so a differing RABBITHOLE_DB_PATH between server and CLI can never
+    show phantom data. The daemon's own DB path is what status prints.
+  </requirement>
+
+  <acceptance id="RH-CLI-001-A1" kind="acceptance" status="active" version="1.0.0"
+              applies-to="rabbit-hole.cli"
+              verification="test" verifies="RH-CLI-001">
+    Live scenario: serve on /tmp/a.db, attach with /tmp/b.db in the environment, then
+    `list --all` shows the daemon's session and `status` prints the DAEMON's DB path —
+    never the CLI's (foreman row DF-014 live verification).
+  </acceptance>
+
+  <verification id="RH-CLI-001-V1" kind="verification" status="active" version="1.0.0"
+               applies-to="rabbit-hole.cli"
+               method="test" type="test">
+    Go tests: cmd/rabbit-hole/list_test.go, cmd/rabbit-hole/status_test.go,
+    cmd/rabbit-hole/compact_test.go, cmd/rabbit-hole/demo_test.go. Machine-checked citation
+    deferred (RH-TOOLING-001).
+  </verification>
+
+</spec>
