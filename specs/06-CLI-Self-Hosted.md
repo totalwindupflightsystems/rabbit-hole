@@ -48,8 +48,9 @@ rabbit-hole attach --pid 12345 --categories file,network
 # Disable TLS interception
 rabbit-hole attach --pid 12345 --no-tls-intercept
 
-# Follow children (forks)
-rabbit-hole attach --pid 12345 --follow-children
+# Trace child process activity (forks/exec) via the `process` category —
+# attach has no --follow-children flag
+rabbit-hole attach --pid 12345 --categories process
 ```
 
 ```go
@@ -125,8 +126,9 @@ rabbit-hole detach --all  # detach all sessions
 ```bash
 rabbit-hole list            # active sessions
 rabbit-hole list --all      # all sessions including completed
-rabbit-hole list --status crashed  # filter by status
 ```
+
+`list` has no `--status` filter — use `--all` and read the STATUS column.
 
 Output:
 ```
@@ -261,7 +263,7 @@ Total: 2 file reads, 1 write, 1 test run. All operations successful.
 rabbit-hole search "patch middleware"                    # FTS5 text search
 rabbit-hole search --intent write_file                   # filter by intent
 rabbit-hole search --phase action --outcome failure      # find failures
-rabbit-hole search --session 0191abc --since 1h          # recent in session
+rabbit-hole search --session 0191abc --limit 100         # session-scoped, capped (no --since flag)
 rabbit-hole search --confidence 0.8                      # high confidence only
 rabbit-hole search --json --limit 100                    # structured output
 ```
@@ -270,10 +272,15 @@ rabbit-hole search --json --limit 100                    # structured output
 
 ```bash
 rabbit-hole compact                          # compact now (default 30-day retention)
-rabbit-hole compact --before 2026-06-01      # delete data before date
-rabbit-hole compact --retention 7d           # delete older than 7 days
+rabbit-hole compact --before 90d             # delete data older than 90 days
+rabbit-hole compact --retention 7            # delete older than 7 days
 rabbit-hole compact --addr 127.0.0.1:9734    # compact via the running daemon
 ```
+
+`--before` takes a duration (`90d`, `720h`, `10m`, `30s`), not a date, and
+should be written positive: the CLI negates a leading `-`, which moves the
+cutoff into the future instead of the past. `--retention` is a plain day
+count (`7`), not a duration string.
 
 By default `compact` operates on the standalone local database. Pass
 `--addr` to target a running daemon (`rabbit-hole serve`) instead — the
