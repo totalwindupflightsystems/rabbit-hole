@@ -15,6 +15,9 @@ dist/
 .rabbit-hole/
 data/
 
+# DuckBrain local namespace dirs (created when DuckBrain runs with cwd in the repo)
+namespaces/
+
 # IDE
 .idea/
 .vscode/
