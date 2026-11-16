@@ -804,3 +804,4 @@
 {"id":482,"timestamp":"2026-11-16T22:57:43Z","event_type":"task_completed","task_id":"CLN-002","actor":"foreman","tick_number":null,"detail":"{\"status\":\"complete\"}"}
 {"id":483,"timestamp":"2026-11-16T23:01:19Z","event_type":"task_completed","task_id":"DOC-14","actor":"foreman","tick_number":null,"detail":"{\"status\":\"complete\"}"}
 {"id":484,"timestamp":"2026-11-16T23:01:19Z","event_type":"task_completed","task_id":"QA-RABBIT-HOLE-4","actor":"foreman","tick_number":null,"detail":"{\"status\":\"complete\"}"}
+{"id":485,"timestamp":"2026-11-16T23:58:10Z","event_type":"task_updated","task_id":"DF-RABBIT-HOLE-1","actor":"foreman","tick_number":null,"detail":"{\"status\":\"in_progress\"}"}
