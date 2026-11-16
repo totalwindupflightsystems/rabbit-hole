@@ -1,4 +1,12 @@
 guards:
+  # CLN-002: board-only commits (and any diff with no staged .go file) make
+  # the Go gates report "No Go files staged", which TRUST-001 grades as a
+  # DEGRADED PASS and the CLI turns into exit 2 — the pre-commit hook then
+  # refuses the commit, so every board write needed a --no-verify bypass.
+  # Opting into skips keeps the exit code honest for the zero-work case while
+  # a real gate FAILURE (go build/lint/tests, secrets) still exits 1 and is
+  # still refused; hook timeouts (exit 2) are unaffected by this key.
+  allow_skips: true
   secrets: true
   lint: false
   tests: false
