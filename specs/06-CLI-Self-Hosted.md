@@ -48,65 +48,62 @@ rabbit-hole attach --pid 12345 --categories file,network
 # Disable TLS interception
 rabbit-hole attach --pid 12345 --no-tls-intercept
 
-# Follow children (forks)
-rabbit-hole attach --pid 12345 --follow-children
+# Trace child process activity (forks/exec) via the `process` category —
+# attach has no --follow-children flag
+rabbit-hole attach --pid 12345 --categories process
 ```
 
 ```go
 func newAttachCmd() *cobra.Command {
     var (
-        pid             int32
-        contextWindows  bool
-        categories      []string
-        noTLSIntercept  bool
-        followChildren  bool
+        addr           string
+        pid            int32
+        contextWindows bool
+        categories     []string
+        noTLSIntercept bool
+        noEBPF         bool
     )
 
     cmd := &cobra.Command{
         Use:   "attach --pid <PID>",
         Short: "Attach to an agent process and start collecting traces",
         Args:  cobra.NoArgs,
-        RunE: func(cmd *cobra.Command, args []string) error {
+        RunE: func(cobraCmd *cobra.Command, args []string) error {
             cfg := loadConfig()
 
-            collector, err := collector.NewEBPFCollector(cfg, slog.Default())
-            if err != nil {
-                return fmt.Errorf("init collector: %w", err)
-            }
-
-            var cats []types.TraceCategory
-            if len(categories) > 0 {
-                for _, c := range categories {
-                    cats = append(cats, types.TraceCategory(c))
-                }
-            }
-
-            session, err := collector.Attach(cmd.Context(), pid, types.CollectOptions{
-                ContextWindows:  contextWindows,
-                TraceCategories: cats,
-                TLSInterception:  !noTLSIntercept,
-                FollowChildren:   followChildren,
-            })
+            session, err := newDaemonClient(cfg.ListenAddr).attachSession(
+                cobraCmd.Context(),
+                types.AttachSessionRequest{
+                    PID:             pid,
+                    ContextWindows:  contextWindows,
+                    Categories:      categories,
+                    TLSInterception: !noTLSIntercept,
+                    NoEBPF:          noEBPF,
+                },
+            )
             if err != nil {
                 return err
             }
 
             fmt.Printf("Attached to PID %d\n", pid)
             fmt.Printf("Session ID: %s\n", session.ID)
-            fmt.Printf("Agent: %s (%s)\n", session.AgentName, session.Metadata.CommandLine)
+            fmt.Printf("Agent: %s (%s)\n", session.AgentName, session.CommandLine)
             fmt.Println()
             fmt.Println("Collection active. Use 'rabbit-hole status' to monitor or 'rabbit-hole chat' to query.")
             fmt.Printf("Detach with: rabbit-hole detach %s\n", session.ID)
+            fmt.Println("Session persisted via daemon — visible via 'list --all', 'status', and GET /api/v1/sessions.")
+            fmt.Println("Collection runs in the daemon ('rabbit-hole serve') — keep it running.")
 
             return nil
         },
     }
 
+    cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
     cmd.Flags().Int32Var(&pid, "pid", 0, "Agent process ID to attach to")
     cmd.Flags().BoolVar(&contextWindows, "context-windows", false, "Enable context window capture (expensive)")
     cmd.Flags().StringSliceVar(&categories, "categories", nil, "Trace categories to collect (syscall,network,file,llm_call,process,resource)")
     cmd.Flags().BoolVar(&noTLSIntercept, "no-tls-intercept", false, "Disable TLS interception")
-    cmd.Flags().BoolVar(&followChildren, "follow-children", false, "Also trace child processes")
+    cmd.Flags().BoolVar(&noEBPF, "no-ebpf", false, "Run in degraded mode without eBPF (telemetry DISABLED)")
     cmd.MarkFlagRequired("pid")
 
     return cmd
@@ -125,8 +122,9 @@ rabbit-hole detach --all  # detach all sessions
 ```bash
 rabbit-hole list            # active sessions
 rabbit-hole list --all      # all sessions including completed
-rabbit-hole list --status crashed  # filter by status
 ```
+
+`list` has no `--status` filter — use `--all` and read the STATUS column.
 
 Output:
 ```
@@ -158,6 +156,10 @@ func newServeCmd() *cobra.Command {
     var (
         addr         string
         noClassifier bool
+        remote       string
+        demoStream   bool
+        demoEveryS   int
+        noEBPF       bool
     )
 
     cmd := &cobra.Command{
@@ -222,6 +224,10 @@ func newServeCmd() *cobra.Command {
 
     cmd.Flags().StringVar(&addr, "addr", "", "Listen address (default: 127.0.0.1:9734)")
     cmd.Flags().BoolVar(&noClassifier, "no-classifier", false, "Disable classification (pattern matching only)")
+    cmd.Flags().StringVar(&remote, "remote", "", "Remote classifier endpoint[::token] (e.g. localhost:50051 or host:443@token)")
+    cmd.Flags().BoolVar(&demoStream, "demo-stream", false, "Dogfood mode: publish a demo flow every N seconds (no root needed)")
+    cmd.Flags().IntVar(&demoEveryS, "demo-every", 3, "Seconds between demo-stream flows")
+    cmd.Flags().BoolVar(&noEBPF, "no-ebpf", false, "Run in degraded mode without eBPF (telemetry DISABLED)")
 
     return cmd
 }
@@ -261,7 +267,7 @@ Total: 2 file reads, 1 write, 1 test run. All operations successful.
 rabbit-hole search "patch middleware"                    # FTS5 text search
 rabbit-hole search --intent write_file                   # filter by intent
 rabbit-hole search --phase action --outcome failure      # find failures
-rabbit-hole search --session 0191abc --since 1h          # recent in session
+rabbit-hole search --session 0191abc --limit 100         # session-scoped, capped (no --since flag)
 rabbit-hole search --confidence 0.8                      # high confidence only
 rabbit-hole search --json --limit 100                    # structured output
 ```
@@ -270,10 +276,15 @@ rabbit-hole search --json --limit 100                    # structured output
 
 ```bash
 rabbit-hole compact                          # compact now (default 30-day retention)
-rabbit-hole compact --before 2026-06-01      # delete data before date
-rabbit-hole compact --retention 7d           # delete older than 7 days
+rabbit-hole compact --before 90d             # delete data older than 90 days
+rabbit-hole compact --retention 7            # delete older than 7 days
 rabbit-hole compact --addr 127.0.0.1:9734    # compact via the running daemon
 ```
+
+`--before` takes a duration (`90d`, `720h`, `10m`, `30s`), not a date, and
+should be written positive: the CLI negates a leading `-`, which moves the
+cutoff into the future instead of the past. `--retention` is a plain day
+count (`7`), not a duration string.
 
 By default `compact` operates on the standalone local database. Pass
 `--addr` to target a running daemon (`rabbit-hole serve`) instead — the
