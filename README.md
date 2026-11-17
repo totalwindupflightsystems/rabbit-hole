@@ -128,6 +128,82 @@ With a remote backend configured, `/health` reports the classifier as
 [docs/classify-server.md](docs/classify-server.md) for the full reference
 (tokens, wire-format caveats, RPC list, optional grpcurl verification).
 
+## Demo data and the dashboard (dogfooding)
+
+Rabbit-Hole can dogfood itself. The `demo` command generates a realistic agent
+session — file reads, web searches, code patches, LLM calls, test runs — and
+stores it in the database, so the dashboard, `search`, and `chat` all have
+believable data to explore. It needs no root, no eBPF, and no kernel telemetry:
+it is plain synthetic data written to the SQLite store.
+
+```bash
+# Seed a session (default: 48 flows, starting 3 hours in the past)
+./bin/rabbit-hole demo
+
+# Tune the size and the time window
+./bin/rabbit-hole demo --flows 120 --hours-back 6
+
+# Spread the flows evenly across that window instead of packing them all
+# at its start
+./bin/rabbit-hole demo --flows 120 --hours-back 6 --spread
+
+# Serve unprivileged, then open the dashboard
+./bin/rabbit-hole serve --no-ebpf
+# → http://127.0.0.1:9734/dashboard
+```
+
+Without `--addr`, `demo` writes straight into the database, so seed before
+`serve` and make sure both see the same `RABBITHOLE_DB_PATH` (the CLI honours
+it exactly as the daemon does). If the daemon is already running, pass `--addr`
+and the seed goes through it instead of touching the file directly:
+
+```bash
+./bin/rabbit-hole demo --addr 127.0.0.1:9734 --flows 48
+```
+
+`--addr` cannot create a daemon: without one listening there, the command
+fails with `cannot reach Rabbit-Hole daemon … (is 'rabbit-hole serve'
+running?)`.
+
+The dashboard is an embedded single-page trace explorer served by the daemon at
+`/dashboard` (and `/dashboard/`) — nothing extra to install. It reads the same
+database through `/api/v1/dashboard/summary`, so it is populated the moment the
+seeded session exists:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9734/dashboard
+# 200
+```
+
+With that session in place the rest of the CLI has something to answer over.
+`search`, `chat`, `status`, and `list` all talk to the daemon over HTTP (the
+daemon owns the database), so keep `serve` running:
+
+```bash
+# FTS5 full-text search over the recorded flows
+./bin/rabbit-hole search "patch"
+# → Found N results: the seeded patch_code flows
+
+# Time-window questions are answered from the seeded flows
+./bin/rabbit-hole chat "what did the agent do in the last 3 hours?"
+
+# Daemon/database status and the session inventory
+./bin/rabbit-hole status
+./bin/rabbit-hole list --all
+```
+
+**The data is synthetic, and by default it sits in the past.** A demo session
+starts `--hours-back` hours ago (3 by default) and its flows are packed from
+that point at roughly 15-second intervals, so a strict "last hour" window
+contains none of them. With the built-in stub chat model that is invisible —
+the stub falls back to the most recent activity when a time window comes back
+empty — but with a real model configured the window is honoured and a "last
+hour" question can honestly return nothing. Use `--hours-back 0` to start the
+flows now, or `--hours-back <N> --spread` to cover the whole window, when you
+want the recent window populated.
+
+<!-- ch:trace: README-6 -->
+
 ## Requirements
 
 - **Go 1.26+** (uses `go tool` and `testing/synctest`)
