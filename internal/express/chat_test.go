@@ -225,6 +225,122 @@ func TestHandleChat_StubTimeWindowFallbackToRecent(t *testing.T) {
 	}
 }
 
+// TestHandleChat_StubNonTimeWindowFallsBackToRecent proves DF-RABBIT-HOLE-4:
+// with the stub model active and demo-style flows in the DB, a non-time-window
+// message ("hello") must not dead-end on "I couldn't find any matching
+// activity" with flows:[]. The stub turns the whole message into a keyword
+// filter, which matches nothing, so handleChat re-runs without the keyword
+// and answers from the most recent flows — prefixed with an honest sentence
+// saying the keyword matched nothing and recent activity is being shown.
+func TestHandleChat_StubNonTimeWindowFallsBackToRecent(t *testing.T) {
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "false")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", "http://example.invalid")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	store := newTestStore(t)
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Logf("store close: %v", err)
+		}
+	})
+
+	// Same shape as `rabbit-hole demo`: flows starting 3h back, none of
+	// which mention "hello".
+	sc := demo.Generate(20, time.Now().UTC().Add(-3*time.Hour), 4242)
+	sc.Session.Status = types.SessionStatusRunning
+	if err := store.StoreSession(context.Background(), &sc.Session); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+	if err := store.StoreFlows(context.Background(), sc.Flows); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat",
+		strings.NewReader(`{"message":"hello"}`))
+	rr := httptest.NewRecorder()
+	srv.handleChat(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	var resp types.ChatResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.Stub {
+		t.Error("Stub = false, want true — stub model active")
+	}
+	if len(resp.Flows) == 0 {
+		t.Fatalf("Flows = 0 — non-time-window message dead-ended while the DB holds flows (body: %s)", rr.Body.String())
+	}
+	if strings.Contains(resp.Answer, "couldn't find") {
+		t.Errorf("Answer=%q — expected the recent-flows answer, not the no-match message", resp.Answer)
+	}
+	// The fallback answer must say why it is showing recent activity.
+	for _, want := range []string{`No activity matched "hello"`, "showing your most recent activity instead"} {
+		if !strings.Contains(resp.Answer, want) {
+			t.Errorf("Answer=%q — missing honest fallback note %q", resp.Answer, want)
+		}
+	}
+	if !strings.Contains(resp.Answer, "Found ") {
+		t.Errorf("Answer=%q — expected a summary of the fallback flows", resp.Answer)
+	}
+}
+
+// TestHandleChat_StubNonTimeWindowEmptyDBHonest proves the fallback never
+// fabricates: on a store with no flows at all, the same non-time-window
+// message answers 200 with an explicit no-match answer and flows:[] —
+// no crash, no invented activity, and no "showing recent activity" claim.
+// DF-RABBIT-HOLE-4.
+func TestHandleChat_StubNonTimeWindowEmptyDBHonest(t *testing.T) {
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "false")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", "http://example.invalid")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	store := newTestStore(t)
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Logf("store close: %v", err)
+		}
+	})
+
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat",
+		strings.NewReader(`{"message":"hello"}`))
+	rr := httptest.NewRecorder()
+	srv.handleChat(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	var resp types.ChatResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Flows) != 0 {
+		t.Fatalf("Flows = %d, want 0 — empty DB must not fabricate flows (body: %s)", len(resp.Flows), rr.Body.String())
+	}
+	if !strings.Contains(resp.Answer, "couldn't find any matching activity") {
+		t.Errorf("Answer=%q — want the explicit no-match answer on an empty DB", resp.Answer)
+	}
+	if strings.Contains(resp.Answer, "showing your most recent activity instead") {
+		t.Errorf("Answer=%q — claimed recent activity on an empty DB", resp.Answer)
+	}
+	// Wire contract: flows serializes as [] rather than null.
+	if !strings.Contains(rr.Body.String(), `"flows":[]`) {
+		t.Errorf(`response JSON missing "flows":[], got: %s`, rr.Body.String())
+	}
+}
+
 // --- DF-035: structured error body on translate failure ---
 
 // TestHandleChat_TranslateTimeout_Retryable503 verifies the cold-start
