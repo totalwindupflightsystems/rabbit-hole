@@ -44,6 +44,8 @@ tags:
     description: Real-time flow events over WebSocket.
   - name: Dashboard
     description: Aggregate overview metrics and the embedded dashboard SPA.
+  - name: Admin
+    description: Daemon statistics, maintenance, and demo-data operations driven by the CLI.
 
 paths:
   /health:
@@ -279,6 +281,418 @@ paths:
           $ref: '#/components/responses/SessionNotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions/attach:
+    post:
+      tags: [Sessions]
+      operationId: attachSession
+      summary: Attach the daemon collector to an agent process
+      description: |
+        Starts a session on the daemon's collector and persists it, so the
+        session outlives the CLI invocation that requested it and is visible
+        immediately to `GET /api/v1/sessions`, `rabbit-hole list`, and
+        `rabbit-hole status`.
+
+        The endpoint exists only when the `serve` command has wired a session
+        manager onto the server; otherwise it answers `503`
+        (`session management unavailable — no daemon wired`).
+
+        A request that does not set `no_ebpf` promises kernel telemetry. When
+        the collector is degraded, attach fails with `403` instead of starting
+        a silently weaker session, which is the HTTP form of the `attach`
+        preflight: send `no_ebpf: true` to opt into degraded mode explicitly
+        (the CLI's `--no-ebpf`).
+
+        `400` covers a body that is not decodable JSON and a non-positive
+        `pid`; a PID the daemon is already monitoring is `409`; a PID that does
+        not exist is `404`.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachSessionRequest'
+            example:
+              pid: 12345
+              context_windows: false
+              categories: [syscall, network]
+              tls_interception: false
+              no_ebpf: false
+      responses:
+        '201':
+          description: Session created on the daemon collector and persisted.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionLifecycleSummary'
+              example:
+                id: 0191a000-0000-7000-8000-000000000001
+                agent_pid: 12345
+                agent_name: hermes
+                command_line: hermes chat
+                start_time: '2026-07-21T12:00:00Z'
+                end_time: null
+                status: running
+        '400':
+          description: Request body is not valid JSON, or `pid` is zero or negative.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidBody:
+                  value: {error: 'invalid attach request: invalid character ''x'' looking for beginning of value'}
+                invalidPID:
+                  value: {error: pid must be a positive integer}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >-
+            eBPF preflight failed: kernel telemetry is unavailable and the
+            request did not opt into degraded mode with `no_ebpf`.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'eBPF unavailable — telemetry DISABLED (use --no-ebpf to run in degraded mode): operation not permitted'
+        '404':
+          description: No process with the requested PID exists.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: 'process 12345 not found'}
+        '409':
+          description: The daemon is already monitoring that PID.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: 'already attached to process 12345'}
+        '500':
+          description: The collector failed to start the session.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: failed to attach session}
+        '503':
+          description: >-
+            The server was started without a daemon-side session manager, so
+            session lifecycle endpoints are unavailable.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: 'session management unavailable — no daemon wired'}
+
+  /api/v1/sessions/{id}/detach:
+    post:
+      tags: [Sessions]
+      operationId: detachSession
+      summary: Detach the collector from a session and complete it
+      description: |
+        Stops tracing the session on the daemon's collector and marks it
+        `completed` in the store, so `rabbit-hole detach <id>` leaves no stuck
+        `running` row behind.
+
+        A session that is persisted but no longer known to the collector (for
+        example the daemon restarted after the attach) is completed in storage
+        anyway, so a detach always lands and a session is never undetachable
+        because of a daemon lifetime.
+
+        There is no request body. The response carries the session id and its
+        terminal status, which is always `completed`. `404` means the id is
+        unknown both to the collector and to the store; `503` means the server
+        has no session manager wired.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session detached and marked completed.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetachSessionResponse'
+              example:
+                id: 0191a000-0000-7000-8000-000000000001
+                status: completed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: The session id is unknown to both the collector and the store.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: 'session 0191a000-0000-7000-8000-000000000001 not found'}
+        '500':
+          description: The collector failed to stop the session.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: failed to detach session}
+        '503':
+          description: >-
+            The server was started without a daemon-side session manager, so
+            session lifecycle endpoints are unavailable.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: 'session management unavailable — no daemon wired'}
+
+  /api/v1/stats:
+    get:
+      tags: [Admin]
+      operationId: getStats
+      summary: Get daemon aggregate statistics
+      description: |
+        Aggregates the daemon's store and runtime for `rabbit-hole status`.
+        Every field describes the process that owns the database, never the
+        CLI's local configuration:
+
+        - `db_path` is the SQLite file the daemon has open.
+        - `listen_addr` is the `listen_addr` metadata row the `serve` command
+          writes at startup; when that row is absent (a test server, or a
+          database written by an older build) it falls back to the address the
+          server is actually bound to.
+        - `active_sessions` counts stored sessions whose status is `running`,
+          over a scan of up to 10000 sessions.
+        - `oldest_trace` is omitted when the store holds no traces.
+        - `log_level`, `ebpf_enabled`, and `ebpf_detail` are the runtime facts
+          the `serve` command registers; a server that registered none reports
+          an empty `log_level` and `ebpf_enabled: false`.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Daemon storage and runtime aggregates.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaemonStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: A storage read failed while assembling the report.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                storageFailed:
+                  value: {error: failed to read storage stats}
+                sessionsFailed:
+                  value: {error: failed to list sessions}
+
+  /api/v1/compact:
+    post:
+      tags: [Admin]
+      operationId: compactStore
+      summary: Delete daemon data older than a cutoff
+      description: |
+        Deletes data older than `cutoff` from the daemon's own store. The CLI
+        parses its human duration (`rabbit-hole compact --older-than 30d`) and
+        sends the already-resolved RFC3339 cutoff, so the server never
+        interprets duration strings — and never compacts a SQLite file the
+        daemon does not own, because the CLI never opens the database itself.
+
+        The response echoes the cutoff normalized to UTC in RFC3339 form, so a
+        caller can log exactly what was applied. `400` covers an undecodable
+        body, an absent `cutoff`, and a `cutoff` that is not RFC3339; `500`
+        carries the store's error text.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompactRequest'
+            example:
+              cutoff: '2026-08-01T00:00:00Z'
+      responses:
+        '200':
+          description: Data older than the cutoff was deleted.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompactResponse'
+              example:
+                cutoff: '2026-08-01T00:00:00Z'
+        '400':
+          description: >-
+            Undecodable request body, absent `cutoff`, or a `cutoff` that is
+            not an RFC3339 timestamp.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidBody:
+                  value: {error: 'invalid request body: invalid character ''x'' looking for beginning of value'}
+                missingCutoff:
+                  value: {error: cutoff is required (RFC3339 timestamp)}
+                invalidCutoff:
+                  value: {error: 'invalid cutoff: parsing time "yesterday" as "2006-01-02T15:04:05Z07:00": cannot parse "yesterday" as "2006"'}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: The store rejected the delete.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example: {error: 'compact failed: database is locked'}
+
+  /api/v1/demo/seed:
+    post:
+      tags: [Admin]
+      operationId: seedDemo
+      summary: Seed a realistic demo session
+      description: |
+        Generates a realistic dogfood session — flows, synthetic traces, and
+        context windows on the `llm_api_call` and `patch_code` flows — and
+        persists it through the daemon's store, so `rabbit-hole demo` never
+        leaves phantom data the dashboard, chat, and search cannot see.
+
+        Defaults, applied when a field is absent or not positive (`<= 0`):
+        `flows` 48, `hours_back` 3. With `spread: true` the flows are
+        distributed across the whole `hours_back` window; otherwise they
+        cluster at its start.
+
+        The seeded session is stored `running` while its traces are written
+        (trace storage resolves the session from the PID by `running` status,
+        and a `completed` session would orphan them on a foreign key) and is
+        finalized to `completed` before the response, so `session_id` names a
+        completed session.
+
+        A request body is required even when every field is defaulted — send
+        `{}` — because the body is decoded before the defaults are applied; an
+        empty body is `400`.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoSeedRequest'
+            example:
+              flows: 48
+              hours_back: 3
+              spread: true
+      responses:
+        '200':
+          description: Demo session seeded and finalized as completed.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/CorsAllowOrigin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoSeedResponse'
+              example:
+                session_id: 0191a000-0000-7000-8000-000000000001
+        '400':
+          description: Request body is not valid JSON (including an empty body).
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emptyBody:
+                  value: {error: 'invalid request body: EOF'}
+                invalidBody:
+                  value: {error: 'invalid request body: invalid character ''x'' looking for beginning of value'}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: >-
+            A seed step failed. The message names the step — `failed to store
+            session`, `failed to store flows`, `failed to store traces`,
+            `failed to store context window`, or `failed to finalize session` —
+            followed by the store's error text.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                storeSession:
+                  value: {error: 'failed to store session: UNIQUE constraint failed: sessions.id'}
+                storeFlows:
+                  value: {error: 'failed to store flows: database is locked'}
 
   /api/v1/flows/{id}:
     get:
@@ -945,6 +1359,105 @@ components:
         offset: 0
         limit: 20
 
+    AttachSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [pid]
+      properties:
+        pid:
+          type: integer
+          format: int32
+          minimum: 1
+          description: |-
+            Operating-system PID of the agent process to attach to. Zero and
+            negative values are rejected with `400`.
+          example: 12345
+        context_windows:
+          type: boolean
+          default: false
+          description: |-
+            Capture LLM context windows for the session. Expensive, so off by
+            default.
+        categories:
+          type: array
+          description: |-
+            Requested trace categories. Empty (the default) covers every
+            category; the list is carried on the session's collect options.
+          items:
+            type: string
+            enum: [syscall, network, file, llm_call, context_window, process, resource]
+        tls_interception:
+          type: boolean
+          default: false
+          description: Intercept TLS to detect LLM API calls.
+        no_ebpf:
+          type: boolean
+          default: false
+          description: |-
+            Opt into degraded mode without kernel telemetry. When false the
+            request promises eBPF and fails with `403` if it is unavailable.
+      example:
+        pid: 12345
+        context_windows: false
+        categories: [syscall, network]
+        tls_interception: false
+        no_ebpf: false
+
+    SessionLifecycleSummary:
+      type: object
+      additionalProperties: false
+      required: [id, agent_pid, agent_name, start_time, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDv7'
+        agent_pid:
+          type: integer
+          format: int32
+          description: Operating-system PID of the attached agent process.
+          example: 12345
+        agent_name:
+          type: string
+          examples: [hermes, codex, claude-code]
+        command_line:
+          type: string
+          description: Command line of the attached process. Omitted when empty.
+          example: hermes chat
+        start_time:
+          $ref: '#/components/schemas/RFC3339Timestamp'
+        end_time:
+          anyOf:
+            - $ref: '#/components/schemas/RFC3339Timestamp'
+            - type: 'null'
+          description: Null or omitted while the session is running.
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+      description: |-
+        Wire shape of `POST /api/v1/sessions/attach` (`types.SessionSummary`).
+        It is flatter than `SessionSummary`: the command line is a top-level
+        `command_line` field and there is no `metadata` object.
+      example:
+        id: 0191a000-0000-7000-8000-000000000001
+        agent_pid: 12345
+        agent_name: hermes
+        command_line: hermes chat
+        start_time: '2026-07-21T12:00:00Z'
+        end_time: null
+        status: running
+
+    DetachSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUIDv7'
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+          description: Terminal status of the detached session; always `completed`.
+      example:
+        id: 0191a000-0000-7000-8000-000000000001
+        status: completed
+
     ContextWindow:
       type: object
       additionalProperties: false
@@ -1281,6 +1794,141 @@ components:
           format: int64
           description: Number of flows started in this hour.
 
+    DaemonStats:
+      type: object
+      additionalProperties: false
+      required: [db_path, listen_addr, total_sessions, active_sessions, total_traces, total_flows, db_size_bytes, log_level, ebpf_enabled]
+      properties:
+        db_path:
+          type: string
+          description: SQLite database file the daemon has open.
+          example: /var/lib/rabbit-hole/rabbit-hole.db
+        listen_addr:
+          type: string
+          description: |-
+            Address the daemon is actually bound to. The `listen_addr` metadata
+            row written by `serve` at startup wins; the server's own bound
+            address is the fallback for test servers and older databases.
+          example: 127.0.0.1:9734
+        total_sessions:
+          type: integer
+          format: int64
+          description: Sessions ever recorded.
+        active_sessions:
+          type: integer
+          format: int64
+          description: Stored sessions whose status is `running`.
+        total_traces:
+          type: integer
+          format: int64
+          description: Captured traces.
+        total_flows:
+          type: integer
+          format: int64
+          description: Classified flows.
+        db_size_bytes:
+          type: integer
+          format: int64
+          description: SQLite file size in bytes (pages × page size).
+        oldest_trace:
+          anyOf:
+            - $ref: '#/components/schemas/RFC3339Timestamp'
+            - type: 'null'
+          description: >-
+            Timestamp of the oldest stored trace, as stored (RFC 3339 with the
+            database's local UTC offset). Omitted when there are no traces.
+        log_level:
+          type: string
+          description: |-
+            Daemon log level (`debug`, `info`, `warn`, `error`). Empty when the
+            `serve` command registered no runtime info.
+          examples: [info]
+        ebpf_enabled:
+          type: boolean
+          description: Kernel probes are active in this daemon.
+        ebpf_detail:
+          type: string
+          description: Why eBPF is disabled, when it is. Omitted otherwise.
+          example: 'eBPF degraded — telemetry DISABLED'
+      example:
+        db_path: /var/lib/rabbit-hole/rabbit-hole.db
+        listen_addr: 127.0.0.1:9734
+        total_sessions: 12
+        active_sessions: 2
+        total_traces: 23108
+        total_flows: 4711
+        db_size_bytes: 52428800
+        oldest_trace: '2026-07-01T09:12:44Z'
+        log_level: info
+        ebpf_enabled: true
+
+    CompactRequest:
+      type: object
+      additionalProperties: false
+      required: [cutoff]
+      properties:
+        cutoff:
+          type: string
+          format: date-time
+          description: |-
+            RFC3339 timestamp; everything older is deleted. The CLI resolves
+            its `--older-than` duration into this value before calling.
+          example: '2026-08-01T00:00:00Z'
+
+    CompactResponse:
+      type: object
+      additionalProperties: false
+      required: [cutoff]
+      properties:
+        cutoff:
+          type: string
+          format: date-time
+          description: The applied cutoff, normalized to UTC and re-formatted as RFC3339.
+      example:
+        cutoff: '2026-08-01T00:00:00Z'
+
+    DemoSeedRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        flows:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 48
+          description: Flows to generate. Zero or negative applies the default of 48.
+          example: 48
+        hours_back:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 3
+          description: |-
+            Hours before now to start the session. Zero or negative applies the
+            default of 3.
+          example: 3
+        spread:
+          type: boolean
+          default: false
+          description: |-
+            Distribute flows across the whole `hours_back` window instead of
+            clustering them at its start.
+      example:
+        flows: 48
+        hours_back: 3
+        spread: true
+
+    DemoSeedResponse:
+      type: object
+      additionalProperties: false
+      required: [session_id]
+      properties:
+        session_id:
+          $ref: '#/components/schemas/UUIDv7'
+          description: ID of the seeded session, already finalized to `completed`.
+      example:
+        session_id: 0191a000-0000-7000-8000-000000000001
+
 x-cors:
   description: Middleware handles OPTIONS for every path before route dispatch.
   allowOrigin: '*'
@@ -1291,3 +1939,4 @@ x-api-notes:
   - All responses receive `X-Request-ID`; callers may supply it to correlate a request.
   - Endpoint-level rate limiting is a per-IP, per-endpoint token bucket for search, chat, and WebSocket upgrades.
   - WebSocket flow data uses the same Flow schema as GET /api/v1/flows/{id}.
+  - The daemon-scoped routes (`GET /api/v1/stats`, `POST /api/v1/compact`, `POST /api/v1/demo/seed`, and the session lifecycle endpoints) report and mutate the daemon's own store; the CLI never opens the SQLite file itself.
