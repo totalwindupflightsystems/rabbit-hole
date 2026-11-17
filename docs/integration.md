@@ -251,6 +251,24 @@ The chat model env vars (`RABBITHOLE_CHAT_MODEL_ENDPOINT`,
 **required** to enable the real model; if any is unset, the server logs a
 warning and falls back to the built-in stub (responses carry `"stub": true`).
 
+### Maintenance commands
+
+Commands that write the store — `rabbit-hole compact` today — must run as the
+daemon user, or as a user that owns the data directory. The SQLite store
+belongs to whoever started `rabbit-hole serve`, so a maintenance command run as
+any other user (for example after starting the daemon with `sudo`) exits
+non-zero with an ownership error naming the data directory, its owner, and the
+fix:
+
+```text
+database not writable by current user — the daemon (or another user) owns the data directory /tmp/rh-data (owner: root); run maintenance commands as the daemon user (root), or check RABBITHOLE_DATA_DIR ownership/permissions
+```
+
+Run the command with `RABBITHOLE_DATA_DIR` pointing at the daemon's data
+directory, as the user that owns it (`sudo ./bin/rabbit-hole compact …` when the
+daemon was started with `sudo`), or `chown` the data directory to the user
+running maintenance.
+
 ## API contract
 
 The authoritative, machine-readable contract for this API is
