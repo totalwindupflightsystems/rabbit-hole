@@ -148,7 +148,16 @@ type pidWatch interface {
 // pidfdWatch is the real pidWatch: a pidfd pinned at track time plus a
 // /proc fallback. The pidfd pins the exact process, so a recycled PID
 // can never be mistaken for the monitored one.
+//
+// mu serializes the watch lifecycle. The monitor goroutine calls
+// exitInfo() from its poll loop (outside the monitor lock) while a
+// concurrent StopSession may close the same watch from another
+// goroutine. Without the lock, close() could free the fd under an
+// in-flight waitid(P_PIDFD); worse, the recycled fd number could then
+// belong to another session's pidfd, and waitid would hand this session
+// a stranger's exit status for finalize to persist.
 type pidfdWatch struct {
+	mu            sync.Mutex
 	pid           int32
 	fd            int // pidfd; -1 when unavailable -> /proc-only
 	logger        *slog.Logger
@@ -169,6 +178,8 @@ func openPidfdWatch(pid int32, logger *slog.Logger) pidWatch {
 }
 
 func (w *pidfdWatch) close() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.fd >= 0 {
 		_ = syscall.Close(w.fd)
 		w.fd = -1
@@ -176,6 +187,8 @@ func (w *pidfdWatch) close() {
 }
 
 func (w *pidfdWatch) exitInfo() (exited bool, code int32, signalDeath, ok bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.fd >= 0 && !w.pidfdDisabled {
 		st, errno := waitPidfd(w.fd, int(w.pid))
 		switch {

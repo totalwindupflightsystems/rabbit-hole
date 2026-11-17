@@ -76,14 +76,17 @@ func waitForStatus(t *testing.T, store *mockStorage, id string, want types.Sessi
 	return nil
 }
 
-// findSession returns the stored session pointer (mockStorage keeps
-// pointers, so mutations by UpdateSession are visible).
+// findSession returns a snapshot copy of the stored session. The store
+// must never hand out a pointer into its own state: this helper reads
+// while the monitor goroutine finalizes the same session, and aliasing
+// that struct was the DF-RABBIT-HOLE-1 race (read of s.Status against
+// UpdateSession's write).
 func (m *mockStorage) findSession(id string) *types.Session {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, s := range m.sessions {
 		if s.ID == id {
-			return s
+			return cloneSession(s)
 		}
 	}
 	return nil

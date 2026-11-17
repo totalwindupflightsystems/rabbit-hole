@@ -114,6 +114,12 @@ func TestStress_MemoryLeak(t *testing.T) {
 
 // TestStress_MemoryLeakParallel runs the leak test with concurrent
 // session lifecycle operations to catch data-race-induced leaks.
+//
+// It asserts a heap ceiling, not wall-clock time, so it stays valid in both
+// modes the suite is run in — `make test-all` (-race, mandatory) and plain
+// `go test`. Wall-clock SLO budgets elsewhere in the module are per-host
+// budgets calibrated WITHOUT -race; see docs/testing.md before treating a
+// timing breach under -race as a regression.
 func TestStress_MemoryLeakParallel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stress test — skipped in short mode")
