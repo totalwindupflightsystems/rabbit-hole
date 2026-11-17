@@ -136,11 +136,47 @@ With a remote backend configured, `/health` reports the classifier as
 
 ### Go toolchain
 
-Rabbit-Hole is a Go project — install Go 1.26+ and `make` before building:
+Rabbit-Hole is a Go project — install Go 1.26+ and `make` before building.
+
+#### Unprivileged install (no sudo — recommended)
+
+Everything lives under `$HOME`, so this works on a bare account with no root
+access — the same account that runs the `--no-ebpf` degraded mode:
+
+```bash
+# 1. Download the official tarball (see https://go.dev/dl/ for the current stable)
+curl -fsSLO https://go.dev/dl/go1.26.5.linux-amd64.tar.gz
+
+# 2. Extract into a user-owned GOROOT — nothing goes under /usr/local
+mkdir -p "$HOME/go-toolchain"
+tar -C "$HOME/go-toolchain" -xzf go1.26.5.linux-amd64.tar.gz
+
+# 3. Put it on PATH for this shell...
+export PATH="$HOME/go-toolchain/go/bin:$PATH"
+
+# ...and persist it for future shells
+echo 'export PATH="$HOME/go-toolchain/go/bin:$PATH"' >> "$HOME/.bashrc"
+
+go version   # go version go1.26.5 linux/amd64
+```
+
+`make` is normally already installed (`make --version`). If it is not, you need
+root for a system package — but you can skip `make` entirely and run the build
+command directly, since that is all the `build` target does:
+
+```bash
+go build -ldflags="-s -w -X main.Version=dev" -o bin/rabbit-hole ./cmd/rabbit-hole/
+```
+
+#### Root options (if you have sudo)
 
 - **Ubuntu/Debian**: `sudo apt-get install -y golang-go` (add `build-essential` for `make`)
-- **Alternative**: official Go tarball from https://go.dev/dl/ — extract to `/usr/local` and add `/usr/local/go/bin` to your `PATH`
-- **Verify**: `go version` prints 1.26+; `make --version` works (else `sudo apt-get install -y build-essential`)
+- **Official tarball**: from https://go.dev/dl/ — extract to `/usr/local` (`sudo tar -C /usr/local -xzf go*.linux-amd64.tar.gz`) and add `/usr/local/go/bin` to your `PATH`
+
+#### Verify
+
+`go version` prints 1.26+; `make --version` works (else
+`sudo apt-get install -y build-essential`).
 
 ### eBPF privileges
 
