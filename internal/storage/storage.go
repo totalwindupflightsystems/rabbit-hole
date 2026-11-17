@@ -26,6 +26,7 @@ type Storage interface {
 	StoreSession(ctx context.Context, session *types.Session) error
 	GetSession(ctx context.Context, sessionID string) (*types.Session, error)
 	ListSessions(ctx context.Context, offset, limit int) ([]types.Session, error)
+	CountSessions(ctx context.Context) (int, error)
 	UpdateSession(ctx context.Context, session *types.Session) error
 
 	// Context window operations

@@ -127,6 +127,59 @@ func TestListSessions(t *testing.T) {
 	}
 }
 
+// TestCountSessions covers DF-RABBIT-HOLE-5: the count feeds the API's `total`
+// and must report every stored session, independent of ListSessions pagination.
+func TestCountSessions(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Empty store counts zero, not an error.
+	if got, err := store.CountSessions(ctx); err != nil {
+		t.Fatalf("CountSessions on empty store: %v", err)
+	} else if got != 0 {
+		t.Errorf("CountSessions on empty store = %d, want 0", got)
+	}
+
+	for i := 0; i < 3; i++ {
+		sess := &types.Session{
+			ID:        fmt.Sprintf("ses-count-%d", i),
+			AgentPID:  int32(2000 + i),
+			AgentName: "hermes",
+			StartTime: time.Now().UTC().Add(-time.Duration(i) * time.Hour),
+			Status:    types.SessionStatusCompleted,
+			Metadata: types.SessionMetadata{
+				CommandLine: "hermes chat",
+				Environment: map[string]string{},
+			},
+		}
+		if err := store.StoreSession(ctx, sess); err != nil {
+			t.Fatalf("StoreSession %d: %v", i, err)
+		}
+	}
+
+	got, err := store.CountSessions(ctx)
+	if err != nil {
+		t.Fatalf("CountSessions: %v", err)
+	}
+	if got != 3 {
+		t.Errorf("CountSessions = %d, want 3", got)
+	}
+
+	// Paging the list must not change the count.
+	page, err := store.ListSessions(ctx, 1, 1)
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(page) != 1 {
+		t.Errorf("len(page) = %d, want 1", len(page))
+	}
+	if got, err := store.CountSessions(ctx); err != nil {
+		t.Fatalf("CountSessions after page: %v", err)
+	} else if got != 3 {
+		t.Errorf("CountSessions after ListSessions(offset=1, limit=1) = %d, want 3", got)
+	}
+}
+
 func TestReconcileCrashedSessions(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
