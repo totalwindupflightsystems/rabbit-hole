@@ -178,6 +178,72 @@ func TestListSessions_WithData(t *testing.T) {
 	}
 }
 
+// seedSessions stores n sessions with distinct IDs.
+func seedSessions(t *testing.T, store *storage.SQLiteStore, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		sess := &types.Session{
+			ID: fmt.Sprintf("0191a000-0000-7000-8000-%012d", i+1), AgentPID: int32(12345 + i),
+			AgentName: "hermes", StartTime: time.Now().UTC().Add(-time.Duration(i) * time.Minute),
+			Status:   types.SessionStatusRunning,
+			Metadata: types.SessionMetadata{WorkDir: "/home/test"},
+		}
+		if err := store.StoreSession(context.Background(), sess); err != nil {
+			t.Fatalf("StoreSession %d: %v", i, err)
+		}
+	}
+}
+
+// TestListSessions_TotalIsMatchCount covers DF-RABBIT-HOLE-5: `total` must be
+// the number of matching sessions, not the size of the returned page, so a
+// client paging with limit=1 can learn the real set size. Pre-fix this handler
+// reported total = len(sessions) (1 and 0 here) and this test fails.
+func TestListSessions_TotalIsMatchCount(t *testing.T) {
+	srv, cl := newTestServer(t)
+	defer cl()
+	seedSessions(t, srv.store, 3)
+
+	for _, tc := range []struct {
+		name   string
+		offset int
+	}{
+		{name: "first page", offset: 0},
+		{name: "second page", offset: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := doJSON(t, "GET",
+				getURL(srv, fmt.Sprintf("/api/v1/sessions?limit=1&offset=%d", tc.offset)), nil)
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("got %d, want 200", resp.StatusCode)
+			}
+			m := decodeMap(t, resp)
+
+			for _, k := range []string{"sessions", "total", "offset", "limit"} {
+				if _, ok := m[k]; !ok {
+					t.Errorf("response missing key %q; keys: %v", k, m)
+				}
+			}
+			sessions, ok := m["sessions"].([]any)
+			if !ok {
+				t.Fatalf("sessions is not an array: %T", m["sessions"])
+			}
+			if len(sessions) != 1 {
+				t.Errorf("len(sessions) = %d, want 1 (limit must be honoured)", len(sessions))
+			}
+			if total, _ := m["total"].(float64); int(total) != 3 {
+				t.Errorf("total = %v, want 3 (match count, not page size)", m["total"])
+			}
+			if off, _ := m["offset"].(float64); int(off) != tc.offset {
+				t.Errorf("offset = %v, want %d", m["offset"], tc.offset)
+			}
+			if limit, _ := m["limit"].(float64); int(limit) != 1 {
+				t.Errorf("limit = %v, want 1", m["limit"])
+			}
+		})
+	}
+}
+
 func TestGetSession_Found(t *testing.T) {
 	srv, cl := newTestServer(t)
 	defer cl()

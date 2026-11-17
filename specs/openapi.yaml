@@ -231,7 +231,11 @@ paths:
       tags: [Sessions]
       operationId: listSessions
       summary: List monitored sessions
-      description: Returns paginated session summaries. The server defaults `offset` to 0 and `limit` to 20, and caps `limit` at 100.
+      description: |-
+        Returns paginated session summaries. `total` is the number of sessions
+        matching the request, not the number of summaries on this page, so a
+        client can page through every result. The server defaults `offset` to 0
+        and `limit` to 20, and caps `limit` at 100.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -1016,7 +1020,7 @@ components:
     Offset:
       name: offset
       in: query
-      description: Zero-based number of sessions to skip.
+      description: Zero-based number of sessions to skip. Defaults to 0.
       schema:
         type: integer
         format: int32
@@ -1025,7 +1029,7 @@ components:
     SessionListLimit:
       name: limit
       in: query
-      description: Maximum number of session summaries. Values greater than 100 are capped by the server.
+      description: Maximum number of session summaries. Defaults to 20; values greater than 100 are capped by the server.
       schema:
         type: integer
         format: int32
@@ -1331,7 +1335,10 @@ components:
           type: integer
           format: int32
           minimum: 0
-          description: Number of summaries returned in this response.
+          description: >-
+            Total number of sessions matching the request, independent of
+            `offset` and `limit`. The `sessions` array holds at most `limit` of
+            them.
         offset:
           type: integer
           format: int32

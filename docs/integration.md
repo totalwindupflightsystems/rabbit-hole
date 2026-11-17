@@ -56,7 +56,7 @@ the API to your network — make sure that is what you want.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Liveness + per-component health (storage, metrics, classifier, collector) |
-| GET | `/api/v1/sessions` | List agent sessions (`offset`, `limit` query params; `limit` max 100) |
+| GET | `/api/v1/sessions` | List agent sessions (`offset`, `limit` query params; `limit` max 100; `total` = matching sessions) |
 | GET | `/api/v1/sessions/{id}` | One session by UUID |
 | GET | `/api/v1/flows/{id}` | One flow by UUID |
 | GET | `/api/v1/flows/{id}/context-window` | Context window for a flow (if captured) |
@@ -119,6 +119,16 @@ curl -s "http://127.0.0.1:9734/api/v1/sessions?limit=10" | jq
   "offset": 0,
   "limit": 10
 }
+```
+
+Pagination: `GET /api/v1/sessions` takes `offset` (zero-based number of
+sessions to skip, default `0`) and `limit` (page size, default `20`, capped at
+`100`). The response echoes both. `total` is the number of sessions matching
+the request — not the number of summaries on this page — so a client can page
+through everything; `sessions` holds at most `limit` entries:
+
+```bash
+curl -s "http://127.0.0.1:9734/api/v1/sessions?limit=10&offset=20" | jq '{total, offset, limit}'
 ```
 
 ### Search flows

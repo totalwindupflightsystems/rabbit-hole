@@ -142,6 +142,16 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 		sessions = []types.Session{}
 	}
 
+	// total is the number of matching sessions, not the size of this page, so a
+	// client can page through the whole set. Counting is a best-effort extra: if
+	// it fails we fall back to the page size rather than failing the request,
+	// which still gives the caller a consistent page (offset/limit honoured).
+	total, err := s.store.CountSessions(r.Context())
+	if err != nil {
+		s.logger.Warn("count sessions failed, falling back to page size", "err", err)
+		total = len(sessions)
+	}
+
 	// Build session summaries with flow counts
 	summaries := make([]sessionSummary, len(sessions))
 	for i, sess := range sessions {
@@ -158,7 +168,7 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sessions": summaries,
-		"total":    len(sessions),
+		"total":    total,
 		"offset":   offset,
 		"limit":    limit,
 	})

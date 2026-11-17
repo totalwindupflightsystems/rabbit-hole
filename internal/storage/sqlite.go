@@ -556,6 +556,16 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, offset, limit int) ([]ty
 	return out, rows.Err()
 }
 
+// CountSessions returns the total number of stored sessions, independent of any
+// pagination applied by ListSessions.
+func (s *SQLiteStore) CountSessions(ctx context.Context) (int, error) {
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions`).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count sessions: %w", err)
+	}
+	return total, nil
+}
+
 // UpdateSession updates an existing session.
 func (s *SQLiteStore) UpdateSession(ctx context.Context, session *types.Session) error {
 	envJSON, _ := json.Marshal(session.Metadata.Environment)
