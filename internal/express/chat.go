@@ -85,27 +85,39 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		flows = []types.Flow{}
 	}
 
-	// Step 3b: Stub zero-result fallback for time-window questions. The
-	// stub translates "What did the agent do in the last hour?" into an
-	// empty query + time window; when nothing was recorded in that window
-	// (e.g. right after `rabbit-hole demo` seeds flows ~3h back), re-run
-	// without the window so the answer shows the most recent activity
-	// instead of dead-ending on "couldn't find any matching activity".
-	// Only stub-translated time-only requests fall back — keyword queries
-	// with no matches keep their honest empty result. DF-008.
+	// Step 3b: Stub zero-result fallback to recent flows. The stub has no
+	// language understanding: it turns a whole non-time message into an
+	// FTS5 keyword filter ("hello" → Query="hello") and a time question
+	// into a window. Either translation can match nothing while the DB
+	// holds plenty of activity (greetings, unknown words, a window that
+	// predates the seeded flows — e.g. right after `rabbit-hole demo`
+	// seeds flows ~3h back). Rather than dead-ending on "I couldn't find
+	// any matching activity" with flows:[], re-run the query with neither
+	// the keyword nor the window and answer from the most recent flows,
+	// prefixed with a sentence naming the reason. The session/phase/
+	// outcome filters are kept, so when the request's own scope genuinely
+	// holds no flows the re-query finds nothing too and the honest empty
+	// answer stands (no fabrication). Only the stub does this — a real
+	// model owns its own interpretation and keeps its current behaviour.
+	// DF-008, DF-RABBIT-HOLE-4.
 	_, isStub := s.chatModel.(*stubChatModel)
-	if isStub && len(flows) == 0 && searchReq.Query == "" && !searchReq.TimeRange.Start.IsZero() {
-		s.logger.Debug("stub: time-window question returned no flows; falling back to recent flows",
-			"message", req.Message)
+	fallbackNote := ""
+	if isStub && len(flows) == 0 {
 		recent, _, ferr := s.store.QueryFlows(ctx, types.FlowQuery{
 			SessionID: searchReq.SessionID,
-			Query:     searchReq.Query,
 			Phases:    searchReq.Categories,
 			Outcomes:  searchReq.Outcomes,
 			Limit:     searchReq.Limit,
 		})
-		if ferr == nil && len(recent) > 0 {
+		switch {
+		case ferr != nil:
+			s.logger.Warn("stub: recent-flows fallback query failed",
+				"err", ferr, "message", req.Message)
+		case len(recent) > 0:
+			s.logger.Debug("stub: no flows matched; falling back to recent flows",
+				"message", req.Message, "recent", len(recent))
 			flows = recent
+			fallbackNote = stubFallbackNote(searchReq)
 		}
 	}
 
@@ -114,6 +126,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Fallback: use structured results without NL generation
 		answer = formatFallbackAnswer(flows)
+	}
+	if fallbackNote != "" {
+		answer = fallbackNote + answer
 	}
 
 	// Step 5: Generate follow-up suggestions
@@ -133,6 +148,25 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// stubFallbackNote is the sentence a stub answer is prefixed with when the
+// stub's translation matched nothing but the store does hold flows, so the
+// answer is showing recent activity rather than the asked-for slice. It
+// names which filter came up empty — the keyword, the window, or both — so
+// the answer stays honest about what the user is looking at. DF-RABBIT-HOLE-4.
+func stubFallbackNote(req *types.SearchRequest) string {
+	windowed := !req.TimeRange.Start.IsZero()
+	var reason string
+	switch {
+	case req.Query != "" && windowed:
+		reason = fmt.Sprintf("No activity matched %q in that time window", req.Query)
+	case req.Query != "":
+		reason = fmt.Sprintf("No activity matched %q", req.Query)
+	default:
+		reason = "No activity was recorded in that time window"
+	}
+	return reason + "; showing your most recent activity instead.\n\n"
 }
 
 func (s *Server) generateSuggestions(flows []types.Flow) []string {

@@ -200,6 +200,36 @@ stub and sets `"stub": true` in the response. The `rabbit-hole chat` CLI
 prints a warning to stderr in this case. Consumers should check the `stub`
 field and surface it to users — stub answers are canned, not model-generated.
 
+The stub does not dead-end on questions it cannot translate. It turns a time
+question ("what happened in the last hour?") into a time window, and any
+other message into a keyword filter over flow descriptions — so a greeting
+like `"hello"` or an unknown word matches nothing even when the database is
+full. When that translated search returns zero flows but the database does
+hold flows within the request's scope (`session_id`, `categories`,
+`outcomes`), the server re-runs the search with neither the keyword nor the
+time window and answers from the most recent flows (same `limit`). The
+answer names the reason it is showing recent activity, for example:
+
+```text
+No activity matched "hello"; showing your most recent activity instead.
+
+Found 20 actions:
+  ✓ execute_code — Ran sql query against billing database
+  ...
+```
+
+Variants of that first sentence: an empty time window reads "No activity was
+recorded in that time window; showing your most recent activity instead.",
+and a question that carried both a keyword and a window names both. If the
+database genuinely holds no flows in scope, no fallback happens and the
+answer is the explicit `I couldn't find any matching activity for your
+query.` with `"flows": []` — stub answers never invent activity.
+
+A real chat model does **not** fall back this way: it owns its own
+interpretation of the question, so the server returns exactly the flows it
+matched (empty when nothing matched). The fallback exists only because the
+stub cannot reason about phrasing.
+
 ### Metrics
 
 Prometheus text format:
