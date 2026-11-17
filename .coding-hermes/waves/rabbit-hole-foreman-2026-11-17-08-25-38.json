@@ -18,5 +18,21 @@
       "status": "dispatched"
     }
   ],
-  "note": "singleton wave (WAVE_BUDGET=1); board row marked in_progress before dispatch"
+  "note": "singleton wave (WAVE_BUDGET=1); board row marked in_progress before dispatch",
+  "finished_at": "2026-11-17T22:36:00Z",
+  "status": "recovered",
+  "recovery": {
+    "tick": "rabbit-hole-foreman-2026-11-17-22-33-27",
+    "verified_by": "foreman",
+    "findings": {
+      "merge": "worker 94a59cf merged as 24f4dc5 by tick 309 (2026-11-17T03:50:33-05:00); 94a59cf is an ancestor of main and git diff main...wt/DF-RABBIT-HOLE-5 is empty",
+      "judge": "gitreins 2026-11-17/b0183b51 PASS 4/4",
+      "gates_rerun_on_merged_tree": "go build ./... rc=0; go vet ./... rc=0; go test ./... -count=1 -short rc=0 (10 packages ok) at main 99b338d",
+      "fix_present_at_head": "CountSessions in internal/express/handlers.go:149, internal/storage/sqlite.go:559-561, storage.go:29",
+      "board_truth": "DF-RABBIT-HOLE-5 status=complete with evidence run b0183b51 + commit_hash 94a59cf",
+      "worktree": "reaped, only untracked .gitreins guard residue",
+      "branch": "wt/DF-RABBIT-HOLE-5 deleted (was 94a59cf)",
+      "board_touching_diff": "0 board paths in 94a59cf (7 files, code+docs+specs only)"
+    }
+  }
 }
