@@ -10,6 +10,7 @@ package collector
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -17,7 +18,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/google/uuid"
 
@@ -34,13 +35,14 @@ type eBPFCollector struct {
 	mu       sync.RWMutex
 
 	ringBuffer  *RingBuffer
-	perfReader  *perf.Reader
+	ringReader  *ringbuf.Reader
 	maxSessions int
 	logger      *slog.Logger
 
 	// ebpfErr is non-nil when the collector is running degraded — kernel
-	// probes failed to load (no CAP_SYS_RESOURCE, kernel < 5.11, missing
-	// BPF support) and no kernel telemetry will arrive. Ring buffer and
+	// probes failed to load and no kernel telemetry will arrive. It carries
+	// the cause the kernel actually reported (see classifyEBPFError); it is
+	// never a guess about privileges or kernel version. Ring buffer and
 	// session bookkeeping still work.
 	ebpfErr error
 }
@@ -93,7 +95,7 @@ func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger) (*eBPFColle
 		c.ebpfErr = err
 		logger.Warn("ebpf: kernel probes unavailable, running without eBPF",
 			"err", err,
-			"hint", "run 'go generate ./internal/collector/' with clang and kernel headers installed",
+			"hint", ebpfHint(err),
 		)
 	}
 
@@ -108,41 +110,93 @@ func (c *eBPFCollector) EBPFEnabled() bool {
 }
 
 // PreflightEBPF returns nil when eBPF probes are loaded and functional.
-// When the collector is running degraded (e.g. no CAP_SYS_RESOURCE, kernel
-// < 5.11, missing BPF support), it returns an explicit error stating that
-// telemetry is DISABLED plus the underlying cause and the opt-in escape
-// hatch. Commands that promise kernel telemetry (attach, serve) must check
-// this before starting; session-management commands (status, list, detach)
-// must not.
+// When the collector is running degraded it returns an explicit error stating
+// that telemetry is DISABLED, the cause the kernel actually reported, and the
+// opt-in escape hatch. It never asserts a privilege or kernel-version
+// requirement: those are only named when the load error was an actual
+// EPERM/EACCES refusal and the required capability is provably missing.
+// Commands that promise kernel telemetry (attach, serve) must check this
+// before starting; session-management commands (status, list, detach) must not.
 func (c *eBPFCollector) PreflightEBPF() error {
 	if c.ebpfErr == nil {
 		return nil
 	}
-	return fmt.Errorf("eBPF unavailable — telemetry DISABLED (requires CAP_SYS_RESOURCE and kernel 5.11+; use --no-ebpf to run in degraded mode): %w", c.ebpfErr)
+	return fmt.Errorf("eBPF unavailable — telemetry DISABLED (use --no-ebpf to run in degraded mode): %w", c.ebpfErr)
 }
 
 // removeMemlock is a package-level hook so tests can simulate an
 // unprivileged host (no CAP_SYS_RESOURCE) without dropping privileges.
 var removeMemlock = rlimit.RemoveMemlock
 
-// loadEBPF attempts to load eBPF programs and start the perf event reader.
+// stackMapValueSize is the minimum legal value_size for a
+// BPF_MAP_TYPE_STACK_TRACE map. The kernel's stack_map_alloc() has always
+// required `value_size >= 8 && value_size % 8 == 0`, so a spec that leaves
+// value_size at the clang-emitted default of 0 is rejected with EINVAL on
+// every kernel — not only on new ones. The generated object declares no
+// __type(value, ...) for stack_map, so the spec is normalized before load
+// (DF-RABBIT-HOLE-6). 8 keeps the default stack layout (no
+// BPF_F_STACK_BUILD_ID) and is accepted by every kernel that has stack maps.
+const stackMapValueSize = 8
+
+// stackTraceMapNames returns the names of the collection's stack-trace maps.
+func stackTraceMapNames(spec *ebpf.CollectionSpec) []string {
+	var names []string
+	for name, ms := range spec.Maps {
+		if ms.Type == ebpf.StackTrace {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// normalizeStackMapSpecs gives every stack-trace map a legal value_size.
+// A single unloadable map aborts the whole collection, so leaving the
+// clang-emitted 0 here costs all telemetry for an unrelated map's sake.
+func normalizeStackMapSpecs(spec *ebpf.CollectionSpec) {
+	for _, ms := range spec.Maps {
+		if ms.Type != ebpf.StackTrace || ms.ValueSize != 0 {
+			continue
+		}
+		ms.ValueSize = stackMapValueSize
+	}
+}
+
+// loadCollection loads the embedded BPF collection with the stack-trace maps
+// normalized for the kernel's documented value_size floor.
+func loadCollection(opts *ebpf.CollectionOptions) (*bpfObjects, error) {
+	spec, err := loadBpf()
+	if err != nil {
+		return nil, fmt.Errorf("load bpf spec: %w", err)
+	}
+	normalizeStackMapSpecs(spec)
+
+	objs := &bpfObjects{}
+	if err := spec.LoadAndAssign(objs, opts); err != nil {
+		return nil, err
+	}
+	return objs, nil
+}
+
+// loadEBPF attempts to load eBPF programs and start the ring-buffer reader.
 func (c *eBPFCollector) loadEBPF() error {
 	if err := removeMemlock(); err != nil {
+		err = fmt.Errorf("remove memlock rlimit: %w", err)
 		c.logger.Warn("ebpf: remove memlock rlimit failed, continuing without eBPF",
 			"err", err,
-			"hint", "may need CAP_SYS_RESOURCE or kernel 5.11+",
+			"hint", ebpfHint(classifyEBPFError(err)),
 		)
-		return fmt.Errorf("remove memlock: %w", err)
+		return classifyEBPFError(err)
 	}
 
-	var objs bpfObjects
+	var objs *bpfObjects
 	opts := &ebpf.CollectionOptions{
 		Programs: ebpf.ProgramOptions{
 			LogLevel: ebpf.LogLevelBranch,
 		},
 	}
-	if err := loadBpfObjects(&objs, opts); err != nil {
-		return fmt.Errorf("load bpf objects: %w", err)
+	objs, err := loadCollection(opts)
+	if err != nil {
+		return classifyEBPFError(fmt.Errorf("load bpf objects: %w", err))
 	}
 
 	if objs.Events == nil {
@@ -154,14 +208,17 @@ func (c *eBPFCollector) loadEBPF() error {
 		return fmt.Errorf("pid_filter map not found in bpf objects")
 	}
 
-	rd, err := perf.NewReader(objs.Events, c.bufSize())
+	// events is a BPF_MAP_TYPE_RINGBUF (see collector.bpf.c): it must be read
+	// with ringbuf.Reader. A perf.Reader cannot attach to a ring-buffer map,
+	// so the previous perf path always failed once the maps loaded.
+	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
 		objs.Close()
-		return fmt.Errorf("create perf reader: %w", err)
+		return fmt.Errorf("create ring buffer reader: %w", err)
 	}
 
-	c.objs = objs
-	c.perfReader = rd
+	c.objs = *objs
+	c.ringReader = rd
 
 	go c.readEvents()
 	return nil
@@ -172,16 +229,16 @@ func (c *eBPFCollector) bufSize() int {
 }
 
 // readEvents runs in a background goroutine, reading raw events from the
-// perf reader, parsing them into types.Trace values, and pushing them
-// into the ring buffer.
+// ring buffer, parsing them into types.Trace values, and pushing them
+// into the in-memory ring buffer.
 func (c *eBPFCollector) readEvents() {
 	for {
-		record, err := c.perfReader.Read()
+		record, err := c.ringReader.Read()
 		if err != nil {
-			if err == perf.ErrClosed {
+			if errors.Is(err, ringbuf.ErrClosed) {
 				return
 			}
-			c.logger.Error("ebpf: perf reader error", "err", err)
+			c.logger.Error("ebpf: ring buffer read error", "err", err)
 			return
 		}
 
@@ -200,15 +257,23 @@ func (c *eBPFCollector) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.perfReader != nil {
-		c.perfReader.Close()
+	var errs []error
+	if c.ringReader != nil {
+		if err := c.ringReader.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close ring buffer reader: %w", err))
+		}
 	}
 
 	for _, l := range c.links {
-		l.Close()
+		if err := l.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close bpf link: %w", err))
+		}
 	}
 
-	return c.objs.Close()
+	if err := c.objs.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close bpf objects: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 // parseTraceEvent manually parses a raw trace_event from the eBPF perf buffer.

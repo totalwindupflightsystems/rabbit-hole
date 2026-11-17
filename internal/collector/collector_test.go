@@ -310,13 +310,21 @@ func TestCollector_PreflightEBPF_Degraded(t *testing.T) {
 	if err == nil {
 		t.Fatal("PreflightEBPF() = nil, want error on unprivileged host")
 	}
+	// The failure must state what the kernel returned (EPERM here). The old
+	// blanket "requires CAP_SYS_RESOURCE and kernel 5.11+" claim must not
+	// appear: before DF-RABBIT-HOLE-6 it was printed even on hosts that held
+	// every capability and ran a far newer kernel.
 	for _, want := range []string{
 		"eBPF unavailable — telemetry DISABLED",
-		"CAP_SYS_RESOURCE",
-		"kernel 5.11",
+		"operation not permitted",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("PreflightEBPF() error %q missing %q", err.Error(), want)
+		}
+	}
+	for _, stale := range []string{"requires CAP_SYS_RESOURCE", "kernel 5.11"} {
+		if strings.Contains(err.Error(), stale) {
+			t.Errorf("PreflightEBPF() error %q must not carry the stale claim %q", err.Error(), stale)
 		}
 	}
 
