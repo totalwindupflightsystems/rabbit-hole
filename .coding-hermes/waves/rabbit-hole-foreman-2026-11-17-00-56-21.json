@@ -1,0 +1,157 @@
+{
+  "tick": "rabbit-hole-foreman-2026-11-17-00-56-21",
+  "project": "rabbit-hole",
+  "repo": "/home/kara/rabbit-hole",
+  "created_at": "2026-11-17T01:05:00Z",
+  "base": "origin/main",
+  "base_sha": "c39bfd9",
+  "wave_budget": 5,
+  "admitted_slots": 5,
+  "spawned": 5,
+  "spawn_reason": "WAVE RECOVERY of crashed wave rabbit-hole-foreman-2026-11-16-22-47-48 (all 6 workers dead with the prior session; CLN-002/DOC-14/QA-RABBIT-HOLE-4 already merged+closed at 23:01). 3 re-dispatches in their existing worktrees with crash notes, 2 new disjoint-seam rows. DOC-2 recovered foreman-direct (commit 8dbe659 exists on wt/DOC-2): gate+judge+merge this tick, no worker. Host load 15.7/16 trending down — workers scoped to package-level tests.",
+  "worker_model": "openai/gpt-6.1-terra",
+  "worker_provider": "xkiro",
+  "workers": [
+    {
+      "task": "DF-RABBIT-HOLE-6",
+      "priority": "P0",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-6",
+      "branch": "wt/DF-RABBIT-HOLE-6",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-6-005621.md",
+      "seam": [
+        "internal/collector/"
+      ],
+      "port": 19863,
+      "resume": "uncommitted ebpf.go +115/-29, new ebpf_classify.go + scratch probe_df6_test.go"
+    },
+    {
+      "task": "DF-RABBIT-HOLE-8",
+      "priority": "P1",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-8",
+      "branch": "wt/DF-RABBIT-HOLE-8",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-8-005621.md",
+      "seam": [
+        "internal/storage/",
+        "cmd/rabbit-hole/compact.go",
+        "docs/integration.md (maintenance-user note only)"
+      ],
+      "port": 19864,
+      "resume": "uncommitted sqlite.go, integration.md, new readonly.go family + readonly_test.go"
+    },
+    {
+      "task": "DF-RABBIT-HOLE-1",
+      "priority": "P1",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-1",
+      "branch": "wt/DF-RABBIT-HOLE-1",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-1-005621.md",
+      "seam": [
+        "internal/attach/"
+      ],
+      "resume": "uncommitted monitor.go +13, monitor_test.go, attach_test.go; QA re-check: SLO half = host contention (per-host budget note satisfies AC), race half = code defect"
+    },
+    {
+      "task": "DF-RABBIT-HOLE-7",
+      "priority": "P3",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-7",
+      "branch": "wt/DF-RABBIT-HOLE-7",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-7-005621.md",
+      "seam": [
+        "README.md"
+      ],
+      "new": "worktree cut c39bfd9"
+    },
+    {
+      "task": "DOC-9",
+      "priority": "P4",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DOC-9",
+      "branch": "wt/DOC-9",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-DOC-9-005621.md",
+      "seam": [
+        "specs/openapi.yaml"
+      ],
+      "new": "worktree cut c39bfd9"
+    }
+  ],
+  "foreman_owned": [
+    {
+      "task": "DOC-2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DOC-2",
+      "branch": "wt/DOC-2",
+      "state": "worker commit 8dbe659 exists on branch (specs/06 CLI examples); foreman runs gate + gitreins judge + merge + gates + push this tick"
+    }
+  ],
+  "deferred": {
+    "DF-RABBIT-HOLE-2": "same file as DF-RABBIT-HOLE-6 (internal/collector/ebpf.go) — serialized behind it",
+    "DF-RABBIT-HOLE-4": "docs/integration.md seam owned by DF-RABBIT-HOLE-8 this wave",
+    "DF-RABBIT-HOLE-5": "docs/integration.md + openapi.yaml seam owned by DF-8/DOC-9 this wave",
+    "DF-038": "test-file seams may collide with DF-1/DF-8 worktrees; next wave",
+    "DOC-11/DOC-12/DOC-13/DOC-15": "specs/06 seam owned by DOC-2 this wave",
+    "DOC-16/DOC-8/DOC-10": "docs/integration.md seam owned by DF-8 this wave",
+    "README-1/3/4/5/6/8/9": "README.md seam owned by DF-7 this wave",
+    "DOC-1": "openapi.yaml seam owned by DOC-9 this wave"
+  },
+  "merge_order": [
+    "DOC-2",
+    "DOC-9",
+    "DF-RABBIT-HOLE-7",
+    "DF-RABBIT-HOLE-8",
+    "DF-RABBIT-HOLE-1",
+    "DF-RABBIT-HOLE-6"
+  ],
+  "notes": [
+    "orphan daemon PID 649015 (./bin/rabbit-hole serve, started 23:03 UTC prior-tick window) holds port 9734 — left running (owner unknown, possibly demo); workers use dedicated ports 19863/19864",
+    "worker spawn WITHOUT -s coding-hermes-worker (host gateway fails session.create on -s, per 11-16 lesson); briefs are self-contained with isolation preamble + commit rules inlined"
+  ],
+  "harvest": {
+    "recovered_by": "rabbit-hole-foreman-2026-11-17-06-20-29",
+    "recovered_at": "2026-11-17T06:55:00Z",
+    "outcomes": [
+      {
+        "task": "DOC-2",
+        "state": "CLOSED",
+        "work": "0aaad45 (3 commits) merged 14eb6cb",
+        "judge": "50a20a7f PASS"
+      },
+      {
+        "task": "DOC-9",
+        "state": "CLOSED",
+        "work": "f7e24f5 merged 954d889 (prior tick); judge id cited in merge commit had no stored run — re-judged this tick",
+        "judge": "see DOC-9 row evidence"
+      },
+      {
+        "task": "DF-RABBIT-HOLE-7",
+        "state": "CLOSED",
+        "work": "aa45d23 merged db5b6f0",
+        "judge": "ffa16ff8 PASS"
+      },
+      {
+        "task": "DF-RABBIT-HOLE-8",
+        "state": "CLOSED",
+        "work": "b3cb75e merged 5b6ea06",
+        "judge": "e8aa3332 PASS"
+      },
+      {
+        "task": "DF-RABBIT-HOLE-6",
+        "state": "CLOSED",
+        "work": "f25b6aa merged ab085ba",
+        "judge": "5d2c59fa PASS"
+      },
+      {
+        "task": "DF-RABBIT-HOLE-1",
+        "state": "OPEN-with-verdict",
+        "work": "cc4c4d1+9f5464a merged c35edc2; docs aa09e22, 2a32fb0",
+        "judge": "a52fa9b4 FAIL (one residual: RSS AND-gate, now DF-RABBIT-HOLE-010)"
+      },
+      {
+        "task": "DOC-018",
+        "state": "FILED",
+        "work": "openapi/README still quote the removed CAP_SYS_RESOURCE/5.11 preflight text (DF-6 judge residual)"
+      },
+      {
+        "task": "DF-RABBIT-HOLE-010",
+        "state": "FILED",
+        "work": "TestStress_MemoryLeak RSS tripwire vacuous (DF-1 judge residual)"
+      }
+    ]
+  }
+}

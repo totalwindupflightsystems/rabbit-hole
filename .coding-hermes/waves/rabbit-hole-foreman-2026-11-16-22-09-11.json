@@ -1,0 +1,49 @@
+{
+  "tick": "rabbit-hole-foreman-2026-11-16-22-09-11",
+  "project": "rabbit-hole",
+  "repo": "/home/kara/rabbit-hole",
+  "created_at": "2026-11-16T22:20:00Z",
+  "base": "origin/main",
+  "base_sha": "a398234",
+  "wave_budget": 5,
+  "admitted_slots": 5,
+  "spawned": 3,
+  "spawn_reason": "host loadavg 16.53 on 16 cores (ceiling 12) from other fleet lanes (qemu autoinstall, godot gut suite, schedulerd max-concurrent=16, ED-GAP-071 judge) — reduced 5 -> 3 to avoid saturation",
+  "worker_model": "openai/gpt-6.1-terra",
+  "worker_provider": "xkiro",
+  "workers": [
+    {
+      "task": "DF-RABBIT-HOLE-6",
+      "priority": "P0",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-6",
+      "branch": "wt/DF-RABBIT-HOLE-6",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-6.md",
+      "seam": ["internal/collector/"],
+      "port": 19734
+    },
+    {
+      "task": "CLN-002",
+      "priority": "P1",
+      "worktree": "/home/kara/worktrees/rabbit-hole-CLN-002",
+      "branch": "wt/CLN-002",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-CLN-002.md",
+      "seam": [".gitreins/config.yaml", "scripts/"],
+      "port": null
+    },
+    {
+      "task": "DF-RABBIT-HOLE-1",
+      "priority": "P1",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-1",
+      "branch": "wt/DF-RABBIT-HOLE-1",
+      "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-1.md",
+      "seam": ["internal/attach/"],
+      "port": null
+    }
+  ],
+  "deferred": {
+    "DF-RABBIT-HOLE-8": "storage/compact + docs seam, needs a root daemon; run next tick after DF-RABBIT-HOLE-6 settles the collector errno path",
+    "DF-RABBIT-HOLE-2": "same file as DF-RABBIT-HOLE-6 (internal/collector/ebpf.go) — serialized behind it",
+    "DOC-2": "specs/06 doc pass, independent; next wave"
+  },
+  "merge_order": ["CLN-002", "DF-RABBIT-HOLE-6", "DF-RABBIT-HOLE-1"]
+}

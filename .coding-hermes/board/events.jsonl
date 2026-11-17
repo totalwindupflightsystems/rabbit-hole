@@ -806,3 +806,16 @@
 {"id":484,"timestamp":"2026-11-16T23:01:19Z","event_type":"task_completed","task_id":"QA-RABBIT-HOLE-4","actor":"foreman","tick_number":null,"detail":"{\"status\":\"complete\"}"}
 {"id":485,"timestamp":"2026-11-16T23:58:10Z","event_type":"task_updated","task_id":"DF-RABBIT-HOLE-1","actor":"foreman","tick_number":null,"detail":"{\"status\":\"in_progress\"}"}
 {"id": 486, "timestamp": "2026-11-17T00:34:00Z", "event_type": "task_updated", "task_id": "DF-RABBIT-HOLE-1", "actor": "foreman", "tick_number": null, "detail": "{\"status\": \"in_progress\", \"qa_recheck\": \"rabbit-hole-qa-2026-11-16-23-09-49\"}"}
+{"id": 487, "timestamp": "2026-11-17T01:10:14Z", "event_type": "task_updated", "task_id": "DF-RABBIT-HOLE-6", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"in_progress\"}"}
+{"id": 488, "timestamp": "2026-11-17T01:10:14Z", "event_type": "task_updated", "task_id": "DF-RABBIT-HOLE-8", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"in_progress\"}"}
+{"id": 489, "timestamp": "2026-11-17T01:10:14Z", "event_type": "task_updated", "task_id": "DF-RABBIT-HOLE-1", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"in_progress\"}"}
+{"id": 490, "timestamp": "2026-11-17T01:10:14Z", "event_type": "task_updated", "task_id": "DF-RABBIT-HOLE-7", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"in_progress\"}"}
+{"id": 491, "timestamp": "2026-11-17T01:10:14Z", "event_type": "task_updated", "task_id": "DOC-9", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"in_progress\"}"}
+{"id": 492, "timestamp": "2026-11-17T06:50:38Z", "event_type": "task_created", "task_id": "DF-RABBIT-HOLE-010", "actor": "foreman", "tick_number": null, "detail": "{\"id\":\"DF-RABBIT-HOLE-010\",\"status\":\"pending\"}"}
+{"id": 493, "timestamp": "2026-11-17T06:50:46Z", "event_type": "task_created", "task_id": "DOC-018", "actor": "foreman", "tick_number": null, "detail": "{\"id\":\"DOC-018\",\"status\":\"pending\"}"}
+{"id": 494, "timestamp": "2026-11-17T06:53:17Z", "event_type": "task_completed", "task_id": "DF-RABBIT-HOLE-6", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"complete\"}"}
+{"id": 495, "timestamp": "2026-11-17T06:53:17Z", "event_type": "task_completed", "task_id": "DF-RABBIT-HOLE-8", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"complete\"}"}
+{"id": 496, "timestamp": "2026-11-17T06:53:28Z", "event_type": "task_completed", "task_id": "DOC-2", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"complete\"}"}
+{"id": 497, "timestamp": "2026-11-17T06:53:35Z", "event_type": "task_completed", "task_id": "DF-RABBIT-HOLE-7", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"complete\"}"}
+{"id": 498, "timestamp": "2026-11-17T06:53:44Z", "event_type": "task_updated", "task_id": "DF-RABBIT-HOLE-1", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"pending\"}"}
+{"id": 499, "timestamp": "2026-11-17T06:55:07Z", "event_type": "task_completed", "task_id": "DOC-9", "actor": "foreman", "tick_number": null, "detail": "{\"status\":\"complete\"}"}

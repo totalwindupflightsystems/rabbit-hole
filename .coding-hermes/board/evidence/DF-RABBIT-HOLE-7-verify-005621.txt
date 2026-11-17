@@ -1,0 +1,37 @@
+DF-RABBIT-HOLE-7 — unprivileged install recipe verification (verbatim worker transcript)
+Tick: rabbit-hole-foreman-2026-11-17-00-56-21 | Worker session: local-df6d964b8aeffa4f176fa75aba912ec9b969ffa5373be73d30eac86fa39a32cc
+Commit: aa45d23 on wt/DF-RABBIT-HOLE-7 (README.md only, +39/-3)
+
+VERIFICATION (non-root user kara, uid 1000; HOME remapped to a scratch dir so nothing under /home/kara or / was written)
+
+  == HOME=/home/kara/.hermes/cache/scratch/rh-df7-verify/home.KvJdmx  USER=kara  UID=1000 ==
+  == step 1: download (verbatim) ==
+  -rw-rw-r-- 1 kara kara 66879095 Nov 16 20:16 go1.26.5.linux-amd64.tar.gz
+  5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053  go1.26.5.linux-amd64.tar.gz
+  == step 2: extract into user-owned GOROOT (verbatim) ==
+  == step 3: PATH + persist (verbatim) ==
+  go version go1.26.5 linux/amd64
+  resolved go: /home/kara/.hermes/cache/scratch/rh-df7-verify/home.KvJdmx/go-toolchain/go/bin/go
+  persisted line: export PATH="$HOME/go-toolchain/go/bin:$PATH"
+  owner=kara:kara  file=/home/kara/.hermes/cache/scratch/rh-df7-verify/home.KvJdmx/go-toolchain/go/bin/go
+  == build from repo root with only the user-space toolchain on PATH ==
+  go build -ldflags="-s -w -X main.Version=v1.0.0-595-gc39bfd9 -X main.Commit=c39bfd9 -X main.BuildTime=2026-11-16T19:34:17-05:00" -o bin/rabbit-hole ./cmd/rabbit-hole/
+  make build exit=0
+  -rwxrwxr-x 1 kara kara 20508937 Nov 16 20:17 bin/rabbit-hole
+  rabbit-hole v1.0.0-595-gc39bfd9 (linux/amd64)
+  build: 2026-11-16T19:34:17-05:00
+  commit: c39bfd9
+
+  Tarball sha256 5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053 matches the official
+  go.dev/dl JSON manifest exactly for go1.26.5.linux-amd64.tar.gz (size 66879095) — README and
+  verification are on the same version.
+
+Notes (worker's honest corrections, recorded for the foreman):
+- On THIS host `sudo -n true` exits 0 (passwordless sudoers for kara), so the bunker leg's
+  "sudo: a password is required" symptom was NOT reproduced locally; the proof is that the whole
+  recipe ran with zero sudo calls, a user-owned GOROOT, and a PATH that resolved to the scratch
+  toolchain, and the binary built and executed.
+- Nothing was installed into ~/.local or any system path; build artifacts stayed in gitignored
+  bin/ and scratch.
+- Recipe pins go1.26.5 linux-amd64 (judge-noted residual: arm64 users / future Go versions must
+  adjust the URL — the README points to https://go.dev/dl/ for the current stable).
