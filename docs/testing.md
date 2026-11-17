@@ -28,7 +28,7 @@ The stress tests in the module, and what each actually asserts:
 | `TestStress_ConcurrentFTS5Search` | `internal/storage` | p99 < 50 ms | no `-race` |
 | `TestStress_ConcurrentSessionIsolation` | `internal/storage` | none (asserts per-session isolation, not latency) | any mode |
 | `TestStress_WALPressure` | `internal/storage` | none, but it must finish inside the 10 m package timeout | no `-race` |
-| `TestStress_MemoryLeak` | `internal/attach` | RSS returns to baseline after 1000 attach/detach cycles (not time) | any mode |
+| `TestStress_MemoryLeak` | `internal/attach` | intended: RSS growth ceiling after 1000 attach/detach cycles — **not currently enforced**, see DF-RABBIT-HOLE-10 | any mode |
 | `TestStress_MemoryLeakParallel` | `internal/attach` | heap ceiling (not time) | any mode |
 | `TestStress_ConcurrentWebSocket` | `internal/express` | none (100 concurrent connections, no dropped messages or cross-talk) | any mode |
 
@@ -60,8 +60,11 @@ make test-slo
 
 `internal/attach` (the package that holds the real data races fixed under
 DF-RABBIT-HOLE-1) is green under `-race` both alone (≈6 s) and inside
-`make test-all` (≈6 s), because its stress test asserts a heap ceiling instead
-of wall-clock time.
+`make test-all` (≈6 s), because its stress tests assert a heap ceiling instead
+of wall-clock time. Note that only the *heap* ceiling is enforced:
+`TestStress_MemoryLeak`'s RSS check currently passes when just one of its two
+thresholds is exceeded (DF-RABBIT-HOLE-10), so do not read the RSS number it
+logs as a gate.
 
 ### Triaging an SLO failure
 
