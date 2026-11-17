@@ -1,0 +1,22 @@
+{
+  "wave_id": "rabbit-hole-foreman-2026-11-17-08-25-38",
+  "tick_id": "rabbit-hole-foreman-2026-11-17-08-25-38",
+  "created_at": "2026-11-17T13:26:00Z",
+  "project": "rabbit-hole",
+  "workdir": "/home/kara/rabbit-hole",
+  "wave_budget": 1,
+  "base_sha": "37b9f78",
+  "model": "openai/gpt-6.1-terra",
+  "provider": "xkiro",
+  "workers": [
+    {
+      "task": "DF-RABBIT-HOLE-5",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-5",
+      "branch": "wt/DF-RABBIT-HOLE-5",
+      "base_sha": "37b9f78",
+      "brief": "/tmp/brief-DF-RABBIT-HOLE-5-20261117-0825.txt",
+      "status": "dispatched"
+    }
+  ],
+  "note": "singleton wave (WAVE_BUDGET=1); board row marked in_progress before dispatch"
+}
