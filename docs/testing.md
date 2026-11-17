@@ -28,8 +28,8 @@ The stress tests in the module, and what each actually asserts:
 | `TestStress_ConcurrentFTS5Search` | `internal/storage` | p99 < 50 ms | no `-race` |
 | `TestStress_ConcurrentSessionIsolation` | `internal/storage` | none (asserts per-session isolation, not latency) | any mode |
 | `TestStress_WALPressure` | `internal/storage` | none, but it must finish inside the 10 m package timeout | no `-race` |
-| `TestStress_MemoryLeak` | `internal/attach` | intended: RSS growth ceiling after 1000 attach/detach cycles — **not currently enforced**, see DF-RABBIT-HOLE-10 | any mode |
-| `TestStress_MemoryLeakParallel` | `internal/attach` | heap ceiling (not time) | any mode |
+| `TestStress_MemoryLeak` | `internal/attach` | RSS growth after 1000 attach/detach cycles — fails on **either** ceiling: >10% of baseline or >50 MB (DF-RABBIT-HOLE-010) | any mode |
+| `TestStress_MemoryLeakParallel` | `internal/attach` | heap ceiling plus the same RSS gate (not time) | any mode |
 | `TestStress_ConcurrentWebSocket` | `internal/express` | none (100 concurrent connections, no dropped messages or cross-talk) | any mode |
 
 **The wall-clock budgets are per-host budgets measured without `-race`.** They
@@ -60,11 +60,53 @@ make test-slo
 
 `internal/attach` (the package that holds the real data races fixed under
 DF-RABBIT-HOLE-1) is green under `-race` both alone (≈6 s) and inside
-`make test-all` (≈6 s), because its stress tests assert a heap ceiling instead
-of wall-clock time. Note that only the *heap* ceiling is enforced:
-`TestStress_MemoryLeak`'s RSS check currently passes when just one of its two
-thresholds is exceeded (DF-RABBIT-HOLE-10), so do not read the RSS number it
-logs as a gate.
+`make test-all` (≈6 s), because its stress tests assert heap and RSS ceilings
+instead of wall-clock time.
+
+### The RSS ceiling in `internal/attach` (DF-RABBIT-HOLE-010)
+
+`TestStress_MemoryLeak` and `TestStress_MemoryLeakParallel` fail when RSS growth
+exceeds **either** ceiling:
+
+- **10% of the measured baseline** (`maxRSSGrowthPct`) — the binding ceiling
+  below a 500 MB baseline, which is every configuration these tests run in
+  (measured baselines: ~18 MB plain, ~143–158 MB under `-race`, so 1.8–16 MB of
+  headroom). A per-session or per-cycle leak grows with the footprint and lands
+  here.
+- **50 MB absolute** (`maxRSSGrowthBytes`) — the binding ceiling above a 500 MB
+  baseline, where 10% would be the looser arm.
+
+Both arms are checked and each reports itself, so the effective allowance is the
+*smaller* of the two. The gate used to AND them, i.e. require growth > 50 MB and
+> 10% simultaneously. At an 18–40 MB baseline the 50 MB arm alone is already
+> > 125% growth, so the pair was unreachable and the tripwire never fired.
+
+Two measurement details are part of the rule, not decoration:
+
+- **The fixture's ledger is dropped before each reading.** The mock collector and
+  mock store record every session they see (~17 KB per cycle, ~17 MB of heap per
+  1000 cycles). That is the test's own bookkeeping, not memory the attach/detach
+  path holds, and it would swamp a 10% ceiling.
+- **`debug.FreeOSMemory` runs before each reading.** RSS above `HeapAlloc` is
+  memory the runtime has freed but not yet returned; read naively, a clean
+  1000-cycle run "grows" 25–37% and the 10% arm would fire on a clean tree. What
+  is measured is memory the process cannot release — memory held by a real leak
+  is live and still counted.
+
+A **3000-cycle warm-up precedes the measured 1000 cycles** and asserts nothing.
+The allocator's arenas/stacks and, above all, the race detector's shadow memory
+are one-time costs that would otherwise be charged to the measured phase: the
+shadow is mapped lazily per touched address, it added ~34 MB over the first 1000
+cycles in an isolated `-race` run and ~115 MB over 3000 cycles with the rest of
+the package ahead of it, and it is never returned to the OS. With the shorter
+warm-up the 10% arm fires on a clean tree.
+
+Red-proof for the gate, recorded on the DF-RABBIT-HOLE-010 completion event:
+holding 40 MB of touched anonymous memory across the measured phase — 40 MB is
+above 10% of the baseline and below the 50 MB arm — fails the percentage arm at
++40.1 MB / 210.8% (plain, heap delta 5.3 KB) and +40.9 MB / 28.6% (`-race`, heap
+delta 0), while the clean run stays at 0.0–0.1% inside the package and at
+1.2–2.3% when the test runs alone.
 
 ### Triaging an SLO failure
 
