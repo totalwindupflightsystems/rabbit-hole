@@ -51,7 +51,9 @@ func NewSQLiteStore(dbPath string, logger *slog.Logger) (*SQLiteStore, error) {
 	store := &SQLiteStore{db: db, logger: logger, path: dbPath}
 	if err := store.migrate(context.Background()); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("migrate: %w", err)
+		// A store created by another user's daemon fails here the first time
+		// the migration writes; report it as ownership guidance, not errno.
+		return nil, wrapWriteError(dbPath, "migrate", err)
 	}
 	return store, nil
 }
@@ -666,7 +668,7 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 
 	result, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE timestamp < ?`, cutoff)
 	if err != nil {
-		return fmt.Errorf("delete old traces: %w", err)
+		return wrapWriteError(s.path, "delete old traces", err)
 	}
 	if n, _ := result.RowsAffected(); n > 0 {
 		s.logger.Info("deleted old traces", "count", n)
@@ -674,7 +676,7 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 
 	result, err = s.db.ExecContext(ctx, `DELETE FROM flows WHERE unixepoch(start_time) < unixepoch(?)`, cutoff)
 	if err != nil {
-		return fmt.Errorf("delete old flows: %w", err)
+		return wrapWriteError(s.path, "delete old flows", err)
 	}
 	if n, _ := result.RowsAffected(); n > 0 {
 		s.logger.Info("deleted old flows", "count", n)
@@ -684,7 +686,7 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 		DELETE FROM sessions WHERE end_time < ? AND end_time IS NOT NULL
 		AND id NOT IN (SELECT DISTINCT session_id FROM flows)`, cutoff)
 	if err != nil {
-		return fmt.Errorf("delete orphan sessions: %w", err)
+		return wrapWriteError(s.path, "delete orphan sessions", err)
 	}
 
 	_, err = s.db.ExecContext(ctx, `VACUUM`)
