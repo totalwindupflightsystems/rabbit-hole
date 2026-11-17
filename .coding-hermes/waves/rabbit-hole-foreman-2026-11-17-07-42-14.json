@@ -1,0 +1,84 @@
+{
+  "tick": "rabbit-hole-foreman-2026-11-17-07-42-14",
+  "project": "rabbit-hole",
+  "repo": "/home/kara/rabbit-hole",
+  "created_at": "2026-11-17T07:45:00Z",
+  "base": "origin/main",
+  "base_sha": "eb45529",
+  "wave_budget": 10,
+  "admitted_slots": 6,
+  "spawned": 6,
+  "spawn_reason": "Board holds 37 pending rows, mostly docs P4/P5 left after the 11-16 wave recovery closed 5 P0/P1 rows. Composed 6 mutually independent rows (no depends_on edges; disjoint file seams): 3 code fixes (P1 RSS tripwire, P1 eBPF warn suppression, P2 chat dead-end) + 3 docs rows in three different files (specs/06, openapi.yaml, README). Host load recovered 23.6 -> 5.7 before dispatch. DF-5 (sessions total) deferred because its AC also needs docs/integration.md, the DF-4 seam; ALL README-x and docs/integration.md and specs/06 sibling rows deferred to the next wave for the same reason.",
+  "worker_model": "openai/gpt-6.1-terra",
+  "worker_provider": "xkiro",
+  "workers": [
+    {
+      "task": "DF-RABBIT-HOLE-010",
+      "priority": "P1",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-010",
+      "branch": "wt/DF-RABBIT-HOLE-010",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-DF-RABBIT-HOLE-010-074147.md",
+      "seam": ["internal/attach/memory_test.go", "docs/testing.md"]
+    },
+    {
+      "task": "DF-RABBIT-HOLE-2",
+      "priority": "P1",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-2",
+      "branch": "wt/DF-RABBIT-HOLE-2",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-DF-RABBIT-HOLE-2-074147.md",
+      "seam": ["cmd/rabbit-hole/attach.go", "cmd/rabbit-hole/serve.go", "internal/collector/"],
+      "port": 19871
+    },
+    {
+      "task": "DF-RABBIT-HOLE-4",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-4",
+      "branch": "wt/DF-RABBIT-HOLE-4",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-DF-RABBIT-HOLE-4-074147.md",
+      "seam": ["internal/express/chat.go", "internal/express/chat_test.go", "docs/integration.md (chat stub-mode block only)"],
+      "port": 19872
+    },
+    {
+      "task": "DOC-15",
+      "priority": "P4",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DOC-15",
+      "branch": "wt/DOC-15",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-DOC-15-074147.md",
+      "seam": ["specs/06-CLI-Self-Hosted.md"]
+    },
+    {
+      "task": "DOC-1",
+      "priority": "P4",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DOC-1",
+      "branch": "wt/DOC-1",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-DOC-1-074147.md",
+      "seam": ["specs/openapi.yaml"]
+    },
+    {
+      "task": "README-6",
+      "priority": "P4",
+      "worktree": "/home/kara/worktrees/rabbit-hole-README-6",
+      "branch": "wt/README-6",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-README-6-074147.md",
+      "seam": ["README.md"],
+      "port": 19873
+    }
+  ],
+  "deferred": {
+    "DF-RABBIT-HOLE-5": "AC needs docs/integration.md + openapi.yaml; integration.md owned by DF-4 this wave",
+    "DF-RABBIT-HOLE-3 / DF-RABBIT-HOLE-4-R3 / DOC-4 / DOC-16": "docs/integration.md seam owned by DF-4 this wave",
+    "DOC-3 / DOC-11 / DOC-12 / DOC-13": "specs/06 seam owned by DOC-15 this wave",
+    "README-1 / README-2 / README-3 / README-4 / README-5 / README-7 / README-8 / README-9 / README-10": "README.md seam owned by README-6 this wave",
+    "DF-5 openapi overlap, DOC-8 / DOC-10": "next wave",
+    "DF-038": "load-hygiene row touches test files broadly; may collide with DF-010/DF-4 test seams — next wave",
+    "DF-RABBIT-HOLE-1": "re-opens only for re-judge AFTER DF-010 lands (see its note) — no dispatch",
+    "QA-RABBIT-HOLE-2-R6 / QA-RABBIT-HOLE-4-R3": "blocked, owning-lane escalation, not repo-fixable"
+  },
+  "merge_order": ["DOC-1", "DOC-15", "README-6", "DF-RABBIT-HOLE-010", "DF-RABBIT-HOLE-2", "DF-RABBIT-HOLE-4"],
+  "gates_per_merge": ["go build ./...", "go vet ./...", "go test -count=1 ./internal/attach/ ./internal/collector/ ./internal/express/ ./cmd/rabbit-hole/", "gitreins guard", "gitreins task complete <ID>"],
+  "notes": [
+    "worker spawn uses --query-file (shell-safe) without -s coding-hermes-worker: host gateway fails session.create when -s is passed",
+    "each brief is self-contained with isolation preamble, AC verbatim, verified facts, dedicated port for live probes",
+    "daemon on :9734 from an earlier tick may still be running — workers told to use 19871/19872/19873 and never kill it"
+  ]
+}
