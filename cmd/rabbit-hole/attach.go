@@ -43,16 +43,25 @@ running for collection; stop the session with 'rabbit-hole detach <id>'.`,
 			}
 
 			logger := newLogger(cfg.LogLevel)
-			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
-			if err != nil {
-				return fmt.Errorf("collector: %w", err)
-			}
 
 			// Preflight: attach promises kernel telemetry, so degraded
 			// eBPF is a hard error unless the user explicitly opted into
 			// degraded mode with --no-ebpf. The daemon-side attach endpoint
 			// enforces the same contract (GAP-001).
+			//
+			// The collector exists here only to run PreflightEBPF(), so in
+			// degraded mode it is not built at all: constructing it would
+			// attempt a best-effort kernel probe load and print the
+			// "memlock"/"kernel probes unavailable" WARN pair to a user who
+			// just asked for exactly that mode (DF-RABBIT-HOLE-2). On the
+			// non-degraded path construction keeps every diagnostic, so a
+			// real capability failure still says what the kernel reported.
 			if !noEBPF {
+				coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
+				if err != nil {
+					return fmt.Errorf("collector: %w", err)
+				}
+				defer func() { _ = coll.Close() }()
 				if err := coll.PreflightEBPF(); err != nil {
 					return err
 				}

@@ -74,7 +74,19 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			}
 
 			// 2. Collector
-			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger)
+			//
+			// --no-ebpf and --demo-stream both declare degraded mode up front
+			// ("no root/eBPF available"), so the best-effort probe load runs
+			// quietly: the single honest degraded-mode WARN below already
+			// says telemetry is off, and the init-time "memlock"/"kernel
+			// probes unavailable" pair would read like an unexpected failure
+			// (DF-RABBIT-HOLE-2). Without either flag every diagnostic is
+			// kept, so a real capability failure still says what is wrong.
+			var collectorOpts []collector.Option
+			if noEBPF || demoStream {
+				collectorOpts = append(collectorOpts, collector.WithQuietEBPFInit())
+			}
+			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger, collectorOpts...)
 			if err != nil {
 				return fmt.Errorf("collector: %w", err)
 			}

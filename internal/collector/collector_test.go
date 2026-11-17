@@ -361,6 +361,80 @@ func TestCollector_PreflightEBPF_Enabled(t *testing.T) {
 	}
 }
 
+// TestCollector_QuietInit_SilencesDegradedWarnings proves the two shapes of
+// construction differ exactly where they must: with WithQuietEBPFInit (used
+// by attach/serve once the user has already declared --no-ebpf or
+// --demo-stream) an unprivileged host produces ZERO init diagnostics, while
+// the default construction keeps the "remove memlock" and "kernel probes
+// unavailable" WARNs that document a real capability failure on the
+// non-degraded path (DF-RABBIT-HOLE-2).
+//
+// The unprivileged host is simulated with the failing removeMemlock hook so
+// this runs unprivileged in CI.
+func TestCollector_QuietInit_SilencesDegradedWarnings(t *testing.T) {
+	old := removeMemlock
+	removeMemlock = func() error {
+		return fmt.Errorf("failed to set memlock rlimit: operation not permitted")
+	}
+	defer func() { removeMemlock = old }()
+
+	const (
+		memlockWarn = "memlock"
+		probesWarn  = "kernel probes unavailable"
+	)
+
+	// Default construction: diagnostics intact.
+	loudBuf := &bytes.Buffer{}
+	loud, err := NewEBPFCollector(1000, 10, slog.New(slog.NewTextHandler(loudBuf, nil)))
+	if err != nil {
+		t.Fatalf("NewEBPFCollector (default): %v", err)
+	}
+	defer func() { _ = loud.Close() }()
+	for _, want := range []string{memlockWarn, probesWarn} {
+		if !strings.Contains(loudBuf.String(), want) {
+			t.Errorf("default construction lost the %q diagnostic, got: %s", want, loudBuf.String())
+		}
+	}
+
+	// Quiet construction: same degraded outcome, no diagnostics.
+	quietBuf := &bytes.Buffer{}
+	quiet, err := NewEBPFCollector(1000, 10,
+		slog.New(slog.NewTextHandler(quietBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		WithQuietEBPFInit(),
+	)
+	if err != nil {
+		t.Fatalf("NewEBPFCollector (quiet): %v", err)
+	}
+	defer func() { _ = quiet.Close() }()
+
+	if got := quietBuf.String(); got != "" {
+		t.Errorf("quiet init logged %d bytes, want nothing: %s", len(got), got)
+	}
+	for _, banned := range []string{memlockWarn, probesWarn} {
+		if strings.Contains(quietBuf.String(), banned) {
+			t.Errorf("quiet init logged %q: %s", banned, quietBuf.String())
+		}
+	}
+
+	// Quiet must suppress noise, not the state: the collector still reports
+	// degraded and preflight still refuses to promise kernel telemetry.
+	if quiet.EBPFEnabled() {
+		t.Error("quiet collector reports EBPFEnabled() = true, want false")
+	}
+	if err := quiet.PreflightEBPF(); err == nil {
+		t.Error("quiet collector PreflightEBPF() = nil, want error on unprivileged host")
+	}
+
+	// ...and it must remain usable for session bookkeeping.
+	session, err := quiet.Attach(context.Background(), int32(os.Getpid()), DefaultCollectOptions())
+	if err != nil {
+		t.Fatalf("Attach on quiet degraded collector: %v", err)
+	}
+	if err := quiet.Detach(context.Background(), session.ID); err != nil {
+		t.Fatalf("Detach on quiet degraded collector: %v", err)
+	}
+}
+
 func TestCollector_AttachDetach(t *testing.T) {
 	c := newTestCollector(t)
 	pid := int32(os.Getpid())
