@@ -45,6 +45,35 @@ type eBPFCollector struct {
 	// never a guess about privileges or kernel version. Ring buffer and
 	// session bookkeeping still work.
 	ebpfErr error
+
+	// quietInit suppresses only the best-effort eBPF init diagnostics. It is
+	// set when the caller has ALREADY declared degraded mode to the user
+	// (--no-ebpf / --demo-stream), where repeating "memlock failed" and
+	// "kernel probes unavailable" reads like an unexpected failure instead
+	// of the mode the user asked for. It never changes what is attempted:
+	// the load still runs and ebpfErr still records the real cause.
+	quietInit bool
+}
+
+// Option configures construction-time policy for NewEBPFCollector. Options
+// never change what the collector can do once it is built.
+type Option func(*collectorOptions)
+
+type collectorOptions struct {
+	quietInit bool
+}
+
+// WithQuietEBPFInit suppresses the init-time eBPF diagnostics emitted when
+// kernel probes fail to load. Use it only after the caller has already told
+// the user telemetry is unavailable or not requested (attach --no-ebpf,
+// serve --no-ebpf / --demo-stream): the caller owns the single honest
+// degraded-mode message, so the best-effort init must not add a second and
+// third WARN that read like errors (DF-RABBIT-HOLE-2).
+//
+// The default (no option) keeps every diagnostic: on the non-degraded path a
+// real kernel capability failure must still say what the kernel reported.
+func WithQuietEBPFInit() Option {
+	return func(o *collectorOptions) { o.quietInit = true }
 }
 
 // collectionSession tracks the state of a single attached agent process.
@@ -67,9 +96,15 @@ type collectionSession struct {
 //   - bufSize: ring buffer capacity (0 = default 100000)
 //   - maxSessions: maximum concurrent sessions (0 = default 50)
 //   - logger: structured logger (uses slog.Default if nil)
-func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger) (*eBPFCollector, error) {
+func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger, options ...Option) (*eBPFCollector, error) {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	var opts collectorOptions
+	for _, apply := range options {
+		if apply != nil {
+			apply(&opts)
+		}
 	}
 	if bufSize <= 0 {
 		bufSize = 100000
@@ -85,6 +120,7 @@ func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger) (*eBPFColle
 		ringBuffer:  rb,
 		maxSessions: maxSessions,
 		logger:      logger,
+		quietInit:   opts.quietInit,
 	}
 
 	// Best-effort eBPF loading. If bpf2go hasn't been run or the kernel
@@ -93,10 +129,12 @@ func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger) (*eBPFColle
 	// need real telemetry (see attach/serve).
 	if err := c.loadEBPF(); err != nil {
 		c.ebpfErr = err
-		logger.Warn("ebpf: kernel probes unavailable, running without eBPF",
-			"err", err,
-			"hint", ebpfHint(err),
-		)
+		if !c.quietInit {
+			logger.Warn("ebpf: kernel probes unavailable, running without eBPF",
+				"err", err,
+				"hint", ebpfHint(err),
+			)
+		}
 	}
 
 	return c, nil
@@ -181,10 +219,12 @@ func loadCollection(opts *ebpf.CollectionOptions) (*bpfObjects, error) {
 func (c *eBPFCollector) loadEBPF() error {
 	if err := removeMemlock(); err != nil {
 		err = fmt.Errorf("remove memlock rlimit: %w", err)
-		c.logger.Warn("ebpf: remove memlock rlimit failed, continuing without eBPF",
-			"err", err,
-			"hint", ebpfHint(classifyEBPFError(err)),
-		)
+		if !c.quietInit {
+			c.logger.Warn("ebpf: remove memlock rlimit failed, continuing without eBPF",
+				"err", err,
+				"hint", ebpfHint(classifyEBPFError(err)),
+			)
+		}
 		return classifyEBPFError(err)
 	}
 
