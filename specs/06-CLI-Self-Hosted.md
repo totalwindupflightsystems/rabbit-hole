@@ -56,58 +56,54 @@ rabbit-hole attach --pid 12345 --categories process
 ```go
 func newAttachCmd() *cobra.Command {
     var (
-        pid             int32
-        contextWindows  bool
-        categories      []string
-        noTLSIntercept  bool
-        followChildren  bool
+        addr           string
+        pid            int32
+        contextWindows bool
+        categories     []string
+        noTLSIntercept bool
+        noEBPF         bool
     )
 
     cmd := &cobra.Command{
         Use:   "attach --pid <PID>",
         Short: "Attach to an agent process and start collecting traces",
         Args:  cobra.NoArgs,
-        RunE: func(cmd *cobra.Command, args []string) error {
+        RunE: func(cobraCmd *cobra.Command, args []string) error {
             cfg := loadConfig()
 
-            collector, err := collector.NewEBPFCollector(cfg, slog.Default())
-            if err != nil {
-                return fmt.Errorf("init collector: %w", err)
-            }
-
-            var cats []types.TraceCategory
-            if len(categories) > 0 {
-                for _, c := range categories {
-                    cats = append(cats, types.TraceCategory(c))
-                }
-            }
-
-            session, err := collector.Attach(cmd.Context(), pid, types.CollectOptions{
-                ContextWindows:  contextWindows,
-                TraceCategories: cats,
-                TLSInterception:  !noTLSIntercept,
-                FollowChildren:   followChildren,
-            })
+            session, err := newDaemonClient(cfg.ListenAddr).attachSession(
+                cobraCmd.Context(),
+                types.AttachSessionRequest{
+                    PID:             pid,
+                    ContextWindows:  contextWindows,
+                    Categories:      categories,
+                    TLSInterception: !noTLSIntercept,
+                    NoEBPF:          noEBPF,
+                },
+            )
             if err != nil {
                 return err
             }
 
             fmt.Printf("Attached to PID %d\n", pid)
             fmt.Printf("Session ID: %s\n", session.ID)
-            fmt.Printf("Agent: %s (%s)\n", session.AgentName, session.Metadata.CommandLine)
+            fmt.Printf("Agent: %s (%s)\n", session.AgentName, session.CommandLine)
             fmt.Println()
             fmt.Println("Collection active. Use 'rabbit-hole status' to monitor or 'rabbit-hole chat' to query.")
             fmt.Printf("Detach with: rabbit-hole detach %s\n", session.ID)
+            fmt.Println("Session persisted via daemon — visible via 'list --all', 'status', and GET /api/v1/sessions.")
+            fmt.Println("Collection runs in the daemon ('rabbit-hole serve') — keep it running.")
 
             return nil
         },
     }
 
+    cmd.Flags().StringVar(&addr, "addr", "", "Daemon address (default: 127.0.0.1:9734 or RABBITHOLE_LISTEN_ADDR)")
     cmd.Flags().Int32Var(&pid, "pid", 0, "Agent process ID to attach to")
     cmd.Flags().BoolVar(&contextWindows, "context-windows", false, "Enable context window capture (expensive)")
     cmd.Flags().StringSliceVar(&categories, "categories", nil, "Trace categories to collect (syscall,network,file,llm_call,process,resource)")
     cmd.Flags().BoolVar(&noTLSIntercept, "no-tls-intercept", false, "Disable TLS interception")
-    cmd.Flags().BoolVar(&followChildren, "follow-children", false, "Also trace child processes")
+    cmd.Flags().BoolVar(&noEBPF, "no-ebpf", false, "Run in degraded mode without eBPF (telemetry DISABLED)")
     cmd.MarkFlagRequired("pid")
 
     return cmd
