@@ -52,10 +52,67 @@ paths:
       operationId: getHealth
       summary: Get server and component health
       description: |
-        Returns overall health plus storage and metrics component status. Other
-        components, such as `classifier` and `collector`, are present only when
-        registered by the serve command. The response is `degraded` when any
-        reported component is in an `error` state.
+        Returns overall health plus one entry per probed component. `storage`
+        and `metrics` are probed by a normally initialized server; `classifier`
+        and `collector` are probed only when the serve command registers them.
+        Components that were never registered are omitted from `components`
+        and never influence the top-level status. The HTTP status is `200` for
+        both an `ok` and a `degraded` report; the verdict is carried in the
+        body.
+
+        Top-level status rule (exactly as implemented): the top-level `status`
+        is `degraded` when ANY probed component's `status` string does not begin
+        with the token `ok`, and `ok` only when every probed component's status
+        string begins with `ok`. The test is a prefix test over the whole status
+        string, not equality against `ok` and not a check for the literal
+        `error`: anything that does not lead with `ok` degrades the response,
+        including a status that leads with `degraded`, a status that leads with
+        `error`, and any other value. Any human-readable suffix after the token
+        (for example `ok — gemma via ollama …`) does not change the verdict.
+        Conversely, a status that begins with `ok` never degrades the response,
+        even when its `detail` describes a loss of function — `detail` is
+        informational and is never consulted for the verdict.
+
+        Observed component status strings:
+
+        - `classifier` (status probe, reports the effective backend mode):
+          `degraded — pattern-only (no model loaded)` when no backend is
+          configured; `degraded — pattern-only (model not loaded)` when a
+          configured model is not loaded, with `detail`
+          `gemma load failed: <err>` if a load error was recorded and an empty
+          `detail` otherwise; `ok — gemma via ollama <url>` with `detail`
+          `model <name> loaded` when the local model is loaded;
+          `ok — remote gRPC <endpoint>` or `degraded — remote gRPC <endpoint>`
+          for a remote backend, depending on whether it is reachable. Both
+          pattern-only values and the degraded remote value degrade the
+          response: a classifier running on deterministic pattern matching
+          instead of a model is never reported as `ok`.
+        - `collector` (check probe; the check inspects ring-buffer health): `ok`
+          with `detail` `eBPF probes attached` when probes are attached, or `ok`
+          with `detail` `eBPF degraded — telemetry DISABLED` when kernel
+          telemetry is unavailable (`--no-ebpf`, `--demo-stream`, missing
+          capabilities, unsupported kernel). That detail is informational and
+          the status still begins with `ok`, so degraded telemetry on its own
+          does not degrade the response. The status becomes `error` with
+          `detail` `ring buffer overflow: <n> traces dropped` when the ring
+          buffer has dropped more than 100,000 traces, which does degrade the
+          response. A host where eBPF probes cannot be loaded at all and
+          neither `--no-ebpf` nor `--demo-stream` was passed never serves
+          `/health`: `serve` exits with the preflight error
+          (`eBPF unavailable — telemetry DISABLED (requires CAP_SYS_RESOURCE and
+          kernel 5.11+; use --no-ebpf to run in degraded mode): …`), so that
+          condition is a startup failure rather than a component status.
+        - `storage`: `ok` when the store health check passes, otherwise `error`
+          with the store's error text as `detail`.
+        - `metrics`: `ok` with `detail` `runtime gauges active`, or `error`
+          with `detail` `registry not initialized`.
+
+        The distinguishing case is deliberate: a `collector` with eBPF disabled
+        reports `ok` because the component works but is not collecting, while a
+        `classifier` on pattern matching reports `degraded` because
+        classification is silently weaker than configured. A consumer should
+        therefore read the leading token of each component status, not the
+        `detail` text, to predict the top-level status.
       security: []
       responses:
         '200':
@@ -69,15 +126,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
-              example:
-                status: ok
-                version: 1.0.0
-                uptime: 5h30m15s
-                components:
-                  storage: {status: ok}
-                  metrics: {status: ok, detail: runtime gauges active}
-                  classifier: {status: ok}
-                  collector: {status: error, detail: ring buffer not started}
+              examples:
+                degraded:
+                  summary: >-
+                    Captured from a live server started with --no-ebpf and a
+                    throwaway DB: a pattern-only classifier degrades the
+                    top-level status while every other probed component is ok.
+                  value:
+                    status: degraded
+                    version: v1.0.0-dev
+                    uptime: 8.023704479s
+                    components:
+                      classifier:
+                        status: 'degraded — pattern-only (model not loaded)'
+                        detail: 'gemma load failed: classification model not loaded'
+                      collector:
+                        status: ok
+                        detail: 'eBPF degraded — telemetry DISABLED'
+                      metrics:
+                        status: ok
+                        detail: runtime gauges active
+                      storage:
+                        status: ok
+                allOk:
+                  summary: >-
+                    Every probed component's status begins with ok, so the
+                    top-level status is ok. The collector detail shows the
+                    ok-prefixed telemetry-disabled state.
+                  value:
+                    status: ok
+                    version: v1.0.0-dev
+                    uptime: 5h30m15s
+                    components:
+                      classifier:
+                        status: 'ok — gemma via ollama http://127.0.0.1:11434'
+                        detail: 'model gemma3:4b loaded'
+                      collector:
+                        status: ok
+                        detail: 'eBPF probes attached'
+                      metrics:
+                        status: ok
+                        detail: runtime gauges active
+                      storage:
+                        status: ok
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -672,10 +763,31 @@ components:
       properties:
         status:
           type: string
-          enum: [ok, error]
+          description: |
+            Component status string. Only its prefix is load-bearing: the
+            top-level health status is `degraded` when this value does not begin
+            with the token `ok`, and `ok` only when every probed component's
+            value begins with `ok`. The value may carry a machine token plus a
+            human-readable suffix after it (for example
+            `ok — gemma via ollama http://127.0.0.1:11434`,
+            `degraded — pattern-only (model not loaded)`, or
+            `error`), which is why this field is intentionally open-ended
+            rather than a closed enum — new component probes may introduce new
+            suffix text. The observed values per component are listed in the
+            `GET /health` operation description.
+          examples:
+            - ok
+            - 'ok — gemma via ollama http://127.0.0.1:11434'
+            - 'degraded — pattern-only (model not loaded)'
+            - error
         detail:
           type: string
-          description: Optional diagnostic text supplied by the component probe.
+          description: |
+            Optional diagnostic text supplied by the component probe. It is
+            informational only and is never consulted when computing the
+            top-level status, so an `ok`-prefixed status can still carry a
+            detail that describes lost functionality (for example
+            `eBPF degraded — telemetry DISABLED` on an `ok` collector).
 
     HealthResponse:
       type: object
@@ -694,14 +806,20 @@ components:
         components:
           type: object
           description: |
-            Component name to health result. `storage` and `metrics` are always
-            reported by a normally initialized server; dynamically registered
-            component names include `classifier` and `collector`.
+            Component name to health result, one entry per probed component.
+            `storage` and `metrics` are always reported by a normally
+            initialized server; dynamically registered component names include
+            `classifier` and `collector`. Unregistered components are omitted.
+            The top-level `status` is `degraded` when any entry's `status` does
+            not begin with `ok`; see the `GET /health` operation description
+            for the rule and the observed status strings per component.
           additionalProperties:
             $ref: '#/components/schemas/ComponentStatus'
           example:
             storage: {status: ok}
             metrics: {status: ok, detail: runtime gauges active}
+            classifier: {status: 'ok — gemma via ollama http://127.0.0.1:11434', detail: 'model gemma3:4b loaded'}
+            collector: {status: ok, detail: 'eBPF degraded — telemetry DISABLED'}
 
     SessionMetadata:
       type: object
