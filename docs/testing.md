@@ -20,14 +20,17 @@ Fix the code or the test fixture instead.
 
 ## Timing SLOs and the per-host budget
 
-Three stress tests assert wall-clock behaviour rather than just "it finished":
+The stress tests in the module, and what each actually asserts:
 
-| Test | Package | Budget | Written for |
+| Test | Package | Budget / assertion | Written for |
 | --- | --- | --- | --- |
 | `TestStress_100KTraceInsert` | `internal/storage` | 100k traces < 30 s | no `-race` |
 | `TestStress_ConcurrentFTS5Search` | `internal/storage` | p99 < 50 ms | no `-race` |
+| `TestStress_ConcurrentSessionIsolation` | `internal/storage` | none (asserts per-session isolation, not latency) | any mode |
 | `TestStress_WALPressure` | `internal/storage` | none, but it must finish inside the 10 m package timeout | no `-race` |
+| `TestStress_MemoryLeak` | `internal/attach` | RSS returns to baseline after 1000 attach/detach cycles (not time) | any mode |
 | `TestStress_MemoryLeakParallel` | `internal/attach` | heap ceiling (not time) | any mode |
+| `TestStress_ConcurrentWebSocket` | `internal/express` | none (100 concurrent connections, no dropped messages or cross-talk) | any mode |
 
 **The wall-clock budgets are per-host budgets measured without `-race`.** They
 are latency *regression* tripwires for a single package on a quiet host, not
