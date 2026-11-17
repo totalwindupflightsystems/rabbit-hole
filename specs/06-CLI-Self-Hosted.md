@@ -430,18 +430,83 @@ fi
 
 ## 4. Configuration
 
-| Env Var | Type | Default | Description |
-|---------|------|---------|-------------|
-| `RABBITHOLE_DATA_DIR` | string | `~/.rabbit-hole/` | Data directory |
-| `RABBITHOLE_MODEL_PATH` | string | `$DATA_DIR/models/gemma-3-4b.gguf` | Gemma GGUF path |
-| `RABBITHOLE_MODEL_NAME` | string | `gemma-3-4b` | Model identifier |
-| `RABBITHOLE_LISTEN_ADDR` | string | `127.0.0.1:9734` | HTTP bind address |
-| `RABBITHOLE_BUFFER_SIZE` | int | `100000` | Ring buffer size |
-| `RABBITHOLE_BATCH_INTERVAL` | duration | `500ms` | Classification batch interval |
-| `RABBITHOLE_RETENTION_DAYS` | int | `30` | Data retention |
-| `RABBITHOLE_MAX_SESSIONS` | int | `50` | Max concurrent sessions |
-| `RABBITHOLE_LOG_LEVEL` | string | `info` | Log level |
-| `RABBITHOLE_TLS_INTERCEPT` | bool | `true` | TLS interception |
+All configuration arrives through environment variables; the binary reads no
+config file. The table below is the **complete** set of `RABBITHOLE_*`
+variables read by non-test Go code — 35 names, verified against the code
+census (`grep -rhoE 'RABBITHOLE_[A-Z0-9_]+' --include='*.go' internal cmd pkg | sort -u`,
+minus `*_test.go` hits) at commit `eb45529`. Defaults are the values in
+`Defaults()` (`internal/config/config.go:71-107`); validation is `Validate()`
+in the same file unless a row says otherwise. Parsing is strict: a malformed
+`duration` or `int` aborts the command with `RABBITHOLE_<KEY>: <error>`.
+
+"Runtime effect" says where the value is actually consumed. A row marked
+*parsed only* is read and validated at startup but not yet wired into the
+running system: setting it changes nothing today, and the row names the fixed
+value the code uses instead. 19 keys are wired, 16 are parsed only.
+
+| Env Var | Type | Default | Validation | Runtime effect |
+|---------|------|---------|------------|----------------|
+| `RABBITHOLE_DATA_DIR` | string | `~/.rabbit-hole` | must be non-empty; created with mode `0755` on startup; must exist and be a directory | Root of runtime state. Re-derives `DB_PATH` and `MODEL_PATH` unless those are set explicitly. |
+| `RABBITHOLE_DB_PATH` | string | `$DATA_DIR/rabbit-hole.db` | none beyond derivation | SQLite file opened by `serve`, `compact` and `demo`, read by `status`. `compact` opens it directly unless `--addr` routes the call through the running daemon. |
+| `RABBITHOLE_MODEL_PATH` | string | `$DATA_DIR/models/gemma-3-4b.gguf` | when set explicitly, the parent directory must exist (the default path is not checked) | GGUF loaded by the local classifier backend in `serve`; ignored when `serve --remote` uses a gRPC backend. |
+| `RABBITHOLE_MODEL_NAME` | string | `gemma-3-4b` | none | Model identifier passed to the local Gemma/Ollama backend (the Ollama tag) and stamped on classified flows. |
+| `RABBITHOLE_LISTEN_ADDR` | string | `127.0.0.1:9734` | must be non-empty and parse as `host:port` | Bind address for the HTTP/WebSocket daemon. Every CLI subcommand also uses it as the default daemon address; `--addr` overrides per invocation. |
+| `RABBITHOLE_CORS_ORIGINS` | string | `*` | any string, not validated | *parsed only* — the server always answers `Access-Control-Allow-Origin: *` (`internal/express/middleware.go:43`), so this cannot restrict origins yet. The allowed-headers list is also fixed (`Content-Type, X-Request-ID`), so browser preflights do not allow `X-API-Key`. |
+| `RABBITHOLE_API_KEY` | string | unset | any non-empty string; empty or unset = **no auth** | When set, every request except `/health`, `/metrics` and `/api/v1/metrics` must carry a matching `X-API-Key` header, otherwise `401 {"error":"unauthorized"}`. Enforced before handler logic and before WebSocket upgrades. The CLI reads the same variable to authenticate its own daemon calls (`cmd/rabbit-hole/daemon.go`). |
+| `RABBITHOLE_READ_TIMEOUT` | duration | `30s` | Go duration | *parsed only* — `http.Server` is created without `ReadTimeout`. |
+| `RABBITHOLE_WRITE_TIMEOUT` | duration | `30s` | Go duration | *parsed only* — no `WriteTimeout` is applied. |
+| `RABBITHOLE_WS_PING_INTERVAL` | duration | `30s` | Go duration | *parsed only* — ping cadence is fixed in the WebSocket handler. |
+| `RABBITHOLE_WS_READ_TIMEOUT` | duration | `60s` | Go duration | *parsed only* — read deadline is fixed in the WebSocket handler. |
+| `RABBITHOLE_BUFFER_SIZE` | int | `100000` | integer, at least 1000 | Capacity of the collector ring buffer (`serve`, `attach`). |
+| `RABBITHOLE_MAX_SESSIONS` | int | `50` | integer, at least 1 | Concurrent-session cap enforced by the collector. |
+| `RABBITHOLE_TLS_INTERCEPT` | bool | `true` | `strconv.ParseBool` (`1`/`0`, `t`/`f`, `true`/`false`) | *parsed only* — interception is chosen per session by `attach --no-tls-intercept`; a session request that omits the field gets interception enabled (`internal/collector/collector.go:44`). |
+| `RABBITHOLE_BATCH_INTERVAL` | duration | `500ms` | Go duration, must be positive | *parsed only* — the classification engine has no interval knob; its batch window is the fixed 500ms in `internal/classify/engine.go:45-46`. |
+| `RABBITHOLE_BATCH_SIZE` | int | `100` | integer, at least 1 | *parsed only* — the engine always batches at 100. |
+| `RABBITHOLE_BATCH_TIMEOUT` | duration | `500ms` | Go duration, must be positive | *parsed only* — the engine always flushes at 500ms. |
+| `RABBITHOLE_MODEL_THREADS` | int | `4` | integer, at least 1 | *parsed only* — not passed to the Gemma backend; llama.cpp thread count is whatever Ollama/its loader defaults to. |
+| `RABBITHOLE_MODEL_GPU_LAYERS` | int | `0` | integer, no range check | *parsed only* — not passed to the Gemma backend. |
+| `RABBITHOLE_INFERENCE_TIMEOUT` | duration | `5s` | Go duration, must be positive | *parsed only* — the Gemma backend uses a fixed 30s HTTP client timeout (`internal/classify/gemma.go:65`). Only matters for the local model. |
+| `RABBITHOLE_CONTEXT_WINDOWS` | bool | `false` | `strconv.ParseBool` | *parsed only* — context-window capture is per session via `attach --context-windows`. |
+| `RABBITHOLE_CHAT_ENABLED` | bool | `true` | `strconv.ParseBool`; any other value fails startup | `false` forces the stub (keyword) chat model; `true` uses the real model when the three `CHAT_MODEL_*` variables are set, and falls back to the stub with a warning when they are not. |
+| `RABBITHOLE_CHAT_MODEL_ENDPOINT` | string | unset | required for a real model; trailing `/` trimmed, `/chat/completions` appended | OpenAI-compatible base URL (`http://127.0.0.1:11434/v1` for Ollama, `https://api.openai.com/v1` for OpenAI). Missing any of the three required variables → stub model. |
+| `RABBITHOLE_CHAT_MODEL_NAME` | string | unset | required for a real model | Model name sent in chat requests. |
+| `RABBITHOLE_CHAT_MODEL_API_KEY` | string | unset | required for a real model; any value accepted (local endpoints ignore it) | Sent as `Authorization: Bearer <key>`. Read by the daemon and by `rabbit-hole chat`, which warns when the trio is unset. |
+| `RABBITHOLE_CHAT_MODEL_TIMEOUT` | duration | `120s` | Go duration; an invalid or non-positive value silently falls back to 120s instead of failing startup | Per-request timeout for chat model calls; cold local models need the headroom. A timed-out call is retried once with a fresh budget, and a second timeout answers `503` with `retryable: true`. |
+| `RABBITHOLE_RETENTION_DAYS` | int | `30` | integer, at least 1 | Default cut-off for `rabbit-hole compact` (`days*24h`) when `--days`/`--before` are not given. Nothing purges on a timer. |
+| `RABBITHOLE_COMPACT_INTERVAL` | duration | `1h` | Go duration, no positivity check | *parsed only* — no background compactor runs. |
+| `RABBITHOLE_LOG_LEVEL` | string | `info` | one of `debug`, `info`, `warn`, `error` | Level for the daemon and CLI logger; also reported by `GET /api/v1/stats` and printed by `rabbit-hole status`. |
+| `RABBITHOLE_LOG_FORMAT` | string | `text` | one of `text`, `json`; any other value fails startup | *parsed only* — the logger always installs a `slog` text handler on stderr (`cmd/rabbit-hole/helpers.go:26-30`), so `json` is validated at startup but not honoured. |
+| `RABBITHOLE_RATE_LIMIT_ENABLED` | bool | `true` | `strconv.ParseBool` | Master switch for per-IP, per-endpoint token buckets. `false` disables limiting entirely. |
+| `RABBITHOLE_RATE_LIMIT_SEARCH_RPS` | int | `10` | integer, at least 1 | Requests/second **and** burst for `/api/v1/search*`, per client IP (`X-Forwarded-For` first hop, else the peer address). Exceeding it returns `429` with `Retry-After: <seconds>` (minimum 1) and `{"error":"rate limit exceeded","retry_after":N}`; `/health`, `/metrics` and `/api/v1/metrics` are exempt. |
+| `RABBITHOLE_RATE_LIMIT_CHAT_RPS` | int | `5` | integer, at least 1 | Same contract for `/api/v1/chat*`. |
+| `RABBITHOLE_RATE_LIMIT_WS_RPS` | int | `20` | integer, at least 1 | Same contract for `/api/v1/ws/*`, including WebSocket upgrades. |
+| `RABBITHOLE_BPF_DEBUG` | bool | `false` | `strconv.ParseBool` | *parsed only* — not passed to the collector; there is no runtime debug switch for eBPF today. |
+
+**Security-relevant settings.** The table above is authoritative for defaults;
+what follows is the operator-facing consequence.
+
+- *Authentication is opt-in.* With `RABBITHOLE_API_KEY` unset, every endpoint
+  is open. That is only safe on the default `127.0.0.1` bind; before setting
+  `RABBITHOLE_LISTEN_ADDR=0.0.0.0:9734`, set a key. `/health`, `/metrics` and
+  `/api/v1/metrics` stay unauthenticated by design (probes and scrapers cannot
+  carry a header), so they stay readable by anyone who can reach the port.
+- *Rate limits are the only per-client brake.* Three RPS values, one bucket
+  pair (rate + burst) per client IP per endpoint family, 429 plus
+  `Retry-After` on overflow. Setting any of them to `0` is rejected at startup,
+  not treated as "unlimited" — use `RABBITHOLE_RATE_LIMIT_ENABLED=false` for
+  that, and only behind a trusted network.
+- *`RABBITHOLE_LOG_FORMAT=json` is accepted but the output stays text*, so log
+  shippers that expect JSON will not get it yet.
+- *CORS is wide open and not configurable.* The wildcard is hard-coded, so the
+  dashboard cannot be restricted by origin and any page can read
+  unauthenticated endpoints; keep the daemon on loopback.
+- *TLS interception is per session, not per daemon.* `RABBITHOLE_TLS_INTERCEPT`
+  is validated at startup and then ignored; use `attach --no-tls-intercept`
+  to turn interception off for one session.
+
+The §3 install script block references `RABBITHOLE_INSTALL_DIR`,
+`RABBITHOLE_VERSION` and `RABBITHOLE_NO_SYSTEMD`; those are installer-shell
+knobs, not read by any Go code, and are therefore not part of this table.
 
 ## 5. Testing
 
