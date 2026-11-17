@@ -3,6 +3,7 @@ package attach
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,7 @@ type mockCollector struct {
 	mu        sync.Mutex
 	sessions  map[string]*types.Session
 	traceCh   map[string]chan types.Trace
+	nextID    int
 	attachErr error
 	detachErr error
 	listErr   error
@@ -34,22 +36,30 @@ func newMockCollector() *mockCollector {
 	}
 }
 
+// Attach allocates the session ID under the lock. Concurrent attaches
+// previously hashed the map length outside it (a data race) and reused
+// IDs once two attaches raced — a shared ID makes Detach/StopSession act
+// on another goroutine's session, which silently corrupts the shared
+// store the leak test depends on. Attach returns a snapshot, not the
+// collector's own struct: Detach mutates the stored record in place.
 func (m *mockCollector) Attach(ctx context.Context, pid int32, opts collector.CollectOptions) (*types.Session, error) {
 	if m.attachErr != nil {
 		return nil, m.attachErr
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nextID++
 	session := &types.Session{
-		ID:        "test-session-" + string(rune('A'+len(m.sessions))),
+		ID:        "test-session-" + strconv.Itoa(m.nextID),
 		AgentPID:  pid,
 		Status:    types.SessionStatusRunning,
 		AgentName: "test-agent",
 		StartTime: time.Now(),
 	}
-	m.mu.Lock()
 	m.sessions[session.ID] = session
 	m.traceCh[session.ID] = make(chan types.Trace, 100)
-	m.mu.Unlock()
-	return session, nil
+	snapshot := *session
+	return &snapshot, nil
 }
 
 func (m *mockCollector) Detach(ctx context.Context, sessionID string) error {
@@ -177,13 +187,29 @@ func (m *mockStorage) StoreFlows(ctx context.Context, flows []types.Flow) error 
 	return nil
 }
 
+// cloneSession returns a deep-enough copy of a session record so no
+// caller shares mutable memory with the store.
+func cloneSession(s *types.Session) *types.Session {
+	if s == nil {
+		return nil
+	}
+	snapshot := *s
+	if s.EndTime != nil {
+		end := *s.EndTime
+		snapshot.EndTime = &end
+	}
+	return &snapshot
+}
+
 func (m *mockStorage) StoreSession(ctx context.Context, session *types.Session) error {
 	if m.err != nil {
 		return m.err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sessions = append(m.sessions, session)
+	// Keep our own copy: the caller (collector/monitor) keeps mutating
+	// its struct, and aliasing that memory here raced every reader.
+	m.sessions = append(m.sessions, cloneSession(session))
 	return nil
 }
 
@@ -193,12 +219,18 @@ func (m *mockStorage) UpdateSession(ctx context.Context, session *types.Session)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, s := range m.sessions {
+	for i, s := range m.sessions {
 		if s.ID == session.ID {
-			s.Status = session.Status
+			// Copy-on-write: never mutate a record a reader may already
+			// hold a snapshot of (the monitor goroutine writes terminal
+			// status while RPC handlers read it).
+			updated := *s
+			updated.Status = session.Status
 			if session.EndTime != nil {
-				s.EndTime = session.EndTime
+				end := *session.EndTime
+				updated.EndTime = &end
 			}
+			m.sessions[i] = &updated
 			return nil
 		}
 	}
