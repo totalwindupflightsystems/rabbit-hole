@@ -156,6 +156,10 @@ func newServeCmd() *cobra.Command {
     var (
         addr         string
         noClassifier bool
+        remote       string
+        demoStream   bool
+        demoEveryS   int
+        noEBPF       bool
     )
 
     cmd := &cobra.Command{
@@ -220,6 +224,10 @@ func newServeCmd() *cobra.Command {
 
     cmd.Flags().StringVar(&addr, "addr", "", "Listen address (default: 127.0.0.1:9734)")
     cmd.Flags().BoolVar(&noClassifier, "no-classifier", false, "Disable classification (pattern matching only)")
+    cmd.Flags().StringVar(&remote, "remote", "", "Remote classifier endpoint[::token] (e.g. localhost:50051 or host:443@token)")
+    cmd.Flags().BoolVar(&demoStream, "demo-stream", false, "Dogfood mode: publish a demo flow every N seconds (no root needed)")
+    cmd.Flags().IntVar(&demoEveryS, "demo-every", 3, "Seconds between demo-stream flows")
+    cmd.Flags().BoolVar(&noEBPF, "no-ebpf", false, "Run in degraded mode without eBPF (telemetry DISABLED)")
 
     return cmd
 }
