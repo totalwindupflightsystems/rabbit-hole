@@ -1,0 +1,146 @@
+go test ./... -count=1 -race
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/api/proto/classifier/v1	1.086s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/cmd/rabbit-hole	70.789s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/attach	6.733s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/classify	1.115s
+?   	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/classify/pb	[no test files]
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/collector	1.866s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/config	1.127s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/demo	1.119s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/express	23.004s
+2026/11/17 03:51:22 INFO applying migration version=1
+2026/11/17 03:51:22 INFO applying migration version=1
+2026/11/17 03:51:22 INFO applying migration version=1
+2026/11/17 03:51:22 INFO applying migration version=1
+2026/11/17 03:51:22 INFO starting compaction before=2026-11-17T03:51:22.905-05:00
+2026/11/17 03:51:22 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO starting compaction before=2026-08-27T12:00:00.000Z
+2026/11/17 03:51:23 INFO deleted old flows count=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO reconciled crashed sessions count=2
+2026/11/17 03:51:23 INFO reconciled crashed sessions count=0
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:23 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO starting compaction before=2026-11-16T08:51:24.532Z
+2026/11/17 03:51:24 INFO deleted old flows count=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:24 INFO applying migration version=1
+2026/11/17 03:51:25 INFO applying migration version=1
+2026/11/17 03:51:25 INFO applying migration version=1
+2026/11/17 03:51:25 INFO applying migration version=1
+--- FAIL: TestStress_100KTraceInsert (86.41s)
+    storage_test.go:1463: inserted 100000 traces in 1m26.032013208s
+    storage_test.go:1476: StoreTraces took 1m26.032013208s, want under 30s
+2026/11/17 03:52:51 INFO applying migration version=1
+--- FAIL: TestStress_ConcurrentFTS5Search (1.16s)
+    storage_test.go:1704: concurrent FTS5 search latencies (n=100):
+    storage_test.go:1705:   p50:  390.014088ms
+    storage_test.go:1706:   p75:  564.57195ms
+    storage_test.go:1707:   p90:  742.350685ms
+    storage_test.go:1708:   p99:  815.301967ms
+    storage_test.go:1709:   p999: 815.301967ms
+    storage_test.go:1710:   min:  10.193697ms
+    storage_test.go:1711:   max:  815.301967ms
+    storage_test.go:1714: p99 latency = 815.301967ms, want < 50ms
+2026/11/17 03:52:53 INFO applying migration version=1
+2026/11/17 03:52:53 INFO applying migration version=1
+panic: test timed out after 10m0s
+	running tests:
+		TestStress_WALPressure (8m29s)
+
+goroutine 388 [running]:
+testing.(*M).startAlarm.func1()
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2802 +0x605
+created by time.goFunc
+	/home/kara/sdk/go1.26.5/src/time/sleep.go:215 +0x45
+
+goroutine 1 [chan receive, 8 minutes]:
+testing.(*T).Run(0xc000202008, {0xebe3ed, 0x16}, 0xedafc8)
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2109 +0xb3e
+testing.runTests.func1(0xc000202008)
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2585 +0x85
+testing.tRunner(0xc000202008, 0xc0001edad0)
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2036 +0x21d
+testing.runTests({0xec8fdd, 0x2d}, {0xecc011, 0x3e}, 0xc0001ba090, {0x12ca380, 0x24, 0x24}, {0xc2b723d89144593a, 0x8bb2e60204, ...})
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2583 +0x9ea
+testing.(*M).Run(0xc0001a83c0)
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2443 +0xf4c
+main.main()
+	_testmain.go:120 +0x165
+
+goroutine 175 [runnable]:
+modernc.org/sqlite/lib._parseHhMmSs(0xc001d02000, 0x7d302017a153, 0x7d306a922020)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite_g_00000000000000c0.go:462 +0x7e5
+modernc.org/sqlite/lib._parseYyyyMmDd(0xc001d02000, 0x7d302017a148, 0x7d306a922020)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite_g_00000000000000c0.go:570 +0x3db
+modernc.org/sqlite/lib._parseDateOrTime(0xc001d02000, 0x7d302017b2c8, 0x7d302017a148, 0x7d306a922020)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite_g_0000000000003bc0.go:3108 +0xe9
+modernc.org/sqlite/lib._isDate(0xc001d02000, 0x7d302017b2c8, 0x1, 0x7d302017b2f8, 0x7d306a922020)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite_g_000000000002c488.go:136 +0x48a
+modernc.org/sqlite/lib._dateFunc(0xc001d02000, 0x7d302017b2c8, 0x1, 0x7d302017b2f8)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite_g_000000000006c4cf.go:588 +0xf1
+modernc.org/sqlite/lib._sqlite3VdbeExec(0xc001d02000, 0x7d3020175938)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite_linux_amd64.go:25730 +0x39a63
+modernc.org/sqlite/lib._sqlite3Step(0xc001d02000, 0x7d3020175938)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite_g_000000000001feab.go:22162 +0x1ef
+modernc.org/sqlite/lib.Xsqlite3_step(0xc001d02000, 0x7d3020175938)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/lib/sqlite.go:11977 +0x1cb
+modernc.org/sqlite.(*conn).step(0xc001cda3c0, 0x7d3020175938)
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/conn.go:419 +0x5e
+modernc.org/sqlite.(*stmt).exec.func2(0xc000016030, {0xc00032a340, 0xa, 0xa}, 0xc0001ed1b8, 0xc00031ef3c, {0xee24e0, 0x12eff80})
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/stmt.go:145 +0x2af
+modernc.org/sqlite.(*stmt).exec(0xc000016030, {0xee24e0, 0x12eff80}, {0xc00032a340, 0xa, 0xa})
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/stmt.go:175 +0x29c
+modernc.org/sqlite.(*stmt).ExecContext(0xc000016030, {0xee24e0, 0x12eff80}, {0xc00032a340, 0xa, 0xa})
+	/mnt/ssd/caches/hermes-go-mod/modernc.org/sqlite@v1.54.0/stmt.go:479 +0x6e
+database/sql.ctxDriverStmtExec({0xee24e0, 0x12eff80}, {0xee2750, 0xc000016030}, {0xc00032a340, 0xa, 0xa})
+	/home/kara/sdk/go1.26.5/src/database/sql/ctxutil.go:65 +0xf2
+database/sql.resultFromStatement({0xee24e0, 0x12eff80}, {0xee2290, 0xc001cda3c0}, 0xc0003c2000, {0xc0001ed9b0, 0xa, 0xa})
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:2680 +0x1df
+database/sql.(*Stmt).ExecContext.func1(0x1)
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:2654 +0xfd
+database/sql.(*DB).retry(0xc0001e20b8?, 0xc0001ed638)
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:1576 +0x4b
+database/sql.(*Stmt).ExecContext(0xc0001e2090, {0xee24e0, 0x12eff80}, {0xc0001ed9b0, 0xa, 0xa})
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:2648 +0x1e5
+gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage.(*SQLiteStore).StoreTraces(0xc001fea4a0, {0xee24e0, 0x12eff80}, {0xc0006c2000, 0x2710, 0x0?})
+	/home/kara/rabbit-hole/internal/storage/sqlite.go:224 +0xba6
+gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage.TestStress_WALPressure(0xc001d00008)
+	/home/kara/rabbit-hole/internal/storage/storage_test.go:1898 +0xad1
+testing.tRunner(0xc001d00008, 0xedafc8)
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 1
+	/home/kara/sdk/go1.26.5/src/testing/testing.go:2101 +0xb13
+
+goroutine 361 [chan receive]:
+database/sql.(*Tx).awaitDone(0xc00004a100)
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:2212 +0x49
+created by database/sql.(*DB).beginDC in goroutine 175
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:1925 +0x41f
+
+goroutine 176 [select, 8 minutes]:
+database/sql.(*DB).connectionOpener(0xc001d10ea0, {0xee2600, 0xc00237e730})
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:1261 +0xed
+created by database/sql.OpenDB in goroutine 175
+	/home/kara/sdk/go1.26.5/src/database/sql/sql.go:841 +0x287
+FAIL	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/storage	600.040s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types	1.028s
+?   	gitlab.readydedis.com/rabbit-hole/rabbit-hole/web	[no test files]
+FAIL
+make: *** [Makefile:24: test-all] Error 1
+MAKE_EXIT=2
