@@ -18,7 +18,9 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-6",
       "branch": "wt/DF-RABBIT-HOLE-6",
       "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-6.md",
-      "seam": ["internal/collector/"],
+      "seam": [
+        "internal/collector/"
+      ],
       "port": 19734
     },
     {
@@ -27,7 +29,10 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-CLN-002",
       "branch": "wt/CLN-002",
       "brief": "/home/kara/.hermes/cache/scratch/brief-CLN-002.md",
-      "seam": [".gitreins/config.yaml", "scripts/"],
+      "seam": [
+        ".gitreins/config.yaml",
+        "scripts/"
+      ],
       "port": null
     },
     {
@@ -36,7 +41,9 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-1",
       "branch": "wt/DF-RABBIT-HOLE-1",
       "brief": "/home/kara/.hermes/cache/scratch/brief-DF-RABBIT-HOLE-1.md",
-      "seam": ["internal/attach/"],
+      "seam": [
+        "internal/attach/"
+      ],
       "port": null
     }
   ],
@@ -45,5 +52,16 @@
     "DF-RABBIT-HOLE-2": "same file as DF-RABBIT-HOLE-6 (internal/collector/ebpf.go) — serialized behind it",
     "DOC-2": "specs/06 doc pass, independent; next wave"
   },
-  "merge_order": ["CLN-002", "DF-RABBIT-HOLE-6", "DF-RABBIT-HOLE-1"]
+  "merge_order": [
+    "CLN-002",
+    "DF-RABBIT-HOLE-6",
+    "DF-RABBIT-HOLE-1"
+  ],
+  "finished_at": "2026-11-17T22:45:00Z",
+  "status": "closed-by-recovery",
+  "recovery": {
+    "tick": "rabbit-hole-foreman-2026-11-17-22-33-27",
+    "note": "All worker branches verified merged into main (ahead=0) and reaped in tick 310; every affected board row is complete except DF-RABBIT-HOLE-4, whose merged fix (0fe98d2/d9933e1) left one judge residual that is filed as DF-RABBIT-HOLE-012 — the row is intentionally pending, re-dispatch of the fallback is forbidden",
+    "board_rows_all_complete": true
+  }
 }

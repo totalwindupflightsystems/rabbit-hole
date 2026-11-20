@@ -18,7 +18,10 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-010",
       "branch": "wt/DF-RABBIT-HOLE-010",
       "brief": "/home/kara/.hermes/cache/scratch/rh-DF-RABBIT-HOLE-010-074147.md",
-      "seam": ["internal/attach/memory_test.go", "docs/testing.md"]
+      "seam": [
+        "internal/attach/memory_test.go",
+        "docs/testing.md"
+      ]
     },
     {
       "task": "DF-RABBIT-HOLE-2",
@@ -26,7 +29,11 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-2",
       "branch": "wt/DF-RABBIT-HOLE-2",
       "brief": "/home/kara/.hermes/cache/scratch/rh-DF-RABBIT-HOLE-2-074147.md",
-      "seam": ["cmd/rabbit-hole/attach.go", "cmd/rabbit-hole/serve.go", "internal/collector/"],
+      "seam": [
+        "cmd/rabbit-hole/attach.go",
+        "cmd/rabbit-hole/serve.go",
+        "internal/collector/"
+      ],
       "port": 19871
     },
     {
@@ -35,7 +42,11 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-4",
       "branch": "wt/DF-RABBIT-HOLE-4",
       "brief": "/home/kara/.hermes/cache/scratch/rh-DF-RABBIT-HOLE-4-074147.md",
-      "seam": ["internal/express/chat.go", "internal/express/chat_test.go", "docs/integration.md (chat stub-mode block only)"],
+      "seam": [
+        "internal/express/chat.go",
+        "internal/express/chat_test.go",
+        "docs/integration.md (chat stub-mode block only)"
+      ],
       "port": 19872
     },
     {
@@ -44,7 +55,9 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-DOC-15",
       "branch": "wt/DOC-15",
       "brief": "/home/kara/.hermes/cache/scratch/rh-DOC-15-074147.md",
-      "seam": ["specs/06-CLI-Self-Hosted.md"]
+      "seam": [
+        "specs/06-CLI-Self-Hosted.md"
+      ]
     },
     {
       "task": "DOC-1",
@@ -52,7 +65,9 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-DOC-1",
       "branch": "wt/DOC-1",
       "brief": "/home/kara/.hermes/cache/scratch/rh-DOC-1-074147.md",
-      "seam": ["specs/openapi.yaml"]
+      "seam": [
+        "specs/openapi.yaml"
+      ]
     },
     {
       "task": "README-6",
@@ -60,7 +75,9 @@
       "worktree": "/home/kara/worktrees/rabbit-hole-README-6",
       "branch": "wt/README-6",
       "brief": "/home/kara/.hermes/cache/scratch/rh-README-6-074147.md",
-      "seam": ["README.md"],
+      "seam": [
+        "README.md"
+      ],
       "port": 19873
     }
   ],
@@ -74,11 +91,31 @@
     "DF-RABBIT-HOLE-1": "re-opens only for re-judge AFTER DF-010 lands (see its note) — no dispatch",
     "QA-RABBIT-HOLE-2-R6 / QA-RABBIT-HOLE-4-R3": "blocked, owning-lane escalation, not repo-fixable"
   },
-  "merge_order": ["DOC-1", "DOC-15", "README-6", "DF-RABBIT-HOLE-010", "DF-RABBIT-HOLE-2", "DF-RABBIT-HOLE-4"],
-  "gates_per_merge": ["go build ./...", "go vet ./...", "go test -count=1 ./internal/attach/ ./internal/collector/ ./internal/express/ ./cmd/rabbit-hole/", "gitreins guard", "gitreins task complete <ID>"],
+  "merge_order": [
+    "DOC-1",
+    "DOC-15",
+    "README-6",
+    "DF-RABBIT-HOLE-010",
+    "DF-RABBIT-HOLE-2",
+    "DF-RABBIT-HOLE-4"
+  ],
+  "gates_per_merge": [
+    "go build ./...",
+    "go vet ./...",
+    "go test -count=1 ./internal/attach/ ./internal/collector/ ./internal/express/ ./cmd/rabbit-hole/",
+    "gitreins guard",
+    "gitreins task complete <ID>"
+  ],
   "notes": [
     "worker spawn uses --query-file (shell-safe) without -s coding-hermes-worker: host gateway fails session.create when -s is passed",
     "each brief is self-contained with isolation preamble, AC verbatim, verified facts, dedicated port for live probes",
     "daemon on :9734 from an earlier tick may still be running — workers told to use 19871/19872/19873 and never kill it"
-  ]
+  ],
+  "finished_at": "2026-11-17T22:45:00Z",
+  "status": "closed-by-recovery",
+  "recovery": {
+    "tick": "rabbit-hole-foreman-2026-11-17-22-33-27",
+    "note": "All worker branches verified merged into main (ahead=0) and reaped in tick 310; every affected board row is complete except DF-RABBIT-HOLE-4, whose merged fix (0fe98d2/d9933e1) left one judge residual that is filed as DF-RABBIT-HOLE-012 — the row is intentionally pending, re-dispatch of the fallback is forbidden",
+    "board_rows_all_complete": true
+  }
 }

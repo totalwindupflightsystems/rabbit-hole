@@ -66,3 +66,6 @@ dagger.db
 dagger.db-shm
 dagger.db-wal
 .gitreins/usage.jsonl
+.gitreins/logs/
+.gitreins/*.lock
+.coding-hermes/board/.lock
