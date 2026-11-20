@@ -186,3 +186,42 @@ not a product defect. (b) A tick label re-dispatched 71 minutes after its first 
 at zero product delta, is a scheduler/gateway dispatch defect — reported here and in the
 tick report; it is not filed on this product's board. (c) No code, no board row and no
 repo visibility/credential state was touched by this delivery.
+
+## 2026-11-20 no-op provenance — delivery 3
+
+Tick id (body only, never the heading): `rabbit-hole-dogfood-2026-11-20-14-19-33`.
+
+**Third dispatch of one tick.** `~/.hermes/logs/agent.log` carries three inbound
+`[Scheduler tick]` lines for this exact tick id on chat f310c481: 09:19:39, 10:30:07 and
+10:36:02 -05. Delivery 1 did the loop; delivery 2 recorded its own no-op; this delivery
+verified and stood down again. Nothing was re-walked and nothing was re-filed.
+
+**Parity proof (zero product delta):** `git fetch origin main`; `HEAD` = `origin/main` =
+`458e1da`; `git rev-list --left-right --count HEAD...origin/main` = `0 0`; the only commit
+between delivery 1's `ffbbbb9` and `458e1da` is delivery 2's `docs(dogfood-log)` entry
+(48 lines, one file). No product code, no board row changed since the loop ran.
+
+**Rows stand as filed on the remote tree** (`git show origin/main:.coding-hermes/board/tasks.jsonl`):
+DF-039 (P2 compact `--before` under-deletes), DF-040 (P3 clean-machine `go test` red,
+TestValidateDefaults), PERF-001 (P2 dashboard summary 2.06s warm/2.17s cold at 1M rows),
+PERF-002 (P3 `/api/v1/stats` 1.28s warm). All four `pending`. Board census 158 rows =
+106 complete / 51 pending / 1 blocked, zero duplicate ids; local board md5 == remote md5
+(`d79056f2…`).
+
+**Evidence artifacts still on disk** under `scratch/rh-2026-11-20/evidence/`
+(timings-summary.txt, plans1m.txt, cold1m.txt, warm1m/, warm300k/, dashboard.html,
+postcompact-orphans.txt, board-*.txt).
+
+**One anomaly in the perf artifact, triaged and NOT filed:** `timings-summary.txt` shows
+`chat_stub … code 429 x5, code 200 x5`. That is the documented chat limiter (default
+`RABBITHOLE_RATE_LIMIT_CHAT_RPS=5`, internal/config/config.go:62) answering ten rapid stub
+requests — expected behaviour, not a defect. Its documentation gap is already open as
+DOC-16 (pending). No row filed.
+
+**Residue:** none. `/proc/*/cmdline` sweep for `rabbit-hole`/`rabbit_hole` matched only this
+shell (self-filtered); no lane listener in the 9xxx range belongs to this project.
+
+**Disclosure:** a tick label dispatched three times inside 77 minutes at zero product delta
+is a scheduler/gateway dispatch defect, not a product finding; it is reported in the tick
+report and in DuckBrain (`/dogfood/2026-11-20-tick-delivery3`), never filed on this board.
+No code, board row, repo visibility or credential was touched by this delivery.
