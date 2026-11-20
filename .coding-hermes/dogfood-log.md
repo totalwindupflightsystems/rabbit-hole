@@ -265,3 +265,38 @@ dashboard :9095, chimera :8765, off-by-one :8766), named here and left running.
 is a scheduler/gateway dispatch defect, not a product finding. It is reported in the tick
 report and belongs on the scheduler board; it is never filed on this product's board. No
 code, no board row, no repo visibility or credential state was touched by this delivery.
+
+### Correction to the delivery-4 attribution
+
+Appended minutes after the entry above, because the scheduler's own state contradicts the
+attribution I wrote before checking it. The log entry stays as written; this is the
+correction of record.
+
+**There was one dispatch, not four.** `sqlite3 ~/.hermes/scheduler.db` (symlink to
+`.hermes/coding-hermes/scheduler.db`) holds exactly one `ticks` row for
+`rabbit-hole-dogfood-2026-11-20-14-19-33`: `status=failed`, `outcome=failed`,
+`spawned_at=2026-11-20T09:19:33-05:00`, `completed_at=2026-11-20T09:59:41-05:00`,
+`files_changed=0`, `failure_reason=gateway_5xx`. `tick_dispatch` has zero rows for lane
+`rabbit-hole-dogfood` on 2026-11-20. The project row is enabled with `cooldown_s=259200`
+pinned (3 days), so a second scheduler dispatch inside the window would have been refused
+outright — the four `gateway.log` inbound lines at 09:19:39, 10:30:07, 10:36:02 and 10:38:26
+are the same tick prompt re-delivered into the same chat `f310c481`, i.e. a client-side
+retry of one request, not four ticks. Calling this a scheduler dispatch defect was wrong.
+
+**The product work landed after the tick was already marked failed.** Tick closed failed at
+09:59:41; delivery 1's board commit `ffbbbb9` is timestamped 10:24:36 — 25 minutes later.
+So `gateway_5xx` / `files_changed=0` describes an HTTP turn that outlived its tick budget and
+returned 5xx to the caller, not a product that failed to work. The loop ran, measured and
+filed; the scheduler gave up on it first.
+
+**Scope of the zero-delta claim.** It holds for deliveries 2, 3 and 4 against `ffbbbb9`
+(10:24:36) — `.coding-hermes/dogfood-log.md` is the only path changed since. Delivery 1's
+own delta is the four rows it filed (`DF-039`, `DF-040`, `PERF-001`, `PERF-002`), which is
+not zero and was never claimed to be.
+
+**Where the real finding points.** A long dogfood turn outlives the tick's HTTP budget, gets
+recorded failed while it is still productive, and each retry re-enters the same session as a
+fresh turn because the prompt carries no idempotency key beyond the tick id — three retries
+burned three full agent turns to re-derive "already delivered". That is a scheduler/gateway
+concern. It is reported in the tick report and is not a row for this project's board: the
+rabbit-hole foreman cannot fix the scheduler. No row filed, no code touched.
