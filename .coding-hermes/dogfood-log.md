@@ -138,3 +138,51 @@ traps), skills/rabbit-hole-usage/SKILL.md v1.1.0, 4 board tasks, this log.
 2026-09-05 | PROMISING-BUT-ROUGH | 25s t2fs | friction 6 | 4 findings
 
 2026-09-07 | SHIPPABLE | 4s t2fs | friction 6 | 5 findings
+
+## 2026-11-20 no-op provenance — delivery 2
+
+Tick id in body (never in the heading): `rabbit-hole-dogfood-2026-11-20-14-19-33`.
+
+**This tick already ran the loop.** `~/.hermes/logs/gateway.log` carries two inbound
+dispatch lines for this exact tick id on the same chat (f310c481): 2026-11-20 09:19:39
+and 10:30:07 -05. Delivery 1 did the work and left its record in three places: board rows
+created 15:24:18Z, commit `ffbbbb9` at 10:24:36 -05 ("board: dogfood 2026-11-20 — file
+DF-039/DF-040 (correctness) + PERF-001/PERF-002 (perf)"), and DuckBrain event
+`/dogfood/2026-11-20-tick` (domain `event`, timestamp 15:27:54Z, attributes tick=rabbit-hole-dogfood-2026-11-20-14-19-33,
+head_before e18af6e, head_after ffbbbb9, rows_filed DF-039 DF-040 PERF-001 PERF-002).
+
+**Parity proof (product unchanged since the last delivery):** `git fetch origin`;
+`HEAD` = `origin/main` = `ffbbbb9`; `git rev-list --left-right --count HEAD...origin/main`
+= `0 0`; `git diff --name-only ffbbbb9..origin/main` = empty. Zero product delta is what
+licenses this no-op.
+
+**Board untouched and healthy:** `git show origin/main:.coding-hermes/board/tasks.jsonl`
+= 158 rows (106 complete, 51 pending, 1 blocked), zero duplicate ids; DF-039, DF-040,
+PERF-001, PERF-002 all present and `pending` exactly as filed.
+
+**Evidence spot-check of delivery 1's filed numbers (not re-measured):** the PERF rows'
+text matches `scratch/rh-2026-11-20/evidence/timings-summary.txt` — stats warm mean
+1.2764s / cold 0.5449s / 300k 0.2375s and dashsum warm mean 2.0552s / cold 2.1722s /
+300k 0.7866s, i.e. the rows' quoted 1.28 / 0.54 / 0.24 and 2.06 / 2.17 / 0.79.
+`evidence/plans1m.txt` does show `SCAN traces USING COVERING INDEX idx_traces_date` and
+`SCAN flows_fts VIRTUAL TABLE INDEX 0:` as the rows claim. The filed numbers are
+artifact-backed, so they stand.
+
+**Perf leg deliberately NOT re-run:** re-driving an unchanged tree re-measures the host
+(delivery 1's 1M-row runs happened at load ~32.7), not the product. The earlier warm/cold
+numbers are the honest ones.
+
+**Residue scan:** `/proc/*/cmdline` sweep for `rabbit-hole` / `rabbit_hole` (own shell
+filtered out of the match) found no serve/attach process; no lane listener on the usual
+port range. The only listener found in that range is `chimera` :8765 (pid 2580, a
+systemd-user managed service) — another project's deployed service, named here and left
+running, not this lane's residue.
+
+**Disclosures.** (a) Delivery 1 wrote no entry to this file — its record lives in
+DuckBrain and the board commit. The newest entry before this one is 2026-09-07, so every
+dogfood delivery between 09-08 and 11-20 is unlogged and this file cannot serve as the
+duplicate-delivery record until that gap is repaired; repair is a lane-discipline job,
+not a product defect. (b) A tick label re-dispatched 71 minutes after its first delivery,
+at zero product delta, is a scheduler/gateway dispatch defect — reported here and in the
+tick report; it is not filed on this product's board. (c) No code, no board row and no
+repo visibility/credential state was touched by this delivery.
