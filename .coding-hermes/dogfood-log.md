@@ -225,3 +225,43 @@ shell (self-filtered); no lane listener in the 9xxx range belongs to this projec
 is a scheduler/gateway dispatch defect, not a product finding; it is reported in the tick
 report and in DuckBrain (`/dogfood/2026-11-20-tick-delivery3`), never filed on this board.
 No code, board row, repo visibility or credential was touched by this delivery.
+
+## 2026-11-20 no-op provenance — delivery 4
+
+Tick id (body only, never the heading): `rabbit-hole-dogfood-2026-11-20-14-19-33`.
+
+**Fourth dispatch of one tick.** `~/.hermes/logs/gateway.log` carries four inbound
+`[Scheduler tick]` lines for this exact tick id on chat f310c481: 09:19:39, 10:30:07,
+10:36:02 and 10:38:26 -05. Delivery 1 ran the loop; deliveries 2 and 3 recorded their own
+no-ops; this delivery verified again and stood down. Nothing was re-walked, nothing was
+re-measured, nothing was re-filed.
+
+**Parity proof (zero product delta):** `git fetch --quiet origin main` at 10:39:02 -05;
+`HEAD` = `origin/main` = `7540226`; `git rev-list --left-right --count HEAD...origin/main`
+= `0 0`. The whole diff since delivery 1's `ffbbbb9` is `.coding-hermes/dogfood-log.md`
+alone (delivery 2's `458e1da` and delivery 3's `7540226` entries) — `git diff --name-only
+ffbbbb9..origin/main` names no other path. No product code, no board row changed since the
+loop ran.
+
+**Rows stand as filed on the remote tree** (`git show origin/main:.coding-hermes/board/tasks.jsonl`):
+DF-039 `pending`/P2, DF-040 `pending`/P3, PERF-001 `pending`/P2, PERF-002 `pending`/P3.
+Board census 158 rows = 106 complete / 51 pending / 1 blocked, zero duplicate ids; local
+board md5 == remote md5 (`d79056f2…`). Board file untouched by this delivery.
+
+**Perf leg deliberately NOT re-run:** the tree is byte-identical to the one delivery 1
+measured, so a re-run measures the host's load, not the product. The filed warm/cold
+numbers (stats 1.28s warm / 0.54s cold; dashboard summary 2.06s warm / 2.17s cold at 1M
+flows) stand on `scratch/rh-2026-11-20/evidence/timings-summary.txt` and were already
+spot-checked against that artifact by delivery 2.
+
+**Residue scan:** `/proc/*/cmdline` sweep for `rabbit-hole` / `rabbit_hole` matched no
+process (own shell filtered; the only matches were short-lived `/proc` entries that
+vanished mid-scan). No listener in the 8xxx/9xxx range belongs to this project — the
+listeners present are other projects' services (task-router :9092/:9391, router_web :9093,
+temple-runner-web :8123, aipp console :8899, game bridge, cf-inference-proxy :8775,
+dashboard :9095, chimera :8765, off-by-one :8766), named here and left running.
+
+**Disclosure:** a tick label dispatched four times inside 79 minutes at zero product delta
+is a scheduler/gateway dispatch defect, not a product finding. It is reported in the tick
+report and belongs on the scheduler board; it is never filed on this product's board. No
+code, no board row, no repo visibility or credential state was touched by this delivery.
