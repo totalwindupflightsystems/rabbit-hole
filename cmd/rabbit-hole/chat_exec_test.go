@@ -1,9 +1,15 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
 func TestChatCmd_ConnectionRefused(t *testing.T) {
@@ -38,25 +44,60 @@ func TestChatCmd_ConnectionRefused(t *testing.T) {
 }
 
 func TestChatCmd_WithSessionFlag(t *testing.T) {
-	output := captureStdout(func() {
-		cmd := newChatCmd()
-		cmd.SetArgs([]string{"--session", "sess-abc", "what happened?"})
-		err := cmd.Execute()
-		if err != nil {
-			t.Logf("chat with session error: %v", err)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("RABBITHOLE_DATA_DIR", t.TempDir())
+	var request types.ChatRequest
+	hit := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/chat" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
-	})
-	t.Logf("chat session output: %s", output)
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		_, _ = fmt.Fprint(w, `{"answer":"session answer","flows":[],"suggestions":[]}`)
+	}))
+	defer ts.Close()
+	cmd := newChatCmd()
+	cmd.SetArgs([]string{"--addr", strings.TrimPrefix(ts.URL, "http://"), "--session", "sess-abc", "what happened?"})
+	var err error
+	output := captureStdout(func() { err = cmd.Execute() })
+	if err != nil {
+		t.Errorf("chat: %v", err)
+	}
+	if !hit || request.SessionID != "sess-abc" || request.Message != "what happened?" {
+		t.Errorf("chat request: hit=%v request=%+v", hit, request)
+	}
+	if strings.TrimSpace(output) != "session answer" {
+		t.Errorf("chat output = %q", output)
+	}
 }
 
 func TestChatCmd_WithJsonFlag(t *testing.T) {
-	output := captureStdout(func() {
-		cmd := newChatCmd()
-		cmd.SetArgs([]string{"--json", "status?"})
-		err := cmd.Execute()
-		if err != nil {
-			t.Logf("chat json error: %v", err)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("RABBITHOLE_DATA_DIR", t.TempDir())
+	hit := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/chat" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
-	})
-	t.Logf("chat json output: %s", output)
+		_, _ = fmt.Fprint(w, `{"answer":"json answer","flows":[],"suggestions":["follow up"]}`)
+	}))
+	defer ts.Close()
+	cmd := newChatCmd()
+	cmd.SetArgs([]string{"--addr", strings.TrimPrefix(ts.URL, "http://"), "--json", "status?"})
+	var err error
+	output := captureStdout(func() { err = cmd.Execute() })
+	if err != nil {
+		t.Errorf("chat --json: %v", err)
+	}
+	var response types.ChatResponse
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Errorf("chat --json output is not JSON: %q: %v", output, err)
+	}
+	if !hit || response.Answer != "json answer" || len(response.Suggestions) != 1 || response.Suggestions[0] != "follow up" {
+		t.Errorf("chat --json: hit=%v response=%+v", hit, response)
+	}
 }
