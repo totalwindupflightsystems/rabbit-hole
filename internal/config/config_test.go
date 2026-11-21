@@ -272,8 +272,26 @@ func TestLoadCreatesDataDir(t *testing.T) {
 	}
 }
 
+// TestValidateDefaults asserts the invariant that matters on a virgin machine:
+// Defaults() derives DataDir from HOME (~/.rabbit-hole), which does not exist
+// on a fresh install, Load() creates it (DF-011), and the resulting default
+// config validates. Calling Defaults().Validate() directly asserts the
+// opposite of that contract — Validate() deliberately rejects a missing data
+// dir — and is not hermetic: it passes only where some earlier run already
+// created ~/.rabbit-hole (QA-RABBIT-HOLE-1-R14).
 func TestValidateDefaults(t *testing.T) {
-	cfg := Defaults()
+	t.Setenv("HOME", t.TempDir())       // hermetic: never touch the real home
+	t.Setenv("RABBITHOLE_DATA_DIR", "") // ambient override must not leak in
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() with default config failed: %v", err)
+	}
+
+	wantDataDir := filepath.Join(os.Getenv("HOME"), ".rabbit-hole")
+	if cfg.DataDir != wantDataDir {
+		t.Errorf("DataDir: expected %s, got %s", wantDataDir, cfg.DataDir)
+	}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("Default config should validate: %v", err)
 	}
@@ -330,6 +348,7 @@ func TestValidateErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Defaults()
+			cfg.DataDir = t.TempDir()
 			tt.modify(&cfg)
 			err := cfg.Validate()
 			if err == nil {
@@ -337,6 +356,9 @@ func TestValidateErrors(t *testing.T) {
 			}
 			if err.Error() == "" {
 				t.Fatal("expected non-empty error message")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("expected error containing %q, got %v", tt.wantErr, err)
 			}
 		})
 	}
@@ -376,6 +398,7 @@ func TestLoadInvalidBool(t *testing.T) {
 // passes the new SplitHostPort check without producing an error.
 func TestValidateValidAddr(t *testing.T) {
 	cfg := Defaults()
+	cfg.DataDir = t.TempDir()
 	cfg.ListenAddr = "127.0.0.1:9734"
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("expected validation to pass for 127.0.0.1:9734, got: %v", err)
