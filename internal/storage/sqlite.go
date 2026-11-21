@@ -673,11 +673,19 @@ func (s *SQLiteStore) GetContextWindow(ctx context.Context, flowID string) (*typ
 
 // Compact deletes old data from non-running sessions, then vacuums. Running
 // sessions remain intact so their writers can continue across compaction.
+//
+// Every age comparison (traces.timestamp, flows.start_time, sessions.end_time)
+// goes through unixepoch(), so the cutoff's UTC offset relative to the stored
+// rows' offsets cannot change which rows count as expired: only the absolute
+// instant matters. Timestamps SQLite cannot parse yield a NULL unixepoch(),
+// whose comparison is NULL (not true) — unparseable flow, trace and session
+// timestamps are therefore RETAINED, never treated as expired, consistently
+// on all three tables.
 func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 	s.logger.Info("starting compaction", "before", before)
 	cutoff := before.Format(time.RFC3339Nano)
 
-	result, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE timestamp < ?
+	result, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE unixepoch(timestamp) < unixepoch(?)
 		AND session_id NOT IN (SELECT id FROM sessions WHERE status = 'running')`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete old traces", err)
@@ -696,9 +704,10 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 	}
 
 	_, err = s.db.ExecContext(ctx, `
-		DELETE FROM sessions WHERE end_time < ? AND end_time IS NOT NULL
+		DELETE FROM sessions WHERE unixepoch(end_time) < unixepoch(?) AND end_time IS NOT NULL
 		AND status != 'running'
-		AND id NOT IN (SELECT DISTINCT session_id FROM flows)`, cutoff)
+		AND id NOT IN (SELECT DISTINCT session_id FROM flows)
+		AND id NOT IN (SELECT DISTINCT session_id FROM traces)`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete orphan sessions", err)
 	}
