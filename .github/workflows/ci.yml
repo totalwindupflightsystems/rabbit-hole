@@ -20,7 +20,24 @@ jobs:
         run: make build
 
       - name: Test
-        run: make test
+        run: go test ./... -count=1 -short -race
 
       - name: Lint
         run: make lint
+
+  slow-tests:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [stress, integration, e2e]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Run ${{ matrix.target }}
+        run: make ${{ matrix.target }}
