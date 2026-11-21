@@ -874,3 +874,4 @@
 {"id":1795169262097322179,"timestamp":"2026-11-21T10:13:21","event_type":"task_completed","task_id":"QA-RABBIT-HOLE-1-R14","actor":"foreman","detail":"{\"status\":\"complete\"}"}
 {"id":1795169262097322180,"timestamp":"2026-11-21T10:13:21","event_type":"task_completed","task_id":"DF-039","actor":"foreman","detail":"{\"status\":\"complete\"}"}
 {"id":1795169262097322181,"timestamp":"2026-11-21T10:13:21","event_type":"task_completed","task_id":"PM-RH-02","actor":"foreman","detail":"{\"status\":\"complete\"}"}
+{"id":1795169262097322182,"timestamp":"2026-11-21T10:22:36","event_type":"task_created","task_id":"INT-GUARD-1","actor":"foreman","detail":"{\"id\":\"INT-GUARD-1\",\"status\":\"pending\"}"}
