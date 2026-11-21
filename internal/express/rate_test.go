@@ -219,6 +219,107 @@ func TestClientIP_NoPort(t *testing.T) {
 	}
 }
 
+// ---------- Trusted-proxy tests (opt-in X-Forwarded-For handling) ----------
+
+func TestClientIP_TrustedProxyChain(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1", "10.0.0.0/8"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "127.0.0.1:443"
+	r.Header.Set("X-Forwarded-For", "203.0.113.9, 10.1.2.3")
+
+	// Right-to-left: 10.1.2.3 is a trusted proxy, 203.0.113.9 is the client.
+	if ip := rl.clientIP(r); ip != "203.0.113.9" {
+		t.Errorf("clientIP = %q, want %q", ip, "203.0.113.9")
+	}
+}
+
+func TestClientIP_UntrustedPeerIgnoresForwardedFor(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "198.51.100.4:1234"
+	r.Header.Set("X-Forwarded-For", "203.0.113.5")
+
+	if ip := rl.clientIP(r); ip != "198.51.100.4" {
+		t.Errorf("clientIP = %q, want peer %q", ip, "198.51.100.4")
+	}
+}
+
+func TestClientIP_AllHopsTrustedUsesLeftmost(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "10.0.0.1:1234"
+	r.Header.Set("X-Forwarded-For", "10.0.0.5, 10.0.0.6")
+
+	if ip := rl.clientIP(r); ip != "10.0.0.5" {
+		t.Errorf("clientIP = %q, want leftmost hop %q", ip, "10.0.0.5")
+	}
+}
+
+func TestSetTrustedProxies_InvalidEntryFailsClosed(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1", "not-an-ip"}); err == nil {
+		t.Fatal("expected error for invalid trusted proxy entry")
+	}
+	if len(rl.trustedProxies) != 0 {
+		t.Fatalf("invalid config must not be applied, got %d ranges", len(rl.trustedProxies))
+	}
+
+	// A failed configuration leaves the no-trust default in force.
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "127.0.0.1:443"
+	r.Header.Set("X-Forwarded-For", "203.0.113.9")
+	if ip := rl.clientIP(r); ip != "127.0.0.1" {
+		t.Errorf("clientIP = %q, want peer %q after failed trust config", ip, "127.0.0.1")
+	}
+}
+
+// TestRateLimiter_RotatingForwardedForBehindTrustedProxy proves the bypass is
+// still closed when a proxy is trusted: a client that rotates the leftmost
+// (spoofable) entries is keyed on the hop the proxy appended.
+func TestRateLimiter_RotatingForwardedForBehindTrustedProxy(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/search", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := withRateLimit(mux, rl, nil)
+
+	blocked := 0
+	for i := range 30 {
+		r := httptest.NewRequest("POST", "/api/v1/search", nil)
+		r.RemoteAddr = "127.0.0.1:443"
+		// Spoofed leftmost hop rotates; the proxy appended the real client.
+		r.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.%d.%d, 198.51.100.7", i/256, i%256))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code == http.StatusTooManyRequests {
+			blocked++
+			if w.Header().Get("Retry-After") == "" {
+				t.Fatal("missing Retry-After")
+			}
+		}
+	}
+	if blocked == 0 {
+		t.Fatal("no 429 responses: spoofing the leftmost hop bypassed the limiter")
+	}
+	if got := rl.buckets["198.51.100.7"]; got == nil {
+		t.Fatal("requests were not keyed on the proxy-appended client address")
+	}
+}
+
 // ---------- Endpoint routing tests ----------
 
 func TestEndpointFromPath_Search(t *testing.T) {

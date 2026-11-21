@@ -395,3 +395,51 @@ func TestValidateDataDirNotExist(t *testing.T) {
 		t.Errorf("expected error mentioning RABBITHOLE_DATA_DIR does not exist, got: %v", err)
 	}
 }
+
+// TestDefaultsTrustedProxiesEmpty pins the security default: no proxy is
+// trusted, so X-Forwarded-For is never used as a rate-limit key unless the
+// operator opts in.
+func TestDefaultsTrustedProxiesEmpty(t *testing.T) {
+	cfg := Defaults()
+	if len(cfg.RateLimitTrustedProxies) != 0 {
+		t.Fatalf("default trusted proxies = %v, want none", cfg.RateLimitTrustedProxies)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default config must validate: %v", err)
+	}
+}
+
+func TestLoadTrustedProxiesEnv(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "rh-data")
+	t.Setenv("RABBITHOLE_DATA_DIR", dataDir)
+	t.Setenv("RABBITHOLE_TRUSTED_PROXIES", " 127.0.0.1 , 10.0.0.0/8 ,, ")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	want := []string{"127.0.0.1", "10.0.0.0/8"}
+	if len(cfg.RateLimitTrustedProxies) != len(want) {
+		t.Fatalf("trusted proxies = %v, want %v", cfg.RateLimitTrustedProxies, want)
+	}
+	for i, entry := range want {
+		if cfg.RateLimitTrustedProxies[i] != entry {
+			t.Errorf("trusted proxy %d = %q, want %q", i, cfg.RateLimitTrustedProxies[i], entry)
+		}
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("valid trusted proxies must validate: %v", err)
+	}
+}
+
+func TestValidateTrustedProxiesInvalid(t *testing.T) {
+	cfg := Defaults()
+	cfg.RateLimitTrustedProxies = []string{"127.0.0.1", "not-an-ip"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for invalid trusted proxy entry")
+	}
+	if !strings.Contains(err.Error(), "RABBITHOLE_TRUSTED_PROXIES") {
+		t.Errorf("expected error naming RABBITHOLE_TRUSTED_PROXIES, got: %v", err)
+	}
+}
