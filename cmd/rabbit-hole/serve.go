@@ -45,6 +45,12 @@ Dogfood mode (--demo-stream): with no root/eBPF available, generate one
 realistic flow every N seconds into a demo session and publish it to the
 dashboard's Live tab over WebSocket. This is how Rabbit-Hole eats its own
 dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
+		PreRunE: func(_ *cobra.Command, _ []string) error {
+			if demoEveryS <= 0 || int64(demoEveryS) > int64((1<<63-1)/time.Second) {
+				return fmt.Errorf("--demo-every must be a positive number of seconds representable as a duration")
+			}
+			return nil
+		},
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
