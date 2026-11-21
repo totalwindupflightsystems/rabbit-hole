@@ -3,8 +3,8 @@
 package express
 
 import (
+	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,10 +27,13 @@ type endpointRPS struct {
 	ws     int
 }
 
+const maxRateBuckets = 4096
+const rateBucketIdle = time.Minute
+
 // RateLimiter manages per-endpoint, per-IP token bucket rate limiters.
 // It is safe for concurrent use.
 type RateLimiter struct {
-	mu       sync.RWMutex
+	mu       sync.Mutex
 	buckets  map[string]*endpointLimiters // keyed by client IP
 	defaults endpointRPS
 	enabled  bool
@@ -38,9 +41,10 @@ type RateLimiter struct {
 
 // endpointLimiters holds one rate limiter per endpoint for a single client IP.
 type endpointLimiters struct {
-	search *rate.Limiter
-	chat   *rate.Limiter
-	ws     *rate.Limiter
+	search   *rate.Limiter
+	chat     *rate.Limiter
+	ws       *rate.Limiter
+	lastSeen time.Time
 }
 
 // NewRateLimiter creates a RateLimiter with the given per-endpoint RPS values.
@@ -53,46 +57,38 @@ func NewRateLimiter(searchRPS, chatRPS, wsRPS int, enabled bool) *RateLimiter {
 	}
 }
 
-// clientIP extracts the client IP from the request, preferring
-// the X-Forwarded-For header over the direct RemoteAddr.
+// clientIP uses the direct peer, never an untrusted forwarding header.
 func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		// Take the first IP in the chain.
-		if i := strings.IndexByte(fwd, ','); i >= 0 {
-			return strings.TrimSpace(fwd[:i])
-		}
-		return strings.TrimSpace(fwd)
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
-	// Strip port from RemoteAddr.
-	addr := r.RemoteAddr
-	if i := strings.LastIndexByte(addr, ':'); i >= 0 {
-		return addr[:i]
-	}
-	return addr
+	return r.RemoteAddr
 }
 
 // getOrCreateLimiters returns the endpoint limiters for the given IP,
-// creating them if they don't exist.
-func (rl *RateLimiter) getOrCreateLimiters(ip string) *endpointLimiters {
-	rl.mu.RLock()
-	el, ok := rl.buckets[ip]
-	rl.mu.RUnlock()
-	if ok {
-		return el
-	}
-
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	// Double-check after acquiring write lock.
+// creating them if they don't exist. Caller holds rl.mu.
+func (rl *RateLimiter) getOrCreateLimiters(ip string, now time.Time) *endpointLimiters {
 	if el, ok := rl.buckets[ip]; ok {
+		el.lastSeen = now
 		return el
 	}
 
-	el = &endpointLimiters{
-		search: rate.NewLimiter(rate.Limit(rl.defaults.search), rl.defaults.search),
-		chat:   rate.NewLimiter(rate.Limit(rl.defaults.chat), rl.defaults.chat),
-		ws:     rate.NewLimiter(rate.Limit(rl.defaults.ws), rl.defaults.ws),
+	if len(rl.buckets) >= maxRateBuckets {
+		for key, bucket := range rl.buckets {
+			if now.Sub(bucket.lastSeen) >= rateBucketIdle {
+				delete(rl.buckets, key)
+			}
+		}
+		// Never evict active buckets: churn could reset their rate limits.
+		if len(rl.buckets) >= maxRateBuckets {
+			return nil
+		}
+	}
+	el := &endpointLimiters{
+		search:   rate.NewLimiter(rate.Limit(rl.defaults.search), rl.defaults.search),
+		chat:     rate.NewLimiter(rate.Limit(rl.defaults.chat), rl.defaults.chat),
+		ws:       rate.NewLimiter(rate.Limit(rl.defaults.ws), rl.defaults.ws),
+		lastSeen: now,
 	}
 	rl.buckets[ip] = el
 	return el
@@ -107,7 +103,12 @@ func (rl *RateLimiter) Allow(ip string, endpoint Endpoint) (bool, time.Duration)
 		return true, 0
 	}
 
-	el := rl.getOrCreateLimiters(ip)
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	el := rl.getOrCreateLimiters(ip, time.Now())
+	if el == nil {
+		return false, time.Second
+	}
 
 	var lim *rate.Limiter
 	switch endpoint {

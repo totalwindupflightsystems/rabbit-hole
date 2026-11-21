@@ -2,6 +2,7 @@ package express
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -136,8 +137,65 @@ func TestClientIP_WithXForwardedFor(t *testing.T) {
 	r.RemoteAddr = "192.168.1.1:12345"
 
 	ip := clientIP(r)
-	if ip != "203.0.113.5" {
-		t.Errorf("clientIP = %q, want %q", ip, "203.0.113.5")
+	if ip != "192.168.1.1" {
+		t.Errorf("clientIP = %q, want %q", ip, "192.168.1.1")
+	}
+}
+
+func TestRateLimiter_RotatingForwardedFor(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/search", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	var bodies [2]string
+	for mode := range 2 {
+		handler := withRateLimit(mux, NewRateLimiter(10, 5, 20, true), nil)
+		blocked := 0
+		for i := range 30 {
+			r := httptest.NewRequest("POST", "/api/v1/search", nil)
+			r.RemoteAddr = "192.0.2.1:1234"
+			if mode == 0 {
+				r.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.0.%d", i))
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if w.Code == http.StatusTooManyRequests {
+				blocked++
+				if w.Header().Get("Retry-After") == "" {
+					t.Fatal("missing Retry-After")
+				}
+				bodies[mode] = w.Body.String()
+			}
+		}
+		if blocked == 0 {
+			t.Fatalf("mode %d: no 429 responses", mode)
+		}
+	}
+	if bodies[0] != bodies[1] {
+		t.Fatalf("429 bodies differ: %q vs %q", bodies[0], bodies[1])
+	}
+}
+
+func TestRateLimiter_BoundedBuckets(t *testing.T) {
+	rl := NewRateLimiter(1, 1, 1, true)
+	for i := range maxRateBuckets {
+		if ok, _ := rl.Allow(fmt.Sprint(i), EndpointSearch); !ok {
+			t.Fatalf("bucket %d rejected", i)
+		}
+	}
+	if ok, delay := rl.Allow("overflow", EndpointSearch); ok || delay != time.Second {
+		t.Fatal("capacity must fail closed")
+	}
+	if len(rl.buckets) != maxRateBuckets {
+		t.Fatal("bucket cap exceeded")
+	}
+	if ok, _ := rl.Allow("0", EndpointSearch); ok {
+		t.Fatal("active bucket was reset")
+	}
+	rl.buckets["1"].lastSeen = time.Now().Add(-2 * rateBucketIdle)
+	if ok, _ := rl.Allow("overflow", EndpointSearch); !ok {
+		t.Fatal("idle bucket was not evicted")
+	}
+	if len(rl.buckets) > maxRateBuckets {
+		t.Fatal("bucket cap exceeded after eviction")
 	}
 }
 
