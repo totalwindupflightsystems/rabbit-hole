@@ -259,13 +259,15 @@ go build -ldflags="-s -w -X main.Version=dev" -o bin/rabbit-hole ./cmd/rabbit-ho
 Full kernel telemetry (the Collect layer) requires:
 
 - Linux kernel **5.11+**
-- **CAP_SYS_RESOURCE** (typically root — run `sudo ./bin/rabbit-hole attach --pid <PID>`)
+- Appropriate eBPF and resource-limit privileges for the host
 
-Without these privileges, `attach` and `serve` **refuse to start** and exit
-non-zero with:
+For example, on a host without the required privileges, both
+`./bin/rabbit-hole attach --pid <PID>` and `./bin/rabbit-hole serve` exited 1
+and printed this error on stderr (the kernel version and underlying reason can
+vary by host):
 
 ```
-eBPF unavailable — telemetry DISABLED
+Error: eBPF unavailable — telemetry DISABLED (use --no-ebpf to run in degraded mode): kernel 7.0.0-43-generic refused the eBPF collection as unprivileged (operation not permitted); grant the missing capabilities (CAP_BPF, CAP_PERFMON, CAP_SYS_ADMIN) or run as root [remove memlock rlimit: failed to set memlock rlimit: operation not permitted]
 ```
 
 This is deliberate: silently running without kernel probes would make you
