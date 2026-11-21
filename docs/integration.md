@@ -270,13 +270,32 @@ session ends. If a subscriber falls behind, the server drops flows
 
 ## Configuration
 
-Rabbit-Hole is configured entirely through environment variables:
+Rabbit-Hole is configured through environment variables; run `bash scripts/check-config-docs.sh` from the repo to check this table against production reads.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `RABBITHOLE_LISTEN_ADDR` | `127.0.0.1:9734` | HTTP/WebSocket bind address |
-| `RABBITHOLE_DB_PATH` | `~/.rabbit-hole/rabbit-hole.db` | SQLite database path |
+| `RABBITHOLE_DB_PATH` | `<data dir>/rabbit-hole.db` | SQLite database path |
 | `RABBITHOLE_DATA_DIR` | `~/.rabbit-hole/` | Data directory (db, models) |
+| `RABBITHOLE_API_KEY` | unset | Enables API key authentication when non-empty |
+| `RABBITHOLE_MODEL_PATH` | `<data dir>/models/gemma-3-4b.gguf` | Local classifier model path |
+| `RABBITHOLE_MODEL_NAME` | `gemma-3-4b` | Local classifier model name |
+| `RABBITHOLE_READ_TIMEOUT` | `30s` | Parsed HTTP read timeout; not wired to the server |
+| `RABBITHOLE_WRITE_TIMEOUT` | `30s` | Parsed HTTP write timeout; not wired to the server |
+| `RABBITHOLE_WS_PING_INTERVAL` | `30s` | Parsed WebSocket ping interval; not wired to the server |
+| `RABBITHOLE_WS_READ_TIMEOUT` | `60s` | Parsed WebSocket read timeout; not wired to the server |
+| `RABBITHOLE_BUFFER_SIZE` | `100000` | Collector buffer size |
+| `RABBITHOLE_MAX_SESSIONS` | `50` | Maximum collector sessions |
+| `RABBITHOLE_TLS_INTERCEPT` | `true` | Parsed TLS interception setting; not wired to the collector |
+| `RABBITHOLE_BATCH_INTERVAL` | `500ms` | Parsed classification batch interval; not wired to the classifier |
+| `RABBITHOLE_BATCH_SIZE` | `100` | Parsed classification batch size; not wired to the classifier |
+| `RABBITHOLE_BATCH_TIMEOUT` | `500ms` | Parsed classification batch timeout; not wired to the classifier |
+| `RABBITHOLE_MODEL_THREADS` | `4` | Parsed model thread count; not wired to the classifier |
+| `RABBITHOLE_MODEL_GPU_LAYERS` | `0` | Parsed model GPU layer count; not wired to the classifier |
+| `RABBITHOLE_INFERENCE_TIMEOUT` | `5s` | Parsed inference timeout; not wired to the classifier |
+| `RABBITHOLE_CONTEXT_WINDOWS` | `false` | Parsed context-window capture setting; not wired to the collector |
+| `RABBITHOLE_RETENTION_DAYS` | `30` | Default retention period for the compact command |
+| `RABBITHOLE_COMPACT_INTERVAL` | `1h` | Parsed compaction interval; not wired to a scheduler |
 | `RABBITHOLE_CHAT_ENABLED` | `true` | Set `false` to force the stub chat model |
 | `RABBITHOLE_CHAT_MODEL_ENDPOINT` | — | OpenAI-compatible chat completions base URL (e.g. `http://127.0.0.1:11434/v1` for Ollama) |
 | `RABBITHOLE_CHAT_MODEL_NAME` | — | Model name (e.g. `llama3.1`) |
@@ -284,7 +303,13 @@ Rabbit-Hole is configured entirely through environment variables:
 | `RABBITHOLE_CHAT_MODEL_TIMEOUT` | `120s` | Per-request timeout for chat model calls (Go duration). Cold local models can exceed 30s on first load; the daemon warms the model at startup, retries once on timeout, and answers `503` retryable when both attempts time out (DF-035) |
 | `RABBITHOLE_CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `RABBITHOLE_RATE_LIMIT_ENABLED` | `true` | Per-endpoint rate limiting |
+| `RABBITHOLE_RATE_LIMIT_SEARCH_RPS` | `10` | Search requests per second per client |
+| `RABBITHOLE_RATE_LIMIT_CHAT_RPS` | `5` | Chat requests per second per client |
+| `RABBITHOLE_RATE_LIMIT_WS_RPS` | `20` | WebSocket connection requests per second per client |
+| `RABBITHOLE_TRUSTED_PROXIES` | unset | Comma-separated trusted proxy addresses or CIDRs for forwarded client IPs |
 | `RABBITHOLE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
+| `RABBITHOLE_LOG_FORMAT` | `text` | Parsed log format (`text` or `json`); not wired to the logger |
+| `RABBITHOLE_BPF_DEBUG` | `false` | Parsed BPF debug setting; not wired to the collector |
 
 The chat model env vars (`RABBITHOLE_CHAT_MODEL_ENDPOINT`,
 `RABBITHOLE_CHAT_MODEL_NAME`, `RABBITHOLE_CHAT_MODEL_API_KEY`) are all
