@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Trace dashboard with demo seed data and live streaming.
+- Persistent daemon-managed attach and detach sessions across CLI invocations.
+- Chat searches using structured filters and time ranges, with CLI progress indication.
+- `--addr` on chat, attach, detach, status, list, and search to reach a non-default daemon.
+- `classify-server` gRPC reference server for remote classification.
+- OpenAPI documentation for attach, detach, stats, compact, and demo-seed routes.
+- Documentation for all supported `RABBITHOLE_*` configuration keys and unprivileged Go installation.
+
+### Changed
+
+- `compact` and `demo` use the daemon API; status, list, and search read through the daemon.
+- Flow, session, and chat response JSON fields use snake_case.
+- Chat warns when an answer comes from the stub model.
+- The demo `--spread` flag controls the generated flow time range.
+- Build and health output report the injected version consistently.
+- Updated CLI, health, demo, and integration documentation to match the shipped commands and API.
+
+### Fixed
+
+- Rate limits use the real peer by default; forwarded addresses are trusted only for configured proxies, and buckets are bounded.
+- `serve --demo-every` rejects non-positive intervals instead of panicking.
+- `compact --before` compares session age by instant across time zones and protects running daemon sessions.
+- `compact --before` accepts minute and second duration suffixes.
+- Session totals report all matching sessions, not just the current page.
+- Chat falls back to recent flows for questions without a recognized time window.
+- `--no-ebpf` suppresses redundant eBPF initialization warnings while retaining genuine capability diagnostics.
+- eBPF collection loads stack maps and reads ring-buffer events, with errors reflecting the actual kernel failure.
+- Read-only database errors provide ownership guidance for out-of-daemon writes.
+- LLM cold starts use a configurable timeout, warm-up, retry, and structured errors.
+- Time-range searches compare instants correctly across time zones.
+- Flows are stored once instead of duplicated, and completed demo sessions have an end time.
+- Degraded attach sessions end when their monitored process exits.
+- The daemon remains responsive during demo streaming, remote classification, WebSocket use, and attach cycles.
+- Attach output no longer claims a CLI-side database path; status and demo show the configured daemon address.
+- `/health` is accessible without an API key and reports the actual classifier backend mode.
+- `/dashboard` serves the application directly instead of redirecting.
+- Concurrent storage initialization no longer races migrations; first run creates required data directories.
+- eBPF preflight reports missing privileges before attach or serve starts.
+- Docker builds use a Go toolchain compatible with the module requirement.
+
 ## [1.0.0] - 2026-07-31
 
 ### Added
