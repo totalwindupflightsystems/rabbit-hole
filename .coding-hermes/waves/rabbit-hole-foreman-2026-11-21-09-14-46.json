@@ -1,0 +1,61 @@
+{
+  "wave_id": "rabbit-hole-foreman-2026-11-21-09-14-46",
+  "tick_id": "rabbit-hole-foreman-2026-11-21-09-14-46",
+  "created_at": "2026-11-21T14:20:00Z",
+  "project": "rabbit-hole",
+  "workdir": "/home/kara/rabbit-hole",
+  "wave_budget": 8,
+  "base_sha": "3104941",
+  "model": "openai/gpt-6.1-terra",
+  "provider": "xkiro",
+  "workers": [
+    {
+      "task": "PM-RH-02",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-PM-RH-02",
+      "branch": "wt/PM-RH-02",
+      "base_sha": "3104941",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-091446-PM-RH-02.md",
+      "seam": "internal/express/rate.go + rate_test.go (+ internal/config if trusted-proxy config added)",
+      "status": "dispatched"
+    },
+    {
+      "task": "PM-RH-04",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-PM-RH-04",
+      "branch": "wt/PM-RH-04",
+      "base_sha": "3104941",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-091446-PM-RH-04.md",
+      "seam": "cmd/rabbit-hole/serve.go + cmd tests",
+      "status": "dispatched"
+    },
+    {
+      "task": "QA-RABBIT-HOLE-1-R14",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-QA-RABBIT-HOLE-1-R14",
+      "branch": "wt/QA-RABBIT-HOLE-1-R14",
+      "base_sha": "3104941",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-091446-QA-RH-1-R14.md",
+      "seam": "internal/config/config_test.go (+ config.go load path if needed)",
+      "status": "dispatched"
+    },
+    {
+      "task": "DF-039",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-039",
+      "branch": "wt/DF-039",
+      "base_sha": "3104941",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-091446-DF-039.md",
+      "seam": "internal/storage/sqlite.go compact() + internal/storage compact tests",
+      "status": "dispatched"
+    }
+  ],
+  "held_back": {
+    "PM-RH-03": "shares internal/storage/sqlite.go (LIKE ESCAPE) with DF-039 — same-file seam, queued for the next wave",
+    "PM-RH-06": "shares Makefile/.github with DF-RABBIT-HOLE-013",
+    "DF-RABBIT-HOLE-013": "touches internal/storage stress tests in the same package DF-039 rewrites — same-package seam; queued once DF-039 lands",
+    "DF-040": "duplicate premise of QA-RABBIT-HOLE-1-R14 (same TestValidateDefaults virgin-HOME failure) — will be closed as duplicate on R14 evidence",
+    "QA-RABBIT-HOLE-5-R1": "overlaps DF-RABBIT-HOLE-013 (both about stress-test wall-clock budgets)"
+  },
+  "note": "Wave of 4 disjoint seams (express/rate, cmd/serve, config, storage/compact) out of 48 ready rows. 8 admitted slots unused because the remaining P2/P3 rows all collide on a file or package seam with one of these four."
+}
