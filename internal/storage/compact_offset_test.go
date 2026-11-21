@@ -54,6 +54,52 @@ func TestCompactWriterOffsetDiffersFromCutoff(t *testing.T) {
 	}
 }
 
+// Session age must likewise be judged by instant: a host offset ahead of the
+// writer's must not delete a session that is still inside the retention
+// window, and a host offset behind must not strand an expired one.
+func TestCompactSessionRetentionUsesInstant(t *testing.T) {
+	ctx := context.Background()
+	cutoff := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name      string
+		hostHours int
+		endDelta  time.Duration
+		wantKept  bool
+	}{
+		// Host behind UTC: local cutoff wall clock sorts BEFORE the expired
+		// session's UTC string, so a string compare under-deletes it.
+		{name: "host_behind_expired_session", hostHours: -5, endDelta: -time.Hour, wantKept: false},
+		// Host ahead of UTC: local cutoff wall clock sorts AFTER the live
+		// session's UTC string, so a string compare over-deletes it.
+		{name: "host_ahead_live_session", hostHours: +5, endDelta: time.Hour, wantKept: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newTestStore(t)
+			end := cutoff.Add(tc.endDelta)
+			if err := store.StoreSession(ctx, &types.Session{
+				ID: "sess", AgentPID: 1, AgentName: "test",
+				StartTime: end.Add(-time.Minute), EndTime: &end,
+				Status: types.SessionStatusCompleted,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			localCutoff := cutoff.In(time.FixedZone("host", tc.hostHours*60*60))
+			if err := store.Compact(ctx, localCutoff); err != nil {
+				t.Fatal(err)
+			}
+			var n int
+			if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE id = 'sess'`).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			if kept := n == 1; kept != tc.wantKept {
+				t.Errorf("cutoff=%s session_end=%s kept=%v want kept=%v",
+					localCutoff.Format(time.RFC3339), end.Format(time.RFC3339), kept, tc.wantKept)
+			}
+		})
+	}
+}
+
 func TestCompactKeepsMalformedTimestamps(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
