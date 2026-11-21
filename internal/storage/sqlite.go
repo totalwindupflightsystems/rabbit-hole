@@ -671,12 +671,14 @@ func (s *SQLiteStore) GetContextWindow(ctx context.Context, flowID string) (*typ
 
 // ---------- Maintenance ----------
 
-// Compact deletes data older than before, then vacuums.
+// Compact deletes old data from non-running sessions, then vacuums. Running
+// sessions remain intact so their writers can continue across compaction.
 func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 	s.logger.Info("starting compaction", "before", before)
 	cutoff := before.Format(time.RFC3339Nano)
 
-	result, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE timestamp < ?`, cutoff)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE timestamp < ?
+		AND session_id NOT IN (SELECT id FROM sessions WHERE status = 'running')`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete old traces", err)
 	}
@@ -684,7 +686,8 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 		s.logger.Info("deleted old traces", "count", n)
 	}
 
-	result, err = s.db.ExecContext(ctx, `DELETE FROM flows WHERE unixepoch(start_time) < unixepoch(?)`, cutoff)
+	result, err = s.db.ExecContext(ctx, `DELETE FROM flows WHERE unixepoch(start_time) < unixepoch(?)
+		AND session_id NOT IN (SELECT id FROM sessions WHERE status = 'running')`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete old flows", err)
 	}
@@ -694,6 +697,7 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 
 	_, err = s.db.ExecContext(ctx, `
 		DELETE FROM sessions WHERE end_time < ? AND end_time IS NOT NULL
+		AND status != 'running'
 		AND id NOT IN (SELECT DISTINCT session_id FROM flows)`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete orphan sessions", err)

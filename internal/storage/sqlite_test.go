@@ -132,7 +132,7 @@ func TestCompact_TimezoneAgnosticCutoff(t *testing.T) {
 		AgentPID:  4242,
 		AgentName: "hermes",
 		StartTime: time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC),
-		Status:    types.SessionStatusRunning,
+		Status:    types.SessionStatusCompleted,
 		Metadata: types.SessionMetadata{
 			CommandLine: "hermes chat",
 			Environment: map[string]string{},

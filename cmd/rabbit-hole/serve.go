@@ -228,7 +228,13 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			if demoStream {
 				sc := demo.Generate(1, time.Now(), time.Now().UnixNano())
 				sessionID := sc.Session.ID
-				_ = store.StoreSession(cobraCmd.Context(), &sc.Session)
+				sc.Session.Status = types.SessionStatusRunning
+				sc.Session.EndTime = nil
+				if err := store.StoreSession(cobraCmd.Context(), &sc.Session); err != nil {
+					return fmt.Errorf("demo stream: store session: %w", err)
+				}
+				streamHealth := &demoStreamHealth{}
+				server.RegisterHealthCheck(express.HealthCheck{Name: "demo_stream", Check: streamHealth.Check})
 				streamCtx, streamCancel := context.WithCancel(cobraCmd.Context())
 				defer streamCancel()
 				go func() {
@@ -243,7 +249,9 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 							f := sc.Flows[0]
 							f.SessionID = sessionID
 							f.ID = fmt.Sprintf("fl-live-%d", time.Now().UnixNano())
-							if err := store.StoreFlows(streamCtx, []types.Flow{f}); err != nil {
+							err := store.StoreFlows(streamCtx, []types.Flow{f})
+							streamHealth.Set(err)
+							if err != nil {
 								logger.Error("demo stream: store", "err", err)
 								continue
 							}
