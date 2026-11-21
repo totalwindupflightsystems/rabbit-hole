@@ -386,8 +386,9 @@ func (s *SQLiteStore) QueryFlows(ctx context.Context, req types.FlowQuery) ([]ty
 		}
 	}
 	if req.Query != "" {
-		q += " AND (description LIKE ? OR intent LIKE ?)"
-		args = append(args, "%"+req.Query+"%", "%"+req.Query+"%")
+		q += ` AND (description LIKE ? ESCAPE '\' OR intent LIKE ? ESCAPE '\')`
+		pattern := likePattern(req.Query)
+		args = append(args, pattern, pattern)
 	}
 	if !req.TimeRange.Start.IsZero() {
 		// Compare via unixepoch() so stored LOCAL-offset timestamps and
@@ -447,13 +448,18 @@ func (s *SQLiteStore) SearchFlows(ctx context.Context, query string, limit int) 
 	return s.searchFlowsRecent(ctx, limit)
 }
 
+func likePattern(query string) string {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	return "%" + escaped + "%"
+}
+
 func (s *SQLiteStore) searchFlowsLike(ctx context.Context, query string, limit int) ([]types.Flow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, session_id, trace_ids, intent, phase, description,
 		       outcome, confidence, start_time, end_time, duration_ns, metadata
-		FROM flows WHERE description LIKE ? OR intent LIKE ?
+		FROM flows WHERE description LIKE ? ESCAPE '\' OR intent LIKE ? ESCAPE '\'
 		ORDER BY start_time DESC LIMIT ?`,
-		"%"+query+"%", "%"+query+"%", limit)
+		likePattern(query), likePattern(query), limit)
 	if err != nil {
 		return nil, err
 	}
