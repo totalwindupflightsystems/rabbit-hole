@@ -123,7 +123,7 @@ func withRateLimit(next http.Handler, rl *RateLimiter, logger *slog.Logger) http
 			return
 		}
 
-		ip := clientIP(r)
+		ip := rl.clientIP(r)
 		allowed, retryAfter := rl.Allow(ip, endpoint)
 		if !allowed {
 			retrySec := int(retryAfter.Seconds())

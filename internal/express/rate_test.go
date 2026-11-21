@@ -2,6 +2,7 @@ package express
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -136,8 +137,65 @@ func TestClientIP_WithXForwardedFor(t *testing.T) {
 	r.RemoteAddr = "192.168.1.1:12345"
 
 	ip := clientIP(r)
-	if ip != "203.0.113.5" {
-		t.Errorf("clientIP = %q, want %q", ip, "203.0.113.5")
+	if ip != "192.168.1.1" {
+		t.Errorf("clientIP = %q, want %q", ip, "192.168.1.1")
+	}
+}
+
+func TestRateLimiter_RotatingForwardedFor(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/search", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	var bodies [2]string
+	for mode := range 2 {
+		handler := withRateLimit(mux, NewRateLimiter(10, 5, 20, true), nil)
+		blocked := 0
+		for i := range 30 {
+			r := httptest.NewRequest("POST", "/api/v1/search", nil)
+			r.RemoteAddr = "192.0.2.1:1234"
+			if mode == 0 {
+				r.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.0.%d", i))
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if w.Code == http.StatusTooManyRequests {
+				blocked++
+				if w.Header().Get("Retry-After") == "" {
+					t.Fatal("missing Retry-After")
+				}
+				bodies[mode] = w.Body.String()
+			}
+		}
+		if blocked == 0 {
+			t.Fatalf("mode %d: no 429 responses", mode)
+		}
+	}
+	if bodies[0] != bodies[1] {
+		t.Fatalf("429 bodies differ: %q vs %q", bodies[0], bodies[1])
+	}
+}
+
+func TestRateLimiter_BoundedBuckets(t *testing.T) {
+	rl := NewRateLimiter(1, 1, 1, true)
+	for i := range maxRateBuckets {
+		if ok, _ := rl.Allow(fmt.Sprint(i), EndpointSearch); !ok {
+			t.Fatalf("bucket %d rejected", i)
+		}
+	}
+	if ok, delay := rl.Allow("overflow", EndpointSearch); ok || delay != time.Second {
+		t.Fatal("capacity must fail closed")
+	}
+	if len(rl.buckets) != maxRateBuckets {
+		t.Fatal("bucket cap exceeded")
+	}
+	if ok, _ := rl.Allow("0", EndpointSearch); ok {
+		t.Fatal("active bucket was reset")
+	}
+	rl.buckets["1"].lastSeen = time.Now().Add(-2 * rateBucketIdle)
+	if ok, _ := rl.Allow("overflow", EndpointSearch); !ok {
+		t.Fatal("idle bucket was not evicted")
+	}
+	if len(rl.buckets) > maxRateBuckets {
+		t.Fatal("bucket cap exceeded after eviction")
 	}
 }
 
@@ -158,6 +216,107 @@ func TestClientIP_NoPort(t *testing.T) {
 	ip := clientIP(r)
 	if ip != "10.0.0.1" {
 		t.Errorf("clientIP = %q, want %q", ip, "10.0.0.1")
+	}
+}
+
+// ---------- Trusted-proxy tests (opt-in X-Forwarded-For handling) ----------
+
+func TestClientIP_TrustedProxyChain(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1", "10.0.0.0/8"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "127.0.0.1:443"
+	r.Header.Set("X-Forwarded-For", "203.0.113.9, 10.1.2.3")
+
+	// Right-to-left: 10.1.2.3 is a trusted proxy, 203.0.113.9 is the client.
+	if ip := rl.clientIP(r); ip != "203.0.113.9" {
+		t.Errorf("clientIP = %q, want %q", ip, "203.0.113.9")
+	}
+}
+
+func TestClientIP_UntrustedPeerIgnoresForwardedFor(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "198.51.100.4:1234"
+	r.Header.Set("X-Forwarded-For", "203.0.113.5")
+
+	if ip := rl.clientIP(r); ip != "198.51.100.4" {
+		t.Errorf("clientIP = %q, want peer %q", ip, "198.51.100.4")
+	}
+}
+
+func TestClientIP_AllHopsTrustedUsesLeftmost(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "10.0.0.1:1234"
+	r.Header.Set("X-Forwarded-For", "10.0.0.5, 10.0.0.6")
+
+	if ip := rl.clientIP(r); ip != "10.0.0.5" {
+		t.Errorf("clientIP = %q, want leftmost hop %q", ip, "10.0.0.5")
+	}
+}
+
+func TestSetTrustedProxies_InvalidEntryFailsClosed(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1", "not-an-ip"}); err == nil {
+		t.Fatal("expected error for invalid trusted proxy entry")
+	}
+	if len(rl.trustedProxies) != 0 {
+		t.Fatalf("invalid config must not be applied, got %d ranges", len(rl.trustedProxies))
+	}
+
+	// A failed configuration leaves the no-trust default in force.
+	r := httptest.NewRequest("POST", "/api/v1/search", nil)
+	r.RemoteAddr = "127.0.0.1:443"
+	r.Header.Set("X-Forwarded-For", "203.0.113.9")
+	if ip := rl.clientIP(r); ip != "127.0.0.1" {
+		t.Errorf("clientIP = %q, want peer %q after failed trust config", ip, "127.0.0.1")
+	}
+}
+
+// TestRateLimiter_RotatingForwardedForBehindTrustedProxy proves the bypass is
+// still closed when a proxy is trusted: a client that rotates the leftmost
+// (spoofable) entries is keyed on the hop the proxy appended.
+func TestRateLimiter_RotatingForwardedForBehindTrustedProxy(t *testing.T) {
+	rl := NewRateLimiter(10, 5, 20, true)
+	if err := rl.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/search", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := withRateLimit(mux, rl, nil)
+
+	blocked := 0
+	for i := range 30 {
+		r := httptest.NewRequest("POST", "/api/v1/search", nil)
+		r.RemoteAddr = "127.0.0.1:443"
+		// Spoofed leftmost hop rotates; the proxy appended the real client.
+		r.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.%d.%d, 198.51.100.7", i/256, i%256))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code == http.StatusTooManyRequests {
+			blocked++
+			if w.Header().Get("Retry-After") == "" {
+				t.Fatal("missing Retry-After")
+			}
+		}
+	}
+	if blocked == 0 {
+		t.Fatal("no 429 responses: spoofing the leftmost hop bypassed the limiter")
+	}
+	if got := rl.buckets["198.51.100.7"]; got == nil {
+		t.Fatal("requests were not keyed on the proxy-appended client address")
 	}
 }
 

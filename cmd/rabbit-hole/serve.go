@@ -146,6 +146,13 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 				cfg.RateLimitWSRPS,
 				cfg.RateLimitEnabled,
 			)
+			// Opt-in proxy trust: with RABBITHOLE_TRUSTED_PROXIES unset (the
+			// default) the limiter keys on the direct peer address and ignores
+			// X-Forwarded-For entirely, so a client cannot rotate that header
+			// to evade the 429 contract (PM-RH-02).
+			if err := rl.SetTrustedProxies(cfg.RateLimitTrustedProxies); err != nil {
+				return fmt.Errorf("rate limiter: %w", err)
+			}
 			server := express.NewServer(store, logger, cfg.ListenAddr, rl)
 
 			// Publish the CLI build version so GET /health reports the same
