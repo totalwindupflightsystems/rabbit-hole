@@ -240,8 +240,26 @@ func TestLoadCreatesDataDir(t *testing.T) {
 	}
 }
 
+// TestValidateDefaults asserts the invariant that matters on a virgin machine:
+// Defaults() derives DataDir from HOME (~/.rabbit-hole), which does not exist
+// on a fresh install, Load() creates it (DF-011), and the resulting default
+// config validates. Calling Defaults().Validate() directly asserts the
+// opposite of that contract — Validate() deliberately rejects a missing data
+// dir — and is not hermetic: it passes only where some earlier run already
+// created ~/.rabbit-hole (QA-RABBIT-HOLE-1-R14).
 func TestValidateDefaults(t *testing.T) {
-	cfg := Defaults()
+	t.Setenv("HOME", t.TempDir())       // hermetic: never touch the real home
+	t.Setenv("RABBITHOLE_DATA_DIR", "") // ambient override must not leak in
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() with default config failed: %v", err)
+	}
+
+	wantDataDir := filepath.Join(os.Getenv("HOME"), ".rabbit-hole")
+	if cfg.DataDir != wantDataDir {
+		t.Errorf("DataDir: expected %s, got %s", wantDataDir, cfg.DataDir)
+	}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("Default config should validate: %v", err)
 	}
@@ -293,6 +311,7 @@ func TestValidateErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Defaults()
+			cfg.DataDir = t.TempDir()
 			tt.modify(&cfg)
 			err := cfg.Validate()
 			if err == nil {
@@ -300,6 +319,9 @@ func TestValidateErrors(t *testing.T) {
 			}
 			if err.Error() == "" {
 				t.Fatal("expected non-empty error message")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("expected error containing %q, got %v", tt.wantErr, err)
 			}
 		})
 	}
@@ -339,6 +361,7 @@ func TestLoadInvalidBool(t *testing.T) {
 // passes the new SplitHostPort check without producing an error.
 func TestValidateValidAddr(t *testing.T) {
 	cfg := Defaults()
+	cfg.DataDir = t.TempDir()
 	cfg.ListenAddr = "127.0.0.1:9734"
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("expected validation to pass for 127.0.0.1:9734, got: %v", err)
@@ -356,5 +379,53 @@ func TestValidateDataDirNotExist(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "RABBITHOLE_DATA_DIR does not exist") {
 		t.Errorf("expected error mentioning RABBITHOLE_DATA_DIR does not exist, got: %v", err)
+	}
+}
+
+// TestDefaultsTrustedProxiesEmpty pins the security default: no proxy is
+// trusted, so X-Forwarded-For is never used as a rate-limit key unless the
+// operator opts in.
+func TestDefaultsTrustedProxiesEmpty(t *testing.T) {
+	cfg := Defaults()
+	if len(cfg.RateLimitTrustedProxies) != 0 {
+		t.Fatalf("default trusted proxies = %v, want none", cfg.RateLimitTrustedProxies)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default config must validate: %v", err)
+	}
+}
+
+func TestLoadTrustedProxiesEnv(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "rh-data")
+	t.Setenv("RABBITHOLE_DATA_DIR", dataDir)
+	t.Setenv("RABBITHOLE_TRUSTED_PROXIES", " 127.0.0.1 , 10.0.0.0/8 ,, ")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	want := []string{"127.0.0.1", "10.0.0.0/8"}
+	if len(cfg.RateLimitTrustedProxies) != len(want) {
+		t.Fatalf("trusted proxies = %v, want %v", cfg.RateLimitTrustedProxies, want)
+	}
+	for i, entry := range want {
+		if cfg.RateLimitTrustedProxies[i] != entry {
+			t.Errorf("trusted proxy %d = %q, want %q", i, cfg.RateLimitTrustedProxies[i], entry)
+		}
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("valid trusted proxies must validate: %v", err)
+	}
+}
+
+func TestValidateTrustedProxiesInvalid(t *testing.T) {
+	cfg := Defaults()
+	cfg.RateLimitTrustedProxies = []string{"127.0.0.1", "not-an-ip"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for invalid trusted proxy entry")
+	}
+	if !strings.Contains(err.Error(), "RABBITHOLE_TRUSTED_PROXIES") {
+		t.Errorf("expected error naming RABBITHOLE_TRUSTED_PROXIES, got: %v", err)
 	}
 }

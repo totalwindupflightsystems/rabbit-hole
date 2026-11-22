@@ -153,5 +153,12 @@
         "work": "TestStress_MemoryLeak RSS tripwire vacuous (DF-1 judge residual)"
       }
     ]
+  },
+  "finished_at": "2026-11-17T22:45:00Z",
+  "status": "closed-by-recovery",
+  "recovery": {
+    "tick": "rabbit-hole-foreman-2026-11-17-22-33-27",
+    "note": "All worker branches verified merged into main (ahead=0) and reaped in tick 310; every affected board row is complete except DF-RABBIT-HOLE-4, whose merged fix (0fe98d2/d9933e1) left one judge residual that is filed as DF-RABBIT-HOLE-012 — the row is intentionally pending, re-dispatch of the fallback is forbidden",
+    "board_rows_all_complete": true
   }
 }

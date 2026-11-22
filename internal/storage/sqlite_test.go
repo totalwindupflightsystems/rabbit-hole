@@ -8,6 +8,47 @@ import (
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
 
+func TestLiteralLikeQueries(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	session := &types.Session{ID: "literal-session", AgentName: "test", StartTime: now, Status: types.SessionStatusRunning}
+	if err := store.StoreSession(ctx, session); err != nil {
+		t.Fatal(err)
+	}
+	flows := []types.Flow{
+		{ID: "percent", SessionID: session.ID, Intent: "plain", Description: "rate 50%", Phase: types.FlowPhaseAction, Outcome: types.FlowOutcomeSuccess, StartTime: now, EndTime: now},
+		{ID: "underscore", SessionID: session.ID, Intent: "under_score", Description: "plain", Phase: types.FlowPhaseAction, Outcome: types.FlowOutcomeSuccess, StartTime: now, EndTime: now},
+		{ID: "slash", SessionID: session.ID, Intent: "plain", Description: `path\file`, Phase: types.FlowPhaseAction, Outcome: types.FlowOutcomeSuccess, StartTime: now, EndTime: now},
+		{ID: "plain", SessionID: session.ID, Intent: "plain", Description: "ordinary", Phase: types.FlowPhaseAction, Outcome: types.FlowOutcomeSuccess, StartTime: now, EndTime: now},
+	}
+	if err := store.StoreFlows(ctx, flows); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ query, want string }{{"%", "percent"}, {"_", "underscore"}, {`\`, "slash"}, {`\%`, ""}} {
+		for _, path := range []string{"query", "fallback"} {
+			t.Run(path+"/"+tc.query, func(t *testing.T) {
+				var got []types.Flow
+				var err error
+				if path == "query" {
+					got, _, err = store.QueryFlows(ctx, types.FlowQuery{Query: tc.query})
+				} else {
+					got, err = store.searchFlowsLike(ctx, tc.query, 50)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tc.want == "" && len(got) != 0 {
+					t.Fatalf("unexpected flows: %+v", got)
+				}
+				if tc.want != "" && (len(got) != 1 || got[0].ID != tc.want) {
+					t.Fatalf("flows: %+v, want %s", got, tc.want)
+				}
+			})
+		}
+	}
+}
+
 // newLocalZone returns a fixed UTC-5 zone like the production host, used to
 // simulate flows being written with LOCAL offset timestamps (DF-034).
 func newLocalZone() *time.Location {
@@ -132,7 +173,7 @@ func TestCompact_TimezoneAgnosticCutoff(t *testing.T) {
 		AgentPID:  4242,
 		AgentName: "hermes",
 		StartTime: time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC),
-		Status:    types.SessionStatusRunning,
+		Status:    types.SessionStatusCompleted,
 		Metadata: types.SessionMetadata{
 			CommandLine: "hermes chat",
 			Environment: map[string]string{},

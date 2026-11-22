@@ -51,10 +51,11 @@ type Config struct {
 	LogFormat string // RABBITHOLE_LOG_FORMAT — default: text (text|json)
 
 	// Rate Limiting
-	RateLimitEnabled   bool // RABBITHOLE_RATE_LIMIT_ENABLED — default: true
-	RateLimitSearchRPS int  // RABBITHOLE_RATE_LIMIT_SEARCH_RPS — default: 10
-	RateLimitChatRPS   int  // RABBITHOLE_RATE_LIMIT_CHAT_RPS — default: 5
-	RateLimitWSRPS     int  // RABBITHOLE_RATE_LIMIT_WS_RPS — default: 20
+	RateLimitEnabled        bool     // RABBITHOLE_RATE_LIMIT_ENABLED — default: true
+	RateLimitSearchRPS      int      // RABBITHOLE_RATE_LIMIT_SEARCH_RPS — default: 10
+	RateLimitChatRPS        int      // RABBITHOLE_RATE_LIMIT_CHAT_RPS — default: 5
+	RateLimitWSRPS          int      // RABBITHOLE_RATE_LIMIT_WS_RPS — default: 20
+	RateLimitTrustedProxies []string // RABBITHOLE_TRUSTED_PROXIES — default: none (never trust X-Forwarded-For)
 
 	// Debug
 	BPFDebug bool // RABBITHOLE_BPF_DEBUG — default: false
@@ -223,6 +224,15 @@ func Load() (Config, error) {
 		}
 		cfg.RateLimitWSRPS = n
 	}
+	if v := os.Getenv("RABBITHOLE_TRUSTED_PROXIES"); v != "" {
+		// Opt-in: an empty list (the default) means X-Forwarded-For is never
+		// trusted, so clients cannot rotate it to mint fresh buckets.
+		for _, entry := range strings.Split(v, ",") {
+			if entry = strings.TrimSpace(entry); entry != "" {
+				cfg.RateLimitTrustedProxies = append(cfg.RateLimitTrustedProxies, entry)
+			}
+		}
+	}
 
 	// Booleans
 	if v := os.Getenv("RABBITHOLE_TLS_INTERCEPT"); v != "" {
@@ -327,6 +337,13 @@ func (c Config) Validate() error {
 	}
 	if c.RateLimitWSRPS < 1 {
 		errs = append(errs, "RABBITHOLE_RATE_LIMIT_WS_RPS must be at least 1")
+	}
+	for _, entry := range c.RateLimitTrustedProxies {
+		if net.ParseIP(entry) == nil {
+			if _, _, err := net.ParseCIDR(entry); err != nil {
+				errs = append(errs, "RABBITHOLE_TRUSTED_PROXIES entry must be an IP address or CIDR block: "+entry)
+			}
+		}
 	}
 
 	if len(errs) > 0 {

@@ -5,6 +5,7 @@ package express
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,73 @@ import (
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/demo"
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
+
+func TestChatBodyLimitAndSearchError(t *testing.T) {
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "false")
+	store := newTestStore(t)
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"oversized message", fmt.Sprintf(`{"message":%q}`, strings.Repeat("x", 50*1024)), http.StatusRequestEntityTooLarge},
+		{"oversized trailing whitespace", `{"message":"x"}` + strings.Repeat(" ", maxChatBodyBytes), http.StatusRequestEntityTooLarge},
+		{"trailing json", `{"message":"x"}{}`, http.StatusBadRequest},
+		{"search failure", `{"message":"x"}`, http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			srv.handleChat(rr, httptest.NewRequest(http.MethodPost, "/api/v1/chat", strings.NewReader(tc.body)))
+			if rr.Code != tc.status {
+				t.Fatalf("status = %d, want %d: %s", rr.Code, tc.status, rr.Body.String())
+			}
+			if strings.Contains(rr.Body.String(), "SQL logic error") || strings.Contains(rr.Body.String(), "database is closed") {
+				t.Fatalf("leaked internal error: %s", rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestChatLiteralWildcards(t *testing.T) {
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "false")
+	store := newTestStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+	sess := seedSession(t, store)
+	now := time.Now().UTC()
+	flows := []types.Flow{
+		{ID: "percent", SessionID: sess.ID, Intent: "percent", Description: "contains % sign", Phase: types.FlowPhaseAction, Outcome: types.FlowOutcomeSuccess, StartTime: now, EndTime: now},
+		{ID: "plain", SessionID: sess.ID, Intent: "plain", Description: "ordinary text", Phase: types.FlowPhaseAction, Outcome: types.FlowOutcomeSuccess, StartTime: now, EndTime: now},
+	}
+	if err := store.StoreFlows(context.Background(), flows); err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+	for _, tc := range []struct{ query, want string }{{"%", "percent"}, {"_", ""}, {`\`, ""}} {
+		t.Run(tc.query, func(t *testing.T) {
+			body, _ := json.Marshal(types.ChatRequest{Message: tc.query})
+			rr := httptest.NewRecorder()
+			srv.handleChat(rr, httptest.NewRequest(http.MethodPost, "/api/v1/chat", strings.NewReader(string(body))))
+			var resp types.ChatResponse
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+			}
+			if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			if tc.want == "" && len(resp.Flows) != 0 {
+				t.Fatalf("unexpected flows: %+v", resp.Flows)
+			}
+			if tc.want != "" && (len(resp.Flows) != 1 || resp.Flows[0].ID != tc.want) {
+				t.Fatalf("flows: %+v", resp.Flows)
+			}
+		})
+	}
+}
 
 // TestHandleChat_StubFlagSet verifies the server marks chat responses
 // with stub:true when the built-in keyword stub model is active (no real

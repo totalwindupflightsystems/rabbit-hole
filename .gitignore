@@ -66,3 +66,14 @@ dagger.db
 dagger.db-shm
 dagger.db-wal
 .gitreins/usage.jsonl
+.gitreins/logs/
+.gitreins/*.lock
+.coding-hermes/board/.lock
+
+# generated residue settle (unblock-agent 2026-11-21): gitreins judge runtime state —
+# class already ignored for h3/.gitignore; never authored, no live writer
+.gitreins/review-state.json
+.gitreins/review-state.corrupt-*
+.gitreins/review-state.recovery-required
+# per-tick QA/foreman evidence captures (recurring generator, never tracked)
+.coding-hermes/evidence/

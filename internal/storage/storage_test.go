@@ -870,7 +870,7 @@ func TestCompact(t *testing.T) {
 	sess := &types.Session{
 		ID: "ses-compact", AgentPID: 500, AgentName: "test",
 		StartTime: time.Now().UTC().Add(-48 * time.Hour),
-		Status:    types.SessionStatusRunning,
+		Status:    types.SessionStatusCompleted,
 		Metadata:  types.SessionMetadata{CommandLine: "test", Environment: map[string]string{}},
 	}
 	if err := store.StoreSession(ctx, sess); err != nil {

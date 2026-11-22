@@ -272,16 +272,18 @@ backpressuring the pipeline.
 
 ## Configuration
 
-Rabbit-Hole is configured entirely through environment variables:
+Rabbit-Hole is configured through environment variables; run `bash scripts/check-config-docs.sh` from the repo to check this table against production reads.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `RABBITHOLE_LISTEN_ADDR` | `127.0.0.1:9734` | HTTP/WebSocket bind address |
-| `RABBITHOLE_DB_PATH` | `~/.rabbit-hole/rabbit-hole.db` | SQLite database path |
+| `RABBITHOLE_DB_PATH` | `<data dir>/rabbit-hole.db` | SQLite database path |
 | `RABBITHOLE_DATA_DIR` | `~/.rabbit-hole/` | Data directory (db, models) |
+| `RABBITHOLE_API_KEY` | unset | Enables API key authentication when non-empty |
 | `RABBITHOLE_MODEL_PATH` | `$DATA_DIR/models/gemma-3-4b.gguf` | Classifier model path passed to the local backend |
 | `RABBITHOLE_MODEL_NAME` | `gemma-3-4b` | Model identifier (Ollama tag) used by the local backend |
 | `RABBITHOLE_CORS_ORIGINS` | `*` | `*` answers `Access-Control-Allow-Origin: *` (any page may read the response, subject to `RABBITHOLE_API_KEY`). A comma-separated allowlist (e.g. `https://dash.example.com,https://ops.example.com`) echoes the request `Origin` only when it matches and sends `Vary: Origin`; any other origin gets no allow-origin header, so a browser withholds the response. Preflights allow `Content-Type`, `X-Request-ID` and `X-API-Key`. |
+| `RABBITHOLE_TRUSTED_PROXIES` | unset | Comma-separated trusted proxy addresses or CIDRs for forwarded client IPs |
 | `RABBITHOLE_READ_TIMEOUT` | `30s` | `http.Server.ReadTimeout` for the daemon |
 | `RABBITHOLE_WRITE_TIMEOUT` | `30s` | `http.Server.WriteTimeout` for the daemon |
 | `RABBITHOLE_WS_PING_INTERVAL` | `30s` | Keepalive ping cadence on `/api/v1/ws/...` |

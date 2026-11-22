@@ -1,0 +1,67 @@
+{
+  "wave_id": "rabbit-hole-foreman-2026-11-21-19-22-54",
+  "tick_id": "rabbit-hole-foreman-2026-11-21-19-22-54",
+  "created_at": "2026-11-21T19:45:00-05:00",
+  "project": "rabbit-hole",
+  "workdir": "/home/kara/rabbit-hole",
+  "wave_budget": 9,
+  "base_sha": "f9c276c",
+  "base_note": "main at 274fda9 (gitlab slow-tests fixup); worktrees cut at f9c276c (pre-fixup; fixup touched only .gitlab-ci.yml, no seam overlap)",
+  "model": "openai/gpt-6.1-terra",
+  "provider": "xkiro",
+  "pre_wave_recovery": {
+    "resumed": "rabbit-hole-foreman-2026-11-21-15-37-18 (crashed mid-wave: 5/6 branches already merged+judged, PM-RH-06 had an uncommitted ci.yml edit)",
+    "done": [
+      "PM-RH-06: verified dead worker's ci.yml edit (build + full -race short suite green), committed 0e03a12 in wt/PM-RH-06, merged f9c276c, judge FAIL (gitlab arm missing) -> foreman-direct fixup 274fda9 (slow-tests job in .gitlab-ci.yml), re-judge FAIL (make stress permanently red = DF-RABBIT-HOLE-013 coupling)",
+      "PM-RH-06 disposition: kept OPEN pending DF-RABBIT-HOLE-013 landing (wiring done; final green depends on the stress-gate fix); judge verdicts 428fff19 + aca0d058"
+    ]
+  },
+  "workers": [
+    {
+      "task": "DF-RABBIT-HOLE-013",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-013",
+      "branch": "wt/DF-RABBIT-HOLE-013",
+      "base_sha": "f9c276c",
+      "brief": "/tmp/rh-brief-192254-DF-RABBIT-HOLE-013.md",
+      "seam": "internal/storage/*_test.go, new race-tagged helpers in internal/storage, Makefile (test targets only), gate-rule doc (NOT docs/integration.md)",
+      "status": "dispatched",
+      "unblocks": "PM-RH-06 final green + DF-RABBIT-HOLE-013 row itself"
+    },
+    {
+      "task": "DF-RABBIT-HOLE-011",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-011",
+      "branch": "wt/DF-RABBIT-HOLE-011",
+      "base_sha": "pre-11-17 main (existing dirty worktree, 24 uncommitted files from crashed 11-17 session)",
+      "brief": "/tmp/rh-brief-192254-DF-RABBIT-HOLE-011.md",
+      "seam": "cmd/, internal/config/, internal/classify/, internal/collector/, internal/express/middleware.go, docs+specs env-key sections",
+      "status": "dispatched",
+      "clause15": "finishing the crashed 2026-11-17 session per foreman doctrine 15.3"
+    },
+    {
+      "task": "DF-RABBIT-HOLE-012",
+      "priority": "P3",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-012",
+      "branch": "wt/DF-RABBIT-HOLE-012",
+      "base_sha": "f9c276c",
+      "brief": "/tmp/rh-brief-192254-DF-RABBIT-HOLE-012.md",
+      "seam": "internal/express/chat.go + chat tests",
+      "status": "dispatched"
+    }
+  ],
+  "seam_audit": {
+    "checked": "DF-013 (storage tests + Makefile test targets + gate doc) vs DF-011 (cmd/config/classify/collector/middleware/docs-envkeys) vs DF-012 (express/chat.go): no shared file; internal/express shared only at package level across DIFFERENT files (middleware.go vs chat.go); DF-011 forbidden from chat.go, DF-012 forbidden from middleware.go",
+    "excluded_this_wave": {
+      "PERF-001": "internal/storage shared with DF-013",
+      "QA-RABBIT-HOLE-5-R1": "storage stress latency shared with DF-013",
+      "DF-040": "internal/config shared with DF-011's dirty diff",
+      "PM-RH-07": "internal/express package shared with DF-012",
+      "PM-RH-08": ".github/.gitlab shared with PM-RH-06 (still open, depends on DF-013)",
+      "PM-RH-09": ".github/.gitlab/Makefile shared with PM-RH-06 and DF-013",
+      "DF-038": "broad test sweep collides with DF-013"
+    }
+  },
+  "merge_policy": "serial merges in dispatch order onto main, gates re-run on the merged tree after each merge; DF-011 may conflict (4-day-old base) -> fixup worker in fresh worktree if real conflict",
+  "plan_review": "plan-unreviewed: unattended tick; COS card not consulted (wave-recovery + row-coupling was judged time-critical); this manifest + handoff record the plan"
+}

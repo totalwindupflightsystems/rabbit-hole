@@ -4,8 +4,11 @@ package express
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"gitlab.readydedis.com/rabbit-hole/rabbit-hole/pkg/types"
 )
@@ -25,10 +28,21 @@ type chatErrorDetail struct {
 	Retryable bool   `json:"retryable"`
 }
 
+// maxChatBodyBytes bounds the complete JSON request body to 16 KiB, leaving
+// room for LIKE escaping to double the translated input's length.
+const maxChatBodyBytes = 16 * 1024
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxChatBodyBytes)
+	decoder := json.NewDecoder(r.Body)
 	var req types.ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if err := decoder.Decode(&req); err != nil {
+		writeChatDecodeError(w, err)
+		return
+	}
+	// Consume trailing bytes before searching, enforcing the cap on the whole body.
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeChatDecodeError(w, err)
 		return
 	}
 
@@ -78,7 +92,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		Limit:     searchReq.Limit,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "search failed: "+err.Error())
+		s.logger.Error("chat search failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "search failed")
 		return
 	}
 	if flows == nil {
@@ -102,7 +117,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	// DF-008, DF-RABBIT-HOLE-4.
 	_, isStub := s.chatModel.(*stubChatModel)
 	fallbackNote := ""
-	if isStub && len(flows) == 0 {
+	if isStub && len(flows) == 0 && !strings.ContainsAny(searchReq.Query, `%_\`) {
 		recent, _, ferr := s.store.QueryFlows(ctx, types.FlowQuery{
 			SessionID: searchReq.SessionID,
 			Phases:    searchReq.Categories,
@@ -148,6 +163,15 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func writeChatDecodeError(w http.ResponseWriter, err error) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		writeError(w, http.StatusRequestEntityTooLarge, "request body exceeds 16 KiB limit")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "invalid request body")
 }
 
 // stubFallbackNote is the sentence a stub answer is prefixed with when the

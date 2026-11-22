@@ -1,0 +1,90 @@
+{
+  "wave_id": "rabbit-hole-foreman-2026-11-21-15-37-18",
+  "tick_id": "rabbit-hole-foreman-2026-11-21-15-37-18",
+  "created_at": "2026-11-21T21:05:00Z",
+  "project": "rabbit-hole",
+  "workdir": "/home/kara/rabbit-hole",
+  "wave_budget": 6,
+  "base_sha": "bd3e5df",
+  "base_note": "main at bd3e5df after the 2026-11-21-09-14-46 wave-recovery closeout commit; gitlab origin/main == local main, github mirror lags by one commit until the tick-end push",
+  "model": "openai/gpt-6.1-terra",
+  "provider": "xkiro",
+  "recovery_of": "rabbit-hole-foreman-2026-11-21-09-14-46",
+  "workers": [
+    {
+      "task": "PM-RH-03",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-PM-RH-03",
+      "branch": "wt/PM-RH-03",
+      "base_sha": "bd3e5df",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-153718-PM-RH-03.md",
+      "seam": "internal/express/chat.go, internal/express/chat_test.go, internal/storage/sqlite.go (+storage tests), internal/config (cap key only)",
+      "status": "dispatched"
+    },
+    {
+      "task": "PM-RH-05",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-PM-RH-05",
+      "branch": "wt/PM-RH-05",
+      "base_sha": "bd3e5df",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-153718-PM-RH-05.md",
+      "seam": "cmd/rabbit-hole/detach_exec_test.go, chat_exec_test.go, attach_exec_test.go (+cmd prod seams)",
+      "status": "dispatched"
+    },
+    {
+      "task": "PM-RH-06",
+      "priority": "P2",
+      "worktree": "/home/kara/worktrees/rabbit-hole-PM-RH-06",
+      "branch": "wt/PM-RH-06",
+      "base_sha": "bd3e5df",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-153718-PM-RH-06.md",
+      "seam": ".github/workflows/*.yml, .gitlab-ci.yml (+Makefile only if a target needs it)",
+      "status": "dispatched"
+    },
+    {
+      "task": "DF-RABBIT-HOLE-015",
+      "priority": "P3",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-015",
+      "branch": "wt/DF-RABBIT-HOLE-015",
+      "base_sha": "bd3e5df",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-153718-DF-RABBIT-HOLE-015.md",
+      "seam": "CHANGELOG.md only",
+      "status": "dispatched"
+    },
+    {
+      "task": "DOC-4",
+      "priority": "P4",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DOC-4",
+      "branch": "wt/DOC-4",
+      "base_sha": "bd3e5df",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-153718-DOC-4.md",
+      "seam": "docs/integration.md, scripts/check-config-docs.sh (new)",
+      "status": "dispatched"
+    },
+    {
+      "task": "README-1",
+      "priority": "P4",
+      "worktree": "/home/kara/worktrees/rabbit-hole-README-1",
+      "branch": "wt/README-1",
+      "base_sha": "bd3e5df",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-brief-153718-README-1.md",
+      "seam": "README.md only",
+      "status": "dispatched"
+    }
+  ],
+  "seam_audit": {
+    "checked": "each worker's file list intersected against the other five; no shared file and no shared Go package between PM-RH-03 (express+storage), PM-RH-05 (cmd), PM-RH-06 (CI yaml), DF-015 (CHANGELOG), DOC-4 (docs+scripts), README-1 (README)",
+    "excluded_this_wave": {
+      "PM-RH-07": "internal/express package shared with PM-RH-03",
+      "PM-RH-09": ".github/.gitlab/Makefile shared with PM-RH-06",
+      "PM-RH-08": ".github shared with PM-RH-06",
+      "DF-RABBIT-HOLE-013": "internal/storage tests shared with PM-RH-03",
+      "PERF-001": "internal/storage shared with PM-RH-03",
+      "DF-RABBIT-HOLE-011": "cmd/ shared with PM-RH-05 and a stale dirty worktree already exists",
+      "DF-RABBIT-HOLE-012": "internal/express/chat.go shared with PM-RH-03",
+      "DF-038": "broad test-file sweep across packages, collides with PM-RH-05/013",
+      "QA-RABBIT-HOLE-3/4/5": "QA docs + storage/QA harness shared with DOC-4 and PM-RH-03"
+    }
+  },
+  "merge_policy": "serial merges in dispatch order onto main, gates re-run on the merged tree after each merge; stale-base rule checked per branch before its merge"
+}

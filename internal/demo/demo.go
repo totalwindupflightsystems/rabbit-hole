@@ -41,10 +41,8 @@ func Generate(nFlows int, start time.Time, seed int64, spread ...time.Duration) 
 	sessionID := uuid.Must(uuid.NewV7()).String()
 	// A completed session must carry a real end time (DF-032): the
 	// Scenario doc says this is "~30 minutes of work", so the session
-	// ends 30 minutes after it starts. Setting it here covers every
-	// caller — the serve --demo-stream path stores the session as-is and
-	// the demo seeding command flips the status to completed via
-	// UpdateSession, both persisting whatever EndTime Generate set.
+	// ends 30 minutes after it starts. The live stream overrides the
+	// status and end time because it is still being written.
 	end := start.Add(30 * time.Minute)
 	session := types.Session{
 		ID:        sessionID,

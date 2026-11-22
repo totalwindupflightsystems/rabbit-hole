@@ -472,9 +472,10 @@ parsed key has no field.
 | `RABBITHOLE_LOG_LEVEL` | string | `info` | one of `debug`, `info`, `warn`, `error` | Level for the daemon and CLI logger; also reported by `GET /api/v1/stats` and printed by `rabbit-hole status`. |
 | `RABBITHOLE_LOG_FORMAT` | string | `text` | one of `text`, `json`; any other value fails startup | `text` installs the human-readable `slog` handler on stderr; `json` installs the JSON handler so log shippers get one object per line (`cmd/rabbit-hole/helpers.go`). |
 | `RABBITHOLE_RATE_LIMIT_ENABLED` | bool | `true` | `strconv.ParseBool` | Master switch for per-IP, per-endpoint token buckets. `false` disables limiting entirely. |
-| `RABBITHOLE_RATE_LIMIT_SEARCH_RPS` | int | `10` | integer, at least 1 | Requests/second **and** burst for `/api/v1/search*`, per client IP (`X-Forwarded-For` first hop, else the peer address). Exceeding it returns `429` with `Retry-After: <seconds>` (minimum 1) and `{"error":"rate limit exceeded","retry_after":N}`; `/health`, `/metrics` and `/api/v1/metrics` are exempt. |
+| `RABBITHOLE_RATE_LIMIT_SEARCH_RPS` | int | `10` | integer, at least 1 | Requests/second **and** burst for `/api/v1/search*`, per client IP. The client IP is the direct peer address; `X-Forwarded-For` is ignored unless that peer is listed in `RABBITHOLE_TRUSTED_PROXIES`. Exceeding it returns `429` with `Retry-After: <seconds>` (minimum 1) and `{"error":"rate limit exceeded","retry_after":N}`; `/health`, `/metrics` and `/api/v1/metrics` are exempt. |
 | `RABBITHOLE_RATE_LIMIT_CHAT_RPS` | int | `5` | integer, at least 1 | Same contract for `/api/v1/chat*`. |
 | `RABBITHOLE_RATE_LIMIT_WS_RPS` | int | `20` | integer, at least 1 | Same contract for `/api/v1/ws/*`, including WebSocket upgrades. |
+| `RABBITHOLE_TRUSTED_PROXIES` | string | unset | comma-separated IP addresses and/or CIDR blocks; each entry must parse, otherwise startup fails | Opt-in proxy trust. Unset (the default) means `X-Forwarded-For` is **never** used as a rate-limit key, so a client cannot rotate that header to obtain fresh buckets. When set, the header is honoured only for requests whose peer address is listed: the chain is walked right-to-left and the first address that is not itself a trusted proxy becomes the key. |
 | `RABBITHOLE_BPF_DEBUG` | bool | `false` | `strconv.ParseBool` | Prints the kernel BPF verifier log when the collection fails to load (`internal/collector/ebpf.go`). The kernel only produces that log for a failed load, so a healthy start emits nothing extra. |
 
 **Security-relevant settings.** The table above is authoritative for defaults;
@@ -490,6 +491,11 @@ what follows is the operator-facing consequence.
   `Retry-After` on overflow. Setting any of them to `0` is rejected at startup,
   not treated as "unlimited" — use `RABBITHOLE_RATE_LIMIT_ENABLED=false` for
   that, and only behind a trusted network.
+- *Forwarding headers are not trusted by default.* The limiter keys on the
+  direct peer address, so a client cannot mint unlimited buckets by rotating
+  `X-Forwarded-For`. Operators behind a reverse proxy set
+  `RABBITHOLE_TRUSTED_PROXIES` to the proxy addresses; anything else keeps the
+  header inert.
 - *`RABBITHOLE_LOG_FORMAT=json` yields one JSON object per line*, which is what
   log shippers expect; `text` stays the default so an existing install's log
   format does not change silently.

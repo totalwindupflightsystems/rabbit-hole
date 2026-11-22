@@ -52,6 +52,19 @@ test:
     - go test ./... -count=1 -short -race
   coverage: '/^coverage: (\d+\.\d+)% of statements/'
 
+# Slow gates (PM-RH-06): the repo's own stress/integration/e2e targets,
+# mirroring the GitHub slow-tests matrix. Run on pushes to main only —
+# they take tens of minutes and are too heavy for every MR pipeline.
+slow-tests:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  timeout: 40m
+  script:
+    - make stress
+    - make integration
+    - make e2e
+
 vulncheck:
   stage: vulncheck
   script:

@@ -386,8 +386,9 @@ func (s *SQLiteStore) QueryFlows(ctx context.Context, req types.FlowQuery) ([]ty
 		}
 	}
 	if req.Query != "" {
-		q += " AND (description LIKE ? OR intent LIKE ?)"
-		args = append(args, "%"+req.Query+"%", "%"+req.Query+"%")
+		q += ` AND (description LIKE ? ESCAPE '\' OR intent LIKE ? ESCAPE '\')`
+		pattern := likePattern(req.Query)
+		args = append(args, pattern, pattern)
 	}
 	if !req.TimeRange.Start.IsZero() {
 		// Compare via unixepoch() so stored LOCAL-offset timestamps and
@@ -447,13 +448,18 @@ func (s *SQLiteStore) SearchFlows(ctx context.Context, query string, limit int) 
 	return s.searchFlowsRecent(ctx, limit)
 }
 
+func likePattern(query string) string {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	return "%" + escaped + "%"
+}
+
 func (s *SQLiteStore) searchFlowsLike(ctx context.Context, query string, limit int) ([]types.Flow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, session_id, trace_ids, intent, phase, description,
 		       outcome, confidence, start_time, end_time, duration_ns, metadata
-		FROM flows WHERE description LIKE ? OR intent LIKE ?
+		FROM flows WHERE description LIKE ? ESCAPE '\' OR intent LIKE ? ESCAPE '\'
 		ORDER BY start_time DESC LIMIT ?`,
-		"%"+query+"%", "%"+query+"%", limit)
+		likePattern(query), likePattern(query), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -671,12 +677,22 @@ func (s *SQLiteStore) GetContextWindow(ctx context.Context, flowID string) (*typ
 
 // ---------- Maintenance ----------
 
-// Compact deletes data older than before, then vacuums.
+// Compact deletes old data from non-running sessions, then vacuums. Running
+// sessions remain intact so their writers can continue across compaction.
+//
+// Every age comparison (traces.timestamp, flows.start_time, sessions.end_time)
+// goes through unixepoch(), so the cutoff's UTC offset relative to the stored
+// rows' offsets cannot change which rows count as expired: only the absolute
+// instant matters. Timestamps SQLite cannot parse yield a NULL unixepoch(),
+// whose comparison is NULL (not true) — unparseable flow, trace and session
+// timestamps are therefore RETAINED, never treated as expired, consistently
+// on all three tables.
 func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 	s.logger.Info("starting compaction", "before", before)
 	cutoff := before.Format(time.RFC3339Nano)
 
-	result, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE timestamp < ?`, cutoff)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE unixepoch(timestamp) < unixepoch(?)
+		AND session_id NOT IN (SELECT id FROM sessions WHERE status = 'running')`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete old traces", err)
 	}
@@ -684,7 +700,8 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 		s.logger.Info("deleted old traces", "count", n)
 	}
 
-	result, err = s.db.ExecContext(ctx, `DELETE FROM flows WHERE unixepoch(start_time) < unixepoch(?)`, cutoff)
+	result, err = s.db.ExecContext(ctx, `DELETE FROM flows WHERE unixepoch(start_time) < unixepoch(?)
+		AND session_id NOT IN (SELECT id FROM sessions WHERE status = 'running')`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete old flows", err)
 	}
@@ -693,8 +710,10 @@ func (s *SQLiteStore) Compact(ctx context.Context, before time.Time) error {
 	}
 
 	_, err = s.db.ExecContext(ctx, `
-		DELETE FROM sessions WHERE end_time < ? AND end_time IS NOT NULL
-		AND id NOT IN (SELECT DISTINCT session_id FROM flows)`, cutoff)
+		DELETE FROM sessions WHERE unixepoch(end_time) < unixepoch(?) AND end_time IS NOT NULL
+		AND status != 'running'
+		AND id NOT IN (SELECT DISTINCT session_id FROM flows)
+		AND id NOT IN (SELECT DISTINCT session_id FROM traces)`, cutoff)
 	if err != nil {
 		return wrapWriteError(s.path, "delete orphan sessions", err)
 	}

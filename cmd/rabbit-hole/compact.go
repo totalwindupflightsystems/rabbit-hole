@@ -23,7 +23,7 @@ func newCompactCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "compact",
 		Short: "Compact and clean up old data",
-		Long:  "Remove traces and flows older than the retention period. Default: 30 days.",
+		Long:  "Remove traces and flows older than the retention period, excluding running sessions. Default: 30 days.",
 		Args:  cobra.NoArgs,
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()

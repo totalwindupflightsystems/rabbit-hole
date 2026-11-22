@@ -19,6 +19,10 @@ func TestCompactEndpoint_DeletesOnlyOldData(t *testing.T) {
 	defer cl()
 
 	sess := seedSession(t, srv.store)
+	sess.Status = types.SessionStatusCompleted
+	if err := srv.store.UpdateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
 	old := time.Now().Add(-48 * time.Hour)
 	recent := time.Now().UTC()
 

@@ -1,8 +1,32 @@
 package main
 
 import (
+	"io"
+	"strings"
 	"testing"
 )
+
+func TestServeDemoEveryValidation(t *testing.T) {
+	for _, value := range []string{"0", "-3", "9223372037"} {
+		t.Run(value, func(t *testing.T) {
+			cmd := newServeCmd()
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+			cmd.SetArgs([]string{"--no-ebpf", "--demo-stream", "--demo-every", value})
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), "--demo-every") {
+				t.Fatalf("expected --demo-every validation error, got %v", err)
+			}
+		})
+	}
+	cmd := newServeCmd()
+	if err := cmd.Flags().Set("demo-every", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.PreRunE(cmd, nil); err != nil {
+		t.Fatalf("one second must be accepted: %v", err)
+	}
+}
 
 func TestParseRemoteFlag(t *testing.T) {
 	tests := []struct {
