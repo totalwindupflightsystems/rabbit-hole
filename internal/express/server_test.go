@@ -801,7 +801,7 @@ func TestStubChatModel(t *testing.T) {
 		t.Error("empty")
 	}
 	ans, _ = m.GenerateAnswer(context.Background(), "q", nil)
-	if ans != "I couldn't find any matching activity for your query." {
+	if ans != "No matching activity found." {
 		t.Errorf("got %q", ans)
 	}
 }

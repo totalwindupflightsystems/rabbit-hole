@@ -3,6 +3,7 @@
 package express
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -136,11 +137,29 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Step 4: Generate natural language answer
-	answer, err := s.chatModel.GenerateAnswer(ctx, req.Message, flows)
-	if err != nil {
-		// Fallback: use structured results without NL generation
-		answer = formatFallbackAnswer(flows)
+	// Step 4: Generate natural language answer. When the search (and any
+	// stub fallback) returned nothing, the answer must still name its
+	// scope: the handler knows the query, the session filter and whether
+	// the store holds ANY activity — none of which the model sees — so
+	// the zero-flow answer is built here for BOTH the stub and the
+	// real-model path instead of a generic no-match line. The chat model
+	// is never asked to answer an empty flow list.
+	// DF-RABBIT-HOLE-012.
+	var answer string
+	if len(flows) == 0 {
+		zero, zerr := s.zeroFlowAnswer(ctx, searchReq)
+		if zerr != nil {
+			s.logger.Warn("chat: zero-flow probe failed; falling back to a generic answer",
+				"err", zerr, "message", req.Message)
+			zero = formatFallbackAnswer(flows)
+		}
+		answer = zero
+	} else {
+		answer, err = s.chatModel.GenerateAnswer(ctx, req.Message, flows)
+		if err != nil {
+			// Fallback: use structured results without NL generation
+			answer = formatFallbackAnswer(flows)
+		}
 	}
 	if fallbackNote != "" {
 		answer = fallbackNote + answer
@@ -191,6 +210,33 @@ func stubFallbackNote(req *types.SearchRequest) string {
 		reason = "No activity was recorded in that time window"
 	}
 	return reason + "; showing your most recent activity instead.\n\n"
+}
+
+// zeroFlowAnswer answers the "the search returned nothing" case honestly.
+// Where the flow data sits (nowhere, the requested session, or behind a
+// keyword/window) decides the wording, and the answer must NOT silently
+// substitute other sessions' activity. DF-RABBIT-HOLE-012.
+func (s *Server) zeroFlowAnswer(ctx context.Context, req *types.SearchRequest) (string, error) {
+	anyFlow, _, err := s.store.QueryFlows(ctx, types.FlowQuery{Limit: 1})
+	if err != nil {
+		return "", fmt.Errorf("store probe: %w", err)
+	}
+	if len(anyFlow) == 0 {
+		// Empty store: there is nothing to search at all.
+		return "No activity is recorded yet, so there is nothing to search.", nil
+	}
+	if req.SessionID != "" {
+		// The scope itself is empty; other sessions exist but must not
+		// be shown (AC a of DF-RABBIT-HOLE-012).
+		return fmt.Sprintf("No activity was found in the requested session (%s); other sessions may have activity.", req.SessionID), nil
+	}
+	if req.Query != "" {
+		return fmt.Sprintf("No activity matched your search for %q.", req.Query), nil
+	}
+	if !req.TimeRange.Start.IsZero() || !req.TimeRange.End.IsZero() {
+		return "No activity was recorded in that time window.", nil
+	}
+	return formatFallbackAnswer(nil), nil
 }
 
 func (s *Server) generateSuggestions(flows []types.Flow) []string {

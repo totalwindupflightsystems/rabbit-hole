@@ -397,8 +397,8 @@ func TestHandleChat_StubNonTimeWindowEmptyDBHonest(t *testing.T) {
 	if len(resp.Flows) != 0 {
 		t.Fatalf("Flows = %d, want 0 — empty DB must not fabricate flows (body: %s)", len(resp.Flows), rr.Body.String())
 	}
-	if !strings.Contains(resp.Answer, "couldn't find any matching activity") {
-		t.Errorf("Answer=%q — want the explicit no-match answer on an empty DB", resp.Answer)
+	if !strings.Contains(strings.ToLower(resp.Answer), "no activity is recorded yet") {
+		t.Errorf("Answer=%q — want the empty-store answer (no activity recorded yet) on an empty DB", resp.Answer)
 	}
 	if strings.Contains(resp.Answer, "showing your most recent activity instead") {
 		t.Errorf("Answer=%q — claimed recent activity on an empty DB", resp.Answer)
@@ -406,6 +406,157 @@ func TestHandleChat_StubNonTimeWindowEmptyDBHonest(t *testing.T) {
 	// Wire contract: flows serializes as [] rather than null.
 	if !strings.Contains(rr.Body.String(), `"flows":[]`) {
 		t.Errorf(`response JSON missing "flows":[], got: %s`, rr.Body.String())
+	}
+}
+
+// --- DF-RABBIT-HOLE-012: scope-aware zero-flow answers ---
+
+// TestHandleChat_SessionScopeEmpty_NoSubstitution proves AC (a): a
+// chat request scoped to a session that holds no flows must NOT
+// silently fall back to other sessions' activity — and must not
+// dead-end on the generic no-match line either. The answer names the
+// requested session. DF-RABBIT-HOLE-012.
+func TestHandleChat_SessionScopeEmpty_NoSubstitution(t *testing.T) {
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "false")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", "http://example.invalid")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	const haveID = "0191a000-0000-7000-8000-0000000000a1"
+	const emptyID = "0191a000-0000-7000-8000-0000000000b2"
+
+	store := newTestStore(t)
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Logf("store close: %v", err)
+		}
+	})
+
+	// Session A holds one flow; session B is recorded but empty.
+	for _, s := range []*types.Session{
+		{ID: haveID, AgentPID: 1, AgentName: "hermes", StartTime: time.Now().UTC(), Status: types.SessionStatusRunning},
+		{ID: emptyID, AgentPID: 2, AgentName: "hermes", StartTime: time.Now().UTC(), Status: types.SessionStatusRunning},
+	} {
+		if err := store.StoreSession(context.Background(), s); err != nil {
+			t.Fatalf("StoreSession: %v", err)
+		}
+	}
+	if err := store.StoreFlows(context.Background(), []types.Flow{{
+		ID: "flow-a", SessionID: haveID, Intent: "read_file",
+		Phase: types.FlowPhaseObservation, Description: "Read auth.go (247 lines)",
+		Outcome: types.FlowOutcomeSuccess, Confidence: 0.95,
+		StartTime: time.Now().UTC(), EndTime: time.Now().UTC().Add(2 * time.Millisecond),
+	}}); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+
+	body, _ := json.Marshal(types.ChatRequest{Message: "what happened?", SessionID: emptyID})
+	rr := httptest.NewRecorder()
+	srv.handleChat(rr, httptest.NewRequest(http.MethodPost, "/api/v1/chat", strings.NewReader(string(body))))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp types.ChatResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Flows) != 0 {
+		t.Fatalf("Flows = %d, want 0 — must not substitute other sessions' flows (body: %s)", len(resp.Flows), rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"flows":[]`) {
+		t.Errorf(`response JSON missing "flows":[], got: %s`, rr.Body.String())
+	}
+	if strings.Contains(resp.Answer, "couldn't find any matching activity") {
+		t.Errorf("Answer=%q — generic no-match line must not be the final answer", resp.Answer)
+	}
+	if !strings.Contains(resp.Answer, "requested session") {
+		t.Errorf("Answer=%q — must name the requested session as the empty scope", resp.Answer)
+	}
+	if !strings.Contains(resp.Answer, emptyID) {
+		t.Errorf("Answer=%q — must name the requested session id %s", resp.Answer, emptyID)
+	}
+	if !strings.Contains(resp.Answer, "not substituted") && strings.Contains(resp.Answer, "showing your most recent activity instead") {
+		t.Errorf("Answer=%q — must not claim it is showing recent activity, and must not leak other sessions' flows", resp.Answer)
+	}
+}
+
+// TestHandleChat_RealModelZeroFlows_NamesQuery proves AC (b)+(d) for the
+// real-model path: a keyword interpretation that matches nothing over a
+// DB that DOES hold flows must not print the generic no-match line —
+// the answer names the term that missed. The chat backend's answer
+// generation must never be invoked with zero flows. DF-RABBIT-HOLE-012.
+func TestHandleChat_RealModelZeroFlows_NamesQuery(t *testing.T) {
+	var llmCalls int
+	ts := stubChatServer(t, func(w http.ResponseWriter, r *http.Request) {
+		llmCalls++
+		// Call 1: TranslateQuery. Call 2 would be GenerateAnswer —
+		// forbidden when flows is empty.
+		if llmCalls > 1 {
+			t.Errorf("GenerateAnswer must not be called with zero flows (call %d)", llmCalls)
+		}
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": `{"query":"zebra","limit":50}`}},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	t.Setenv("RABBITHOLE_CHAT_ENABLED", "true")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_ENDPOINT", ts.URL)
+	t.Setenv("RABBITHOLE_CHAT_MODEL_NAME", "m")
+	t.Setenv("RABBITHOLE_CHAT_MODEL_API_KEY", "k")
+
+	store := newTestStore(t)
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Logf("store close: %v", err)
+		}
+	})
+
+	// The DB holds flows; "zebra" matches none of them.
+	sess := &types.Session{
+		ID: "0191a000-0000-7000-8000-0000000000c3", AgentPID: 3, AgentName: "hermes",
+		StartTime: time.Now().UTC(), Status: types.SessionStatusRunning,
+	}
+	if err := store.StoreSession(context.Background(), sess); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+	if err := store.StoreFlows(context.Background(), []types.Flow{{
+		ID: "flow-c", SessionID: sess.ID, Intent: "read_file",
+		Phase: types.FlowPhaseObservation, Description: "Read auth.go (247 lines)",
+		Outcome: types.FlowOutcomeSuccess, Confidence: 0.95,
+		StartTime: time.Now().UTC(), EndTime: time.Now().UTC().Add(2 * time.Millisecond),
+	}}); err != nil {
+		t.Fatalf("StoreFlows: %v", err)
+	}
+
+	srv := NewServer(store, nil, "127.0.0.1:0", nil)
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+
+	rr := httptest.NewRecorder()
+	srv.handleChat(rr, httptest.NewRequest(http.MethodPost, "/api/v1/chat",
+		strings.NewReader(`{"message":"what did zebra do?"}`)))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp types.ChatResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Flows) != 0 {
+		t.Fatalf("Flows = %d, want 0 (body: %s)", len(resp.Flows), rr.Body.String())
+	}
+	if strings.Contains(resp.Answer, "couldn't find any matching activity") {
+		t.Errorf("Answer=%q — generic no-match line must not be the final answer", resp.Answer)
+	}
+	if !strings.Contains(resp.Answer, "zebra") || !strings.Contains(resp.Answer, "No activity matched") {
+		t.Errorf("Answer=%q — must name the query that missed", resp.Answer)
 	}
 }
 

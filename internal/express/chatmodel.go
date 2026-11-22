@@ -289,7 +289,11 @@ If the data does not answer the question, say so plainly.`
 // GenerateAnswer implements ChatModel.
 func (m *RealChatModel) GenerateAnswer(ctx context.Context, message string, flows []types.Flow) (string, error) {
 	if len(flows) == 0 {
-		return "I couldn't find any matching activity for your query.", nil
+		// Short-circuit without an HTTP call. Via handleChat this can
+		// never fire — the handler builds a scope-aware answer for zero
+		// flows and never asks the model to summarize an empty list
+		// (DF-RABBIT-HOLE-012). Kept honest for any future caller.
+		return "No matching activity found.", nil
 	}
 
 	contextJSON, err := json.Marshal(flows)
