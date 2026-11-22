@@ -18,6 +18,17 @@ pass.
 Do not delete, skip (`t.Skip`) or time-box a test to make the suite green.
 Fix the code or the test fixture instead.
 
+One documented exception (DF-RABBIT-HOLE-013): the no-race stress SLO tests —
+`TestStress_100KTraceInsert`, `TestStress_ConcurrentFTS5Search` and
+`TestStress_WALPressure` in `internal/storage` — skip themselves when the
+binary is built with `-race` (the `raceEnabled` build-tag constant in
+`internal/storage/race_on.go` / `race_off.go`). Their wall-clock budgets are
+no-race SLOs whose enforcement home is `make test-slo`; skipping them in the
+`-race` gate is the documented gate contract, not gaming — the budgets stay
+live and still fail a latency regression in `make test-slo`.
+`TestStress_ConcurrentSessionIsolation` asserts per-session isolation, not
+latency, so it runs in both modes.
+
 ## Timing SLOs and the per-host budget
 
 The stress tests in the module, and what each actually asserts:
@@ -39,10 +50,12 @@ and the rest of the module are running.
 
 `-race` is not a small tax on these tests: it turns the SQLite-heavy insert and
 search paths over almost every operation, and the measured cost is 20–55x.
-They therefore cannot hold their budgets inside `make test-all`, on any host,
-and a `test-all` red that consists only of these three tests is a mode
-mismatch — not a latency regression. Check them in the mode they were written
-for:
+They therefore cannot hold their budgets inside `make test-all`, on any host.
+`test-all` does not pretend otherwise: the three budgeted stress tests skip
+themselves under `-race` (the exception above), so the SKIP lines for them are
+expected gate output — not lost coverage — and a `test-all` red that consists
+only of those tests cannot happen anymore; if one does, the skip guard was
+bypassed. The budgets are enforced in the mode they were written for:
 
 ```bash
 make test-slo
@@ -110,14 +123,20 @@ delta 0), while the clean run stays at 0.0–0.1% inside the package and at
 
 ### Triaging an SLO failure
 
-1. If `make test-all` reports a budget breach, re-run the stress set in its
-   calibrated mode:
+1. A wall-clock budget breach can only come from the calibrated mode: under
+   `-race` the budgeted stress tests skip themselves (the exception above),
+   so `make test-all` no longer reports one. Re-run the stress set without
+   `-race`:
 
    ```bash
    make test-slo
    ```
 
-2. If it passes there, the `test-all` failure was mode/contention (see the
+   On revisions older than DF-RABBIT-HOLE-013 — or in a manual `-race` run
+   with the skips bypassed — a budget breach there still means the same
+   thing it always did: mode mismatch until proven otherwise.
+
+2. If it passes there, the failure was mode/contention (see the
    table above), not a latency regression. Record the load average and the
    measured numbers in the report instead of editing the budget.
 3. Only treat it as a regression if it also breaches in `make test-slo` on an

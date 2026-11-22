@@ -1429,6 +1429,9 @@ func TestStress_100KTraceInsert(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stress: use -short to skip")
 	}
+	if raceEnabled {
+		t.Skip("wall-clock budgets are calibrated without -race; enforced by make test-slo (DF-RABBIT-HOLE-013)")
+	}
 
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -1480,6 +1483,9 @@ func TestStress_100KTraceInsert(t *testing.T) {
 func TestStress_ConcurrentFTS5Search(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stress: use -short to skip")
+	}
+	if raceEnabled {
+		t.Skip("wall-clock budgets are calibrated without -race; enforced by make test-slo (DF-RABBIT-HOLE-013)")
 	}
 
 	store := newTestStore(t)
@@ -1847,6 +1853,9 @@ func TestStress_ConcurrentSessionIsolation(t *testing.T) {
 func TestStress_WALPressure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stress: use -short to skip")
+	}
+	if raceEnabled {
+		t.Skip("wall-clock budgets are calibrated without -race; enforced by make test-slo (DF-RABBIT-HOLE-013)")
 	}
 
 	// File-backed DB so we can inspect the WAL file on disk.
