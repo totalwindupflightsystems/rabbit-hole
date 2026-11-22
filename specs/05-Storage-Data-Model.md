@@ -447,8 +447,7 @@ import (
 |---------|------|---------|-------------|
 | `RABBITHOLE_DATA_DIR` | string | `~/.rabbit-hole/` | Data directory |
 | `RABBITHOLE_DB_PATH` | string | `$DATA_DIR/rabbit-hole.db` | SQLite database path |
-| `RABBITHOLE_RETENTION_DAYS` | int | `30` | Auto-delete data older than N days |
-| `RABBITHOLE_COMPACT_INTERVAL` | duration | `1h` | Compaction interval |
+| `RABBITHOLE_RETENTION_DAYS` | int | `30` | Default cut-off for `rabbit-hole compact` |
 
 SQLite connection string is constructed as:
 ```

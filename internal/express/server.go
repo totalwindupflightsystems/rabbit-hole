@@ -30,6 +30,16 @@ type Server struct {
 	upgrader websocket.Upgrader
 	logger   *slog.Logger
 
+	// cors decides the Access-Control-Allow-Origin header. Wildcard unless
+	// RABBITHOLE_CORS_ORIGINS names concrete origins (see cors.go).
+	cors corsPolicy
+
+	// wsPingInterval is the keepalive ping cadence and wsReadTimeout the
+	// read deadline refreshed by pongs (RABBITHOLE_WS_PING_INTERVAL /
+	// RABBITHOLE_WS_READ_TIMEOUT).
+	wsPingInterval time.Duration
+	wsReadTimeout  time.Duration
+
 	// rateLimiter controls per-endpoint request rates.
 	rateLimiter *RateLimiter
 
@@ -119,30 +129,105 @@ type ChatModel interface {
 	GenerateAnswer(ctx context.Context, message string, flows []types.Flow) (string, error)
 }
 
+// ServerOption configures config-driven server behaviour. Options exist so the
+// serve command can thread RABBITHOLE_* values in without changing the
+// constructor every caller (tests, embedders) already uses; with no options the
+// server keeps its historical behaviour — wildcard CORS, no HTTP timeouts,
+// 30s pings, 60s WebSocket read deadline, chat model chosen from the
+// environment.
+type ServerOption func(*serverOptions)
+
+// serverOptions holds the resolved option values.
+type serverOptions struct {
+	corsOrigins    string
+	readTimeout    time.Duration
+	writeTimeout   time.Duration
+	wsPingInterval time.Duration
+	wsReadTimeout  time.Duration
+	chatEnabled    bool
+}
+
+// defaultServerOptions restores the pre-config behaviour.
+func defaultServerOptions() serverOptions {
+	return serverOptions{
+		corsOrigins:    "*",
+		wsPingInterval: 30 * time.Second,
+		wsReadTimeout:  60 * time.Second,
+		chatEnabled:    true,
+	}
+}
+
+// WithCORSOrigins applies RABBITHOLE_CORS_ORIGINS: a comma-separated origin
+// allowlist, or "*" for any origin.
+func WithCORSOrigins(spec string) ServerOption {
+	return func(o *serverOptions) { o.corsOrigins = spec }
+}
+
+// WithTimeouts applies RABBITHOLE_READ_TIMEOUT / RABBITHOLE_WRITE_TIMEOUT to
+// the HTTP server. Zero means "no timeout" (net/http semantics).
+func WithTimeouts(read, write time.Duration) ServerOption {
+	return func(o *serverOptions) {
+		o.readTimeout = read
+		o.writeTimeout = write
+	}
+}
+
+// WithWebSocketTimings applies RABBITHOLE_WS_PING_INTERVAL and
+// RABBITHOLE_WS_READ_TIMEOUT. Non-positive values keep the defaults.
+func WithWebSocketTimings(ping, read time.Duration) ServerOption {
+	return func(o *serverOptions) {
+		if ping > 0 {
+			o.wsPingInterval = ping
+		}
+		if read > 0 {
+			o.wsReadTimeout = read
+		}
+	}
+}
+
+// WithChatEnabled applies RABBITHOLE_CHAT_ENABLED: false forces the stub chat
+// model.
+func WithChatEnabled(enabled bool) ServerOption {
+	return func(o *serverOptions) { o.chatEnabled = enabled }
+}
+
 // NewServer creates a new expression server wired to the given store.
 //
 // The ChatModel is selected at construction time:
 //
-//   - If RABBITHOLE_CHAT_ENABLED=false, the stub (keyword) model is used.
+//   - If RABBITHOLE_CHAT_ENABLED=false (or WithChatEnabled(false)), the stub
+//     (keyword) model is used.
 //   - If the OpenAI-compatible chat env vars are all set (RABBITHOLE_CHAT_MODEL_ENDPOINT,
 //     RABBITHOLE_CHAT_MODEL_NAME, RABBITHOLE_CHAT_MODEL_API_KEY), the RealChatModel is used.
 //   - Otherwise, the server logs a warning and falls back to the stub.
 //
 // Pass nil for rl to disable rate limiting. Pass nil for logger to use slog.Default().
-func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl *RateLimiter) *Server {
+// Options carry config values (CORS allowlist, HTTP timeouts, WebSocket
+// timings); omitting them keeps the historical defaults.
+func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl *RateLimiter, options ...ServerOption) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
+	o := defaultServerOptions()
+	for _, apply := range options {
+		if apply != nil {
+			apply(&o)
+		}
+	}
+
 	s := &Server{
-		store:       store,
-		logger:      logger,
-		rateLimiter: rl,
-		subscribers: make(map[string][]chan types.Flow),
+		store:          store,
+		logger:         logger,
+		rateLimiter:    rl,
+		cors:           parseCORSPolicy(o.corsOrigins),
+		wsPingInterval: o.wsPingInterval,
+		wsReadTimeout:  o.wsReadTimeout,
+		subscribers:    make(map[string][]chan types.Flow),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
-		chatModel: selectChatModel(logger),
+		chatModel: selectChatModelEnabled(logger, o.chatEnabled),
 		startTime: time.Now(),
 	}
 
@@ -192,8 +277,10 @@ func NewServer(store *storage.SQLiteStore, logger *slog.Logger, addr string, rl 
 	s.dashboardRoutes()
 
 	s.srv = &http.Server{
-		Addr:    addr,
-		Handler: withMetrics(apiKeyMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger)), s.metrics, s.logger),
+		Addr:         addr,
+		Handler:      withMetrics(apiKeyMiddleware(withRateLimit(s.mux, s.rateLimiter, s.logger)), s.metrics, s.logger, s.cors),
+		ReadTimeout:  o.readTimeout,
+		WriteTimeout: o.writeTimeout,
 	}
 
 	return s
@@ -417,6 +504,21 @@ func formatFallbackAnswer(flows []types.Flow) string {
 }
 
 // ---------- ChatModel selection ----------
+
+// selectChatModelEnabled honours the config layer's RABBITHOLE_CHAT_ENABLED
+// value (wired through WithChatEnabled). When chat is enabled the environment
+// is still consulted by selectChatModel, so option-less callers keep the
+// historical behaviour.
+func selectChatModelEnabled(logger *slog.Logger, enabled bool) ChatModel {
+	if !enabled {
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Info("chat model disabled by RABBITHOLE_CHAT_ENABLED; using stub")
+		return &stubChatModel{}
+	}
+	return selectChatModel(logger)
+}
 
 // selectChatModel picks the chat backend to use at server startup.
 //

@@ -386,8 +386,8 @@ sequenceDiagram
 | `RABBITHOLE_MODEL_NAME` | string | `gemma-3-4b` | Model identifier for model info |
 | `RABBITHOLE_LISTEN_ADDR` | string | `127.0.0.1:9734` | HTTP/WS server bind address |
 | `RABBITHOLE_BUFFER_SIZE` | int | `100000` | Ring buffer size in traces |
-| `RABBITHOLE_BATCH_INTERVAL` | duration | `500ms` | Classification batch interval |
-| `RABBITHOLE_CONTEXT_WINDOWS` | bool | `false` | Enable context window capture (expensive) |
+| `RABBITHOLE_BATCH_SIZE` | int | `100` | Traces per classification batch |
+| `RABBITHOLE_BATCH_TIMEOUT` | duration | `500ms` | Max wait before flushing a partial batch |
 | `RABBITHOLE_RETENTION_DAYS` | int | `30` | Auto-delete traces/flows older than N days |
 | `RABBITHOLE_MAX_SESSIONS` | int | `50` | Maximum concurrent monitored sessions |
 | `RABBITHOLE_LOG_LEVEL` | string | `info` | debug, info, warn, error |

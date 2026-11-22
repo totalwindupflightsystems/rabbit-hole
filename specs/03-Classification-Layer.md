@@ -612,11 +612,13 @@ import (
 |---------|------|---------|-------------|
 | `RABBITHOLE_MODEL_PATH` | string | `~/.rabbit-hole/models/gemma-3-4b.gguf` | Path to GGUF model file |
 | `RABBITHOLE_MODEL_NAME` | string | `gemma-3-4b` | Model identifier |
-| `RABBITHOLE_BATCH_SIZE` | int | `100` | Max trace groups per model call |
-| `RABBITHOLE_BATCH_TIMEOUT` | duration | `500ms` | Max wait before processing incomplete batch |
-| `RABBITHOLE_MODEL_THREADS` | int | `4` | llama.cpp thread count |
-| `RABBITHOLE_MODEL_GPU_LAYERS` | int | `0` | GPU offload layers (0 = CPU-only) |
-| `RABBITHOLE_INFERENCE_TIMEOUT` | duration | `5s` | Per-batch inference deadline |
+| `RABBITHOLE_BATCH_SIZE` | int | `100` | Max traces per classification batch |
+| `RABBITHOLE_BATCH_TIMEOUT` | duration | `500ms` | Max wait before processing an incomplete batch |
+
+The local backend is Ollama over HTTP: the llama.cpp thread count and GPU
+offload are the loader's settings, so there are no model-threads/GPU-layers
+keys. A batch is bounded by the backend's own HTTP client timeout, not by a
+per-batch inference deadline.
 
 ## 7. Classification Prompt Template
 
@@ -671,7 +673,7 @@ Classifier Rules:
 
 | Failure | Manifestation | Recovery |
 |---------|--------------|----------|
-| Gemma OOM on load | Process RSS spikes, OOM killer | Reduce model size (gemma-3-1b vs 4b). Set `RABBITHOLE_MODEL_GPU_LAYERS` to offload to GPU. |
+| Gemma OOM on load | Process RSS spikes, OOM killer | Reduce model size (gemma-3-1b vs 4b), or configure GPU offload in the Ollama loader (Rabbit-Hole does not set `num_gpu`). |
 | Model inference 10x slower than expected | Batch timeout builds up, trace buffer fills | Increase `RABBITHOLE_BATCH_TIMEOUT`. Check CPU throttling. |
 | Model produces garbage output after 100K inferences | Memory leak in llama.cpp | Unload/reload model every N inferences. Health check detects degradation. |
 | GGUF file corrupted during download | Load fails with magic number mismatch | `Health()` returns error with file path. User re-downloads. |

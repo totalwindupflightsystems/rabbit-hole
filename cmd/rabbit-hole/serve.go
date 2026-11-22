@@ -55,7 +55,7 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 				cfg.ListenAddr = addr
 			}
 
-			logger := newLogger(cfg.LogLevel)
+			logger := newLoggerWithFormat(cfg.LogLevel, cfg.LogFormat)
 
 			// 1. Storage
 			store, err := storage.NewSQLiteStore(cfg.DBPath, logger)
@@ -85,6 +85,9 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 			var collectorOpts []collector.Option
 			if noEBPF || demoStream {
 				collectorOpts = append(collectorOpts, collector.WithQuietEBPFInit())
+			}
+			if cfg.BPFDebug {
+				collectorOpts = append(collectorOpts, collector.WithBPFDebug())
 			}
 			coll, err := collector.NewEBPFCollector(cfg.BufferSize, cfg.MaxSessions, logger, collectorOpts...)
 			if err != nil {
@@ -126,7 +129,10 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 					}
 					backend = classify.NewLocalBackend(model)
 				}
-				cls = classify.NewClassifier(classify.NewClassificationEngine(backend, store, logger))
+				cls = classify.NewClassifier(classify.NewClassificationEngine(backend, store, logger,
+					classify.WithBatchSize(cfg.BatchSize),
+					classify.WithBatchTimeout(cfg.BatchTimeout),
+				))
 			}
 
 			// 4. Pipeline: collector → classifier → store
@@ -140,7 +146,12 @@ dog food — open /dashboard, hit Live Stream, and watch the agent work.`,
 				cfg.RateLimitWSRPS,
 				cfg.RateLimitEnabled,
 			)
-			server := express.NewServer(store, logger, cfg.ListenAddr, rl)
+			server := express.NewServer(store, logger, cfg.ListenAddr, rl,
+				express.WithCORSOrigins(cfg.CORSOrigins),
+				express.WithTimeouts(cfg.ReadTimeout, cfg.WriteTimeout),
+				express.WithWebSocketTimings(cfg.WSPingInterval, cfg.WSReadTimeout),
+				express.WithChatEnabled(cfg.ChatEnabled),
+			)
 
 			// Publish the CLI build version so GET /health reports the same
 			// version string as `rabbit-hole version` (DF-021).

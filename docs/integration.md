@@ -263,10 +263,12 @@ wscat -c "ws://127.0.0.1:9734/api/v1/ws/sessions/<session-id>"
 ```
 
 Each message is a JSON-encoded `Flow` object, pushed as the collector →
-classifier pipeline produces it. The server sends pings every 30s (clients
-should pong within 60s) and closes the socket with a normal closure when the
-session ends. If a subscriber falls behind, the server drops flows
-(non-blocking) rather than backpressuring the pipeline.
+classifier pipeline produces it. The server pings on the
+`RABBITHOLE_WS_PING_INTERVAL` cadence (30s by default) and drops a client that
+stays silent past `RABBITHOLE_WS_READ_TIMEOUT` (60s by default; every pong
+refreshes the deadline), closing with a normal closure when the session ends. If
+a subscriber falls behind, the server drops flows (non-blocking) rather than
+backpressuring the pipeline.
 
 ## Configuration
 
@@ -277,14 +279,41 @@ Rabbit-Hole is configured entirely through environment variables:
 | `RABBITHOLE_LISTEN_ADDR` | `127.0.0.1:9734` | HTTP/WebSocket bind address |
 | `RABBITHOLE_DB_PATH` | `~/.rabbit-hole/rabbit-hole.db` | SQLite database path |
 | `RABBITHOLE_DATA_DIR` | `~/.rabbit-hole/` | Data directory (db, models) |
+| `RABBITHOLE_MODEL_PATH` | `$DATA_DIR/models/gemma-3-4b.gguf` | Classifier model path passed to the local backend |
+| `RABBITHOLE_MODEL_NAME` | `gemma-3-4b` | Model identifier (Ollama tag) used by the local backend |
+| `RABBITHOLE_CORS_ORIGINS` | `*` | `*` answers `Access-Control-Allow-Origin: *` (any page may read the response, subject to `RABBITHOLE_API_KEY`). A comma-separated allowlist (e.g. `https://dash.example.com,https://ops.example.com`) echoes the request `Origin` only when it matches and sends `Vary: Origin`; any other origin gets no allow-origin header, so a browser withholds the response. Preflights allow `Content-Type`, `X-Request-ID` and `X-API-Key`. |
+| `RABBITHOLE_READ_TIMEOUT` | `30s` | `http.Server.ReadTimeout` for the daemon |
+| `RABBITHOLE_WRITE_TIMEOUT` | `30s` | `http.Server.WriteTimeout` for the daemon |
+| `RABBITHOLE_WS_PING_INTERVAL` | `30s` | Keepalive ping cadence on `/api/v1/ws/...` |
+| `RABBITHOLE_WS_READ_TIMEOUT` | `60s` | WebSocket read deadline, refreshed on every pong |
+| `RABBITHOLE_BUFFER_SIZE` | `100000` | Collector ring-buffer capacity (entries) |
+| `RABBITHOLE_MAX_SESSIONS` | `50` | Concurrent attached-session cap |
+| `RABBITHOLE_TLS_INTERCEPT` | `true` | Default TLS interception for `attach`; `attach --no-tls-intercept` overrides it per session |
+| `RABBITHOLE_BATCH_SIZE` | `100` | Traces collected before the classifier flushes a batch |
+| `RABBITHOLE_BATCH_TIMEOUT` | `500ms` | Longest wait before a partial batch is flushed |
+| `RABBITHOLE_RETENTION_DAYS` | `30` | Default cut-off for `rabbit-hole compact`; nothing purges on a timer |
 | `RABBITHOLE_CHAT_ENABLED` | `true` | Set `false` to force the stub chat model |
 | `RABBITHOLE_CHAT_MODEL_ENDPOINT` | — | OpenAI-compatible chat completions base URL (e.g. `http://127.0.0.1:11434/v1` for Ollama) |
 | `RABBITHOLE_CHAT_MODEL_NAME` | — | Model name (e.g. `llama3.1`) |
 | `RABBITHOLE_CHAT_MODEL_API_KEY` | — | API key (any value for local endpoints) |
 | `RABBITHOLE_CHAT_MODEL_TIMEOUT` | `120s` | Per-request timeout for chat model calls (Go duration). Cold local models can exceed 30s on first load; the daemon warms the model at startup, retries once on timeout, and answers `503` retryable when both attempts time out (DF-035) |
-| `RABBITHOLE_CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `RABBITHOLE_RATE_LIMIT_ENABLED` | `true` | Per-endpoint rate limiting |
+| `RABBITHOLE_RATE_LIMIT_SEARCH_RPS` | `10` | Requests/second (and burst) for `/api/v1/search*` |
+| `RABBITHOLE_RATE_LIMIT_CHAT_RPS` | `5` | Requests/second (and burst) for `/api/v1/chat*` |
+| `RABBITHOLE_RATE_LIMIT_WS_RPS` | `20` | Requests/second (and burst) for `/api/v1/ws/*` |
 | `RABBITHOLE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
+| `RABBITHOLE_LOG_FORMAT` | `text` | `text` for the human-readable handler, `json` for structured log lines |
+| `RABBITHOLE_BPF_DEBUG` | `false` | Print the kernel BPF verifier log when the collection fails to load |
+
+`RABBITHOLE_BATCH_INTERVAL`, `RABBITHOLE_MODEL_THREADS`,
+`RABBITHOLE_MODEL_GPU_LAYERS`, `RABBITHOLE_INFERENCE_TIMEOUT`,
+`RABBITHOLE_CONTEXT_WINDOWS` and `RABBITHOLE_COMPACT_INTERVAL` were parsed but
+never read by any code path and have been removed: `BATCH_TIMEOUT` is the only
+flush window, the Ollama loader owns thread/GPU placement, there is no
+per-batch inference deadline, context-window capture has no collector path, and
+nothing compacts on a schedule. Leaving them in a unit file is harmless —
+Rabbit-Hole ignores unknown variables — but they no longer change anything.
+
 
 The chat model env vars (`RABBITHOLE_CHAT_MODEL_ENDPOINT`,
 `RABBITHOLE_CHAT_MODEL_NAME`, `RABBITHOLE_CHAT_MODEL_API_KEY`) are all

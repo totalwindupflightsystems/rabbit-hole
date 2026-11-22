@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,6 +54,11 @@ type eBPFCollector struct {
 	// of the mode the user asked for. It never changes what is attempted:
 	// the load still runs and ebpfErr still records the real cause.
 	quietInit bool
+
+	// bpfDebug prints the kernel verifier log when the BPF collection fails
+	// to load (RABBITHOLE_BPF_DEBUG). Off by default: the log is large and
+	// only useful while debugging a load failure.
+	bpfDebug bool
 }
 
 // Option configures construction-time policy for NewEBPFCollector. Options
@@ -61,6 +67,7 @@ type Option func(*collectorOptions)
 
 type collectorOptions struct {
 	quietInit bool
+	bpfDebug  bool
 }
 
 // WithQuietEBPFInit suppresses the init-time eBPF diagnostics emitted when
@@ -74,6 +81,15 @@ type collectorOptions struct {
 // real kernel capability failure must still say what the kernel reported.
 func WithQuietEBPFInit() Option {
 	return func(o *collectorOptions) { o.quietInit = true }
+}
+
+// WithBPFDebug turns on verifier-log reporting for a failed BPF load
+// (RABBITHOLE_BPF_DEBUG). The kernel only produces the verifier log when a
+// program fails to load, so this is a startup diagnostic: when the load
+// succeeds nothing extra is emitted. The load already requests
+// ebpf.LogLevelBranch so the log exists to be printed.
+func WithBPFDebug() Option {
+	return func(o *collectorOptions) { o.bpfDebug = true }
 }
 
 // collectionSession tracks the state of a single attached agent process.
@@ -121,6 +137,7 @@ func NewEBPFCollector(bufSize, maxSessions int, logger *slog.Logger, options ...
 		maxSessions: maxSessions,
 		logger:      logger,
 		quietInit:   opts.quietInit,
+		bpfDebug:    opts.bpfDebug,
 	}
 
 	// Best-effort eBPF loading. If bpf2go hasn't been run or the kernel
@@ -199,6 +216,17 @@ func normalizeStackMapSpecs(spec *ebpf.CollectionSpec) {
 	}
 }
 
+// logVerifierError prints the kernel BPF verifier log carried by a failed
+// load. RABBITHOLE_BPF_DEBUG turns this on; a load that succeeds carries no
+// log, so nothing is printed in the normal case.
+func logVerifierError(logger *slog.Logger, err error) {
+	var ve *ebpf.VerifierError
+	if !errors.As(err, &ve) || len(ve.Log) == 0 {
+		return
+	}
+	logger.Error("ebpf: verifier log", "log", strings.Join(ve.Log, "\n"))
+}
+
 // loadCollection loads the embedded BPF collection with the stack-trace maps
 // normalized for the kernel's documented value_size floor.
 func loadCollection(opts *ebpf.CollectionOptions) (*bpfObjects, error) {
@@ -236,6 +264,9 @@ func (c *eBPFCollector) loadEBPF() error {
 	}
 	objs, err := loadCollection(opts)
 	if err != nil {
+		if c.bpfDebug {
+			logVerifierError(c.logger, err)
+		}
 		return classifyEBPFError(fmt.Errorf("load bpf objects: %w", err))
 	}
 

@@ -37,20 +37,14 @@ type Config struct {
 	MaxSessions  int  // RABBITHOLE_MAX_SESSIONS — default: 50
 
 	// Classification
-	BatchInterval    time.Duration // RABBITHOLE_BATCH_INTERVAL — default: 500ms
-	BatchSize        int           // RABBITHOLE_BATCH_SIZE — default: 100
-	BatchTimeout     time.Duration // RABBITHOLE_BATCH_TIMEOUT — default: 500ms
-	ModelThreads     int           // RABBITHOLE_MODEL_THREADS — default: 4
-	ModelGPULayers   int           // RABBITHOLE_MODEL_GPU_LAYERS — default: 0
-	InferenceTimeout time.Duration // RABBITHOLE_INFERENCE_TIMEOUT — default: 5s
-	ContextWindows   bool          // RABBITHOLE_CONTEXT_WINDOWS — default: false
+	BatchSize    int           // RABBITHOLE_BATCH_SIZE — default: 100
+	BatchTimeout time.Duration // RABBITHOLE_BATCH_TIMEOUT — default: 500ms
 
 	// Chat
 	ChatEnabled bool // RABBITHOLE_CHAT_ENABLED — default: true
 
 	// Maintenance
-	RetentionDays   int           // RABBITHOLE_RETENTION_DAYS — default: 30
-	CompactInterval time.Duration // RABBITHOLE_COMPACT_INTERVAL — default: 1h
+	RetentionDays int // RABBITHOLE_RETENTION_DAYS — default: 30
 
 	// Logging
 	LogLevel  string // RABBITHOLE_LOG_LEVEL — default: info
@@ -86,16 +80,10 @@ func Defaults() Config {
 		BufferSize:         100000,
 		TLSIntercept:       true,
 		MaxSessions:        50,
-		BatchInterval:      500 * time.Millisecond,
 		BatchSize:          100,
 		BatchTimeout:       500 * time.Millisecond,
-		ModelThreads:       4,
-		ModelGPULayers:     0,
-		InferenceTimeout:   5 * time.Second,
-		ContextWindows:     false,
 		ChatEnabled:        true,
 		RetentionDays:      30,
-		CompactInterval:    1 * time.Hour,
 		LogLevel:           "info",
 		LogFormat:          "text",
 		RateLimitEnabled:   true,
@@ -177,33 +165,12 @@ func Load() (Config, error) {
 		}
 		cfg.WSReadTimeout = d
 	}
-	if v := os.Getenv("RABBITHOLE_BATCH_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("RABBITHOLE_BATCH_INTERVAL: %w", err)
-		}
-		cfg.BatchInterval = d
-	}
 	if v := os.Getenv("RABBITHOLE_BATCH_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
 			return Config{}, fmt.Errorf("RABBITHOLE_BATCH_TIMEOUT: %w", err)
 		}
 		cfg.BatchTimeout = d
-	}
-	if v := os.Getenv("RABBITHOLE_INFERENCE_TIMEOUT"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("RABBITHOLE_INFERENCE_TIMEOUT: %w", err)
-		}
-		cfg.InferenceTimeout = d
-	}
-	if v := os.Getenv("RABBITHOLE_COMPACT_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("RABBITHOLE_COMPACT_INTERVAL: %w", err)
-		}
-		cfg.CompactInterval = d
 	}
 
 	// Integers
@@ -227,20 +194,6 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("RABBITHOLE_BATCH_SIZE: %w", err)
 		}
 		cfg.BatchSize = n
-	}
-	if v := os.Getenv("RABBITHOLE_MODEL_THREADS"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("RABBITHOLE_MODEL_THREADS: %w", err)
-		}
-		cfg.ModelThreads = n
-	}
-	if v := os.Getenv("RABBITHOLE_MODEL_GPU_LAYERS"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("RABBITHOLE_MODEL_GPU_LAYERS: %w", err)
-		}
-		cfg.ModelGPULayers = n
 	}
 	if v := os.Getenv("RABBITHOLE_RETENTION_DAYS"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -278,13 +231,6 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("RABBITHOLE_TLS_INTERCEPT: %w", err)
 		}
 		cfg.TLSIntercept = b
-	}
-	if v := os.Getenv("RABBITHOLE_CONTEXT_WINDOWS"); v != "" {
-		b, err := strconv.ParseBool(v)
-		if err != nil {
-			return Config{}, fmt.Errorf("RABBITHOLE_CONTEXT_WINDOWS: %w", err)
-		}
-		cfg.ContextWindows = b
 	}
 	if v := os.Getenv("RABBITHOLE_CHAT_ENABLED"); v != "" {
 		b, err := strconv.ParseBool(v)
@@ -364,17 +310,8 @@ func (c Config) Validate() error {
 	if c.BatchTimeout <= 0 {
 		errs = append(errs, "RABBITHOLE_BATCH_TIMEOUT must be positive")
 	}
-	if c.BatchInterval <= 0 {
-		errs = append(errs, "RABBITHOLE_BATCH_INTERVAL must be positive")
-	}
-	if c.InferenceTimeout <= 0 {
-		errs = append(errs, "RABBITHOLE_INFERENCE_TIMEOUT must be positive")
-	}
 	if c.RetentionDays < 1 {
 		errs = append(errs, "RABBITHOLE_RETENTION_DAYS must be at least 1")
-	}
-	if c.ModelThreads < 1 {
-		errs = append(errs, "RABBITHOLE_MODEL_THREADS must be at least 1")
 	}
 	if !validLogLevel(c.LogLevel) {
 		errs = append(errs, "RABBITHOLE_LOG_LEVEL must be one of: debug, info, warn, error")

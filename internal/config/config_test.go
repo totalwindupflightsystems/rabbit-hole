@@ -27,9 +27,6 @@ func TestDefaults(t *testing.T) {
 	if cfg.TLSIntercept != true {
 		t.Errorf("expected TLSIntercept true, got false")
 	}
-	if cfg.ContextWindows != false {
-		t.Errorf("expected ContextWindows false, got true")
-	}
 	if cfg.ChatEnabled != true {
 		t.Errorf("expected ChatEnabled true, got false")
 	}
@@ -38,12 +35,6 @@ func TestDefaults(t *testing.T) {
 	}
 	if cfg.RetentionDays != 30 {
 		t.Errorf("expected RetentionDays 30, got %d", cfg.RetentionDays)
-	}
-	if cfg.ModelThreads != 4 {
-		t.Errorf("expected ModelThreads 4, got %d", cfg.ModelThreads)
-	}
-	if cfg.ModelGPULayers != 0 {
-		t.Errorf("expected ModelGPULayers 0, got %d", cfg.ModelGPULayers)
 	}
 	if cfg.BatchSize != 100 {
 		t.Errorf("expected BatchSize 100, got %d", cfg.BatchSize)
@@ -56,17 +47,14 @@ func TestDefaults(t *testing.T) {
 	if cfg.WriteTimeout != 30*time.Second {
 		t.Errorf("expected WriteTimeout 30s, got %v", cfg.WriteTimeout)
 	}
-	if cfg.BatchInterval != 500*time.Millisecond {
-		t.Errorf("expected BatchInterval 500ms, got %v", cfg.BatchInterval)
-	}
 	if cfg.BatchTimeout != 500*time.Millisecond {
 		t.Errorf("expected BatchTimeout 500ms, got %v", cfg.BatchTimeout)
 	}
-	if cfg.InferenceTimeout != 5*time.Second {
-		t.Errorf("expected InferenceTimeout 5s, got %v", cfg.InferenceTimeout)
+	if cfg.WSPingInterval != 30*time.Second {
+		t.Errorf("expected WSPingInterval 30s, got %v", cfg.WSPingInterval)
 	}
-	if cfg.CompactInterval != 1*time.Hour {
-		t.Errorf("expected CompactInterval 1h, got %v", cfg.CompactInterval)
+	if cfg.WSReadTimeout != 60*time.Second {
+		t.Errorf("expected WSReadTimeout 60s, got %v", cfg.WSReadTimeout)
 	}
 
 	// Verify data dir uses home directory
@@ -81,38 +69,33 @@ func TestLoadEnvOverrides(t *testing.T) {
 	// Set environment variables
 	dataDir := filepath.Join(t.TempDir(), "rh-data") // creatable: Load() now MkdirAlls DataDir (DF-011)
 	envVars := map[string]string{
-		"RABBITHOLE_LISTEN_ADDR":       "0.0.0.0:8080",
-		"RABBITHOLE_BUFFER_SIZE":       "50000",
-		"RABBITHOLE_MAX_SESSIONS":      "25",
-		"RABBITHOLE_TLS_INTERCEPT":     "false",
-		"RABBITHOLE_CONTEXT_WINDOWS":   "true",
-		"RABBITHOLE_CHAT_ENABLED":      "false",
-		"RABBITHOLE_LOG_LEVEL":         "debug",
-		"RABBITHOLE_RETENTION_DAYS":    "60",
-		"RABBITHOLE_BATCH_SIZE":        "200",
-		"RABBITHOLE_MODEL_THREADS":     "8",
-		"RABBITHOLE_MODEL_GPU_LAYERS":  "16",
-		"RABBITHOLE_BATCH_INTERVAL":    "1s",
-		"RABBITHOLE_BATCH_TIMEOUT":     "2s",
-		"RABBITHOLE_INFERENCE_TIMEOUT": "10s",
-		"RABBITHOLE_READ_TIMEOUT":      "60s",
-		"RABBITHOLE_WRITE_TIMEOUT":     "60s",
-		"RABBITHOLE_COMPACT_INTERVAL":  "2h",
-		"RABBITHOLE_WS_PING_INTERVAL":  "15s",
-		"RABBITHOLE_WS_READ_TIMEOUT":   "30s",
-		"RABBITHOLE_MODEL_NAME":        "gemma-3-1b",
-		"RABBITHOLE_MODEL_PATH":        "/opt/models/gemma.gguf",
-		"RABBITHOLE_DB_PATH":           "/data/rabbit-hole.db",
-		"RABBITHOLE_CORS_ORIGINS":      "http://localhost:3000",
-		"RABBITHOLE_BPF_DEBUG":         "true",
-		"RABBITHOLE_DATA_DIR":          dataDir,
+		"RABBITHOLE_LISTEN_ADDR":      "0.0.0.0:8080",
+		"RABBITHOLE_BUFFER_SIZE":      "50000",
+		"RABBITHOLE_MAX_SESSIONS":     "25",
+		"RABBITHOLE_TLS_INTERCEPT":    "false",
+		"RABBITHOLE_CHAT_ENABLED":     "false",
+		"RABBITHOLE_LOG_LEVEL":        "debug",
+		"RABBITHOLE_LOG_FORMAT":       "json",
+		"RABBITHOLE_RETENTION_DAYS":   "60",
+		"RABBITHOLE_BATCH_SIZE":       "200",
+		"RABBITHOLE_BATCH_TIMEOUT":    "2s",
+		"RABBITHOLE_READ_TIMEOUT":     "60s",
+		"RABBITHOLE_WRITE_TIMEOUT":    "60s",
+		"RABBITHOLE_WS_PING_INTERVAL": "15s",
+		"RABBITHOLE_WS_READ_TIMEOUT":  "30s",
+		"RABBITHOLE_MODEL_NAME":       "gemma-3-1b",
+		"RABBITHOLE_MODEL_PATH":       "/opt/models/gemma.gguf",
+		"RABBITHOLE_DB_PATH":          "/data/rabbit-hole.db",
+		"RABBITHOLE_CORS_ORIGINS":     "http://localhost:3000",
+		"RABBITHOLE_BPF_DEBUG":        "true",
+		"RABBITHOLE_DATA_DIR":         dataDir,
 	}
 	for k, v := range envVars {
-		os.Setenv(k, v)
+		_ = os.Setenv(k, v)
 	}
 	defer func() {
 		for k := range envVars {
-			os.Unsetenv(k)
+			_ = os.Unsetenv(k)
 		}
 	}()
 
@@ -133,26 +116,20 @@ func TestLoadEnvOverrides(t *testing.T) {
 	if cfg.TLSIntercept != false {
 		t.Errorf("TLSIntercept: expected false, got true")
 	}
-	if cfg.ContextWindows != true {
-		t.Errorf("ContextWindows: expected true, got false")
-	}
 	if cfg.ChatEnabled != false {
 		t.Errorf("ChatEnabled: expected false, got true")
 	}
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel: expected debug, got %s", cfg.LogLevel)
 	}
+	if cfg.LogFormat != "json" {
+		t.Errorf("LogFormat: expected json, got %s", cfg.LogFormat)
+	}
 	if cfg.RetentionDays != 60 {
 		t.Errorf("RetentionDays: expected 60, got %d", cfg.RetentionDays)
 	}
 	if cfg.BatchSize != 200 {
 		t.Errorf("BatchSize: expected 200, got %d", cfg.BatchSize)
-	}
-	if cfg.ModelThreads != 8 {
-		t.Errorf("ModelThreads: expected 8, got %d", cfg.ModelThreads)
-	}
-	if cfg.ModelGPULayers != 16 {
-		t.Errorf("ModelGPULayers: expected 16, got %d", cfg.ModelGPULayers)
 	}
 	if cfg.ModelName != "gemma-3-1b" {
 		t.Errorf("ModelName: expected gemma-3-1b, got %s", cfg.ModelName)
@@ -174,23 +151,14 @@ func TestLoadEnvOverrides(t *testing.T) {
 	}
 
 	// Duration checks
-	if cfg.BatchInterval != 1*time.Second {
-		t.Errorf("BatchInterval: expected 1s, got %v", cfg.BatchInterval)
-	}
 	if cfg.BatchTimeout != 2*time.Second {
 		t.Errorf("BatchTimeout: expected 2s, got %v", cfg.BatchTimeout)
-	}
-	if cfg.InferenceTimeout != 10*time.Second {
-		t.Errorf("InferenceTimeout: expected 10s, got %v", cfg.InferenceTimeout)
 	}
 	if cfg.ReadTimeout != 60*time.Second {
 		t.Errorf("ReadTimeout: expected 60s, got %v", cfg.ReadTimeout)
 	}
 	if cfg.WriteTimeout != 60*time.Second {
 		t.Errorf("WriteTimeout: expected 60s, got %v", cfg.WriteTimeout)
-	}
-	if cfg.CompactInterval != 2*time.Hour {
-		t.Errorf("CompactInterval: expected 2h, got %v", cfg.CompactInterval)
 	}
 	if cfg.WSPingInterval != 15*time.Second {
 		t.Errorf("WSPingInterval: expected 15s, got %v", cfg.WSPingInterval)
@@ -202,8 +170,8 @@ func TestLoadEnvOverrides(t *testing.T) {
 
 func TestLoadDataDirDerivesPaths(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "rh-data") // creatable: Load() now MkdirAlls DataDir (DF-011)
-	os.Setenv("RABBITHOLE_DATA_DIR", dataDir)
-	defer os.Unsetenv("RABBITHOLE_DATA_DIR")
+	_ = os.Setenv("RABBITHOLE_DATA_DIR", dataDir)
+	defer func() { _ = os.Unsetenv("RABBITHOLE_DATA_DIR") }()
 
 	cfg, err := Load()
 	if err != nil {
@@ -223,13 +191,13 @@ func TestLoadDataDirDerivesPaths(t *testing.T) {
 
 func TestLoadExplicitPathsOverrideDataDir(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "rh-data") // creatable: Load() now MkdirAlls DataDir (DF-011)
-	os.Setenv("RABBITHOLE_DATA_DIR", dataDir)
-	os.Setenv("RABBITHOLE_DB_PATH", "/explicit/db.sqlite")
-	os.Setenv("RABBITHOLE_MODEL_PATH", "/explicit/model.gguf")
+	_ = os.Setenv("RABBITHOLE_DATA_DIR", dataDir)
+	_ = os.Setenv("RABBITHOLE_DB_PATH", "/explicit/db.sqlite")
+	_ = os.Setenv("RABBITHOLE_MODEL_PATH", "/explicit/model.gguf")
 	defer func() {
-		os.Unsetenv("RABBITHOLE_DATA_DIR")
-		os.Unsetenv("RABBITHOLE_DB_PATH")
-		os.Unsetenv("RABBITHOLE_MODEL_PATH")
+		_ = os.Unsetenv("RABBITHOLE_DATA_DIR")
+		_ = os.Unsetenv("RABBITHOLE_DB_PATH")
+		_ = os.Unsetenv("RABBITHOLE_MODEL_PATH")
 	}()
 
 	cfg, err := Load()
@@ -311,11 +279,6 @@ func TestValidateErrors(t *testing.T) {
 			wantErr: "RABBITHOLE_RETENTION_DAYS must be at least 1",
 		},
 		{
-			name:    "zero model threads",
-			modify:  func(c *Config) { c.ModelThreads = 0 },
-			wantErr: "RABBITHOLE_MODEL_THREADS must be at least 1",
-		},
-		{
 			name:    "invalid listen address format",
 			modify:  func(c *Config) { c.ListenAddr = "bad-addr" },
 			wantErr: "RABBITHOLE_LISTEN_ADDR must be in host:port format (e.g., 127.0.0.1:9734)",
@@ -343,8 +306,8 @@ func TestValidateErrors(t *testing.T) {
 }
 
 func TestLoadInvalidDuration(t *testing.T) {
-	os.Setenv("RABBITHOLE_BATCH_INTERVAL", "not-a-duration")
-	defer os.Unsetenv("RABBITHOLE_BATCH_INTERVAL")
+	_ = os.Setenv("RABBITHOLE_BATCH_TIMEOUT", "not-a-duration")
+	defer func() { _ = os.Unsetenv("RABBITHOLE_BATCH_TIMEOUT") }()
 
 	_, err := Load()
 	if err == nil {
@@ -353,8 +316,8 @@ func TestLoadInvalidDuration(t *testing.T) {
 }
 
 func TestLoadInvalidInt(t *testing.T) {
-	os.Setenv("RABBITHOLE_BUFFER_SIZE", "not-a-number")
-	defer os.Unsetenv("RABBITHOLE_BUFFER_SIZE")
+	_ = os.Setenv("RABBITHOLE_BUFFER_SIZE", "not-a-number")
+	defer func() { _ = os.Unsetenv("RABBITHOLE_BUFFER_SIZE") }()
 
 	_, err := Load()
 	if err == nil {
@@ -363,8 +326,8 @@ func TestLoadInvalidInt(t *testing.T) {
 }
 
 func TestLoadInvalidBool(t *testing.T) {
-	os.Setenv("RABBITHOLE_TLS_INTERCEPT", "maybe")
-	defer os.Unsetenv("RABBITHOLE_TLS_INTERCEPT")
+	_ = os.Setenv("RABBITHOLE_TLS_INTERCEPT", "maybe")
+	defer func() { _ = os.Unsetenv("RABBITHOLE_TLS_INTERCEPT") }()
 
 	_, err := Load()
 	if err == nil {

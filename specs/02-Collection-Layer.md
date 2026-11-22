@@ -337,7 +337,7 @@ import (
 | `RABBITHOLE_BUFFER_SIZE` | int | 100000 | Ring buffer capacity in traces |
 | `RABBITHOLE_MAX_SESSIONS` | int | 50 | Maximum concurrent monitored sessions |
 | `RABBITHOLE_TLS_INTERCEPT` | bool | true | Enable TLS interception |
-| `RABBITHOLE_BPF_DEBUG` | bool | false | Enable BPF verifier logging |
+| `RABBITHOLE_BPF_DEBUG` | bool | false | Print the kernel verifier log when a BPF load fails |
 
 ## 7. eBPF Program (C — collector.bpf.c)
 

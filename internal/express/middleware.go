@@ -19,13 +19,17 @@ func withMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return withMetrics(next, nil, logger)
+	return withMetrics(next, nil, logger, allowAllOrigins())
 }
 
 // withMetrics wraps next with HTTP request accounting on top of the
 // middleware chain. When mc is nil, metrics are not recorded (preserves
 // behavior for tests that only want the bare middleware).
-func withMetrics(next http.Handler, mc *MetricsCollector, logger *slog.Logger) http.Handler {
+//
+// cors decides the Access-Control-Allow-Origin header: the wildcard policy
+// keeps the historical "*", an allowlist echoes only configured origins
+// (RABBITHOLE_CORS_ORIGINS, see cors.go).
+func withMetrics(next http.Handler, mc *MetricsCollector, logger *slog.Logger, cors corsPolicy) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -40,9 +44,7 @@ func withMetrics(next http.Handler, mc *MetricsCollector, logger *slog.Logger) h
 		w.Header().Set("X-Request-ID", reqID)
 
 		// CORS
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID")
+		cors.apply(w, r)
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)

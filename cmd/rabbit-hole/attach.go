@@ -42,7 +42,7 @@ running for collection; stop the session with 'rabbit-hole detach <id>'.`,
 				cfg.ListenAddr = addr
 			}
 
-			logger := newLogger(cfg.LogLevel)
+			logger := newLoggerWithFormat(cfg.LogLevel, cfg.LogFormat)
 
 			// Preflight: attach promises kernel telemetry, so degraded
 			// eBPF is a hard error unless the user explicitly opted into
@@ -69,13 +69,21 @@ running for collection; stop the session with 'rabbit-hole detach <id>'.`,
 				logger.Warn("eBPF disabled via --no-ebpf — telemetry DISABLED, running in degraded mode")
 			}
 
+			// TLS interception is per session, and the daemon-side default
+			// comes from RABBITHOLE_TLS_INTERCEPT. The --no-tls-intercept
+			// flag still wins when the operator passes it explicitly.
+			tlsInterception := !noTLSIntercept
+			if !cobraCmd.Flags().Changed("no-tls-intercept") {
+				tlsInterception = cfg.TLSIntercept
+			}
+
 			session, err := newDaemonClient(cfg.ListenAddr).attachSession(
 				cobraCmd.Context(),
 				types.AttachSessionRequest{
 					PID:             pid,
 					ContextWindows:  contextWindows,
 					Categories:      categories,
-					TLSInterception: !noTLSIntercept,
+					TLSInterception: tlsInterception,
 					NoEBPF:          noEBPF,
 				},
 			)

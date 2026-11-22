@@ -47,10 +47,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		close(flowCh)
 	}()
 
-	// Set read deadline for ping/pong
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	// Set read deadline for ping/pong. The deadline is refreshed on every
+	// pong so an idle-but-alive client survives; it comes from
+	// RABBITHOLE_WS_READ_TIMEOUT.
+	_ = conn.SetReadDeadline(time.Now().Add(s.wsReadTimeout))
 	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(s.wsReadTimeout))
 		return nil
 	})
 
@@ -71,7 +73,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Write loop: push flows to WebSocket
-	ticker := time.NewTicker(30 * time.Second) // ping interval
+	ticker := time.NewTicker(s.wsPingInterval) // RABBITHOLE_WS_PING_INTERVAL
 	defer ticker.Stop()
 
 	for {
@@ -90,6 +92,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case <-ticker.C:
+			// The connection was hijacked, so the server's WriteTimeout no
+			// longer bounds it: give the ping its own deadline like the data
+			// path does.
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

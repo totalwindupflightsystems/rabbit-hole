@@ -32,20 +32,60 @@ type ClassificationEngine struct {
 	logger       *slog.Logger
 }
 
+// Built-in batching defaults. They are also the values Config ships
+// (RABBITHOLE_BATCH_SIZE / RABBITHOLE_BATCH_TIMEOUT), so an unconfigured
+// daemon flushes at the same cadence it always did.
+const (
+	defaultBatchSize    = 100
+	defaultBatchTimeout = 500 * time.Millisecond
+)
+
+// EngineOption configures the engine's batching window. Options exist so the
+// serve command can thread RABBITHOLE_BATCH_SIZE / RABBITHOLE_BATCH_TIMEOUT in
+// without breaking callers that construct an engine with defaults.
+type EngineOption func(*ClassificationEngine)
+
+// WithBatchSize caps how many traces ClassifyStream collects before flushing a
+// batch to Classify. Non-positive values keep the default (100).
+func WithBatchSize(n int) EngineOption {
+	return func(e *ClassificationEngine) {
+		if n > 0 {
+			e.batchSize = n
+		}
+	}
+}
+
+// WithBatchTimeout sets how long ClassifyStream waits for a partial batch
+// before flushing it (RABBITHOLE_BATCH_TIMEOUT). Non-positive values keep the
+// default (500ms).
+func WithBatchTimeout(d time.Duration) EngineOption {
+	return func(e *ClassificationEngine) {
+		if d > 0 {
+			e.batchTimeout = d
+		}
+	}
+}
+
 // NewClassificationEngine creates an engine with sensible defaults
 // from the config layer. The backend may be nil for pattern-only mode.
-func NewClassificationEngine(backend ClassificationBackend, store Storage, logger *slog.Logger) *ClassificationEngine {
+func NewClassificationEngine(backend ClassificationBackend, store Storage, logger *slog.Logger, options ...EngineOption) *ClassificationEngine {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &ClassificationEngine{
+	e := &ClassificationEngine{
 		backend:      backend,
 		store:        store,
 		patterns:     NewPatternCatalog(),
-		batchSize:    100,
-		batchTimeout: 500 * time.Millisecond,
+		batchSize:    defaultBatchSize,
+		batchTimeout: defaultBatchTimeout,
 		logger:       logger,
 	}
+	for _, apply := range options {
+		if apply != nil {
+			apply(e)
+		}
+	}
+	return e
 }
 
 // Classify runs the full classification pipeline on a batch of traces:

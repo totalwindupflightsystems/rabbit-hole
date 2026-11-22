@@ -80,7 +80,7 @@ func (c *classifierImpl) ClassifyStream(ctx context.Context, sessionID string, t
 		var batch []types.Trace
 		batchSize := c.engine.batchSize
 		if batchSize <= 0 {
-			batchSize = 100
+			batchSize = defaultBatchSize
 		}
 		timer := time.NewTimer(c.engine.batchTimeout)
 		defer timer.Stop()

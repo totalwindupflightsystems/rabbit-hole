@@ -1,0 +1,45 @@
+GitReins guard run log — full output (the console summary is bounded)
+run_utc: 2026-11-22T09:53:47Z
+workdir: /home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-011
+test_mode: full
+test_targets: all (full mode)
+overall: FAIL
+guards: 4 (1 failed, 0 skipped)
+diagnostics:
+  first_failing_test: none detected
+  secrets_scanners: clean (gitleaks + builtin cross-check)
+  scanner_nice: scanners: nice=nice -n 10
+
+==============================================================================
+[FAIL] go_lint  passed=false  exit_code=n/a
+==============================================================================
+--- output (untruncated) ---
+[internal/express] internal/express/cors_test.go:22:10: Error return value of `ln.Close` is not checked (errcheck)
+	ln.Close()
+	        ^
+1 issues:
+* errcheck: 1
+
+==============================================================================
+[PASS] secrets  passed=true  exit_code=n/a
+==============================================================================
+--- output (untruncated) ---
+gitleaks: clean
+
+==============================================================================
+[PASS] go_build  passed=true  exit_code=n/a
+==============================================================================
+--- output (untruncated) ---
+go build: ok
+
+==============================================================================
+[PASS] go_tests  passed=true  exit_code=n/a
+==============================================================================
+--- output (untruncated) ---
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/api/proto/classifier/v1	0.015s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/cmd/rabbit-hole	1.706s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/attach	3.197s
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/classify	0.077s
+?   	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/classify/pb	[no test files]
+ok  	gitlab.readydedis.com/rabbit-hole/rabbit-hole/internal/collector	0.032s
+ok  	gitlab.readydedis.com/ra

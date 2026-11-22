@@ -23,10 +23,23 @@ func loadConfig() (config.Config, error) {
 	return cfg, nil
 }
 
+// newLogger returns the CLI/daemon logger with the configured level and text
+// output. Callers that honour RABBITHOLE_LOG_FORMAT should use
+// newLoggerWithFormat instead.
 func newLogger(level string) *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: logLevel(level),
-	}))
+	return newLoggerWithFormat(level, "text")
+}
+
+// newLoggerWithFormat builds the logger for RABBITHOLE_LOG_FORMAT: "text"
+// installs the historical text handler, "json" installs a JSON handler so log
+// shippers get structured lines. Validation rejects any other value at
+// startup, so the default branch is only reached by internal callers.
+func newLoggerWithFormat(level, format string) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: logLevel(level)}
+	if format == "json" {
+		return slog.New(slog.NewJSONHandler(os.Stderr, opts))
+	}
+	return slog.New(slog.NewTextHandler(os.Stderr, opts))
 }
 
 func logLevel(level string) slog.Level {
