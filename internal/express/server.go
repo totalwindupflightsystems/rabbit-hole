@@ -478,9 +478,10 @@ func stubKeywordQuery(msg string) string {
 }
 
 func (m *stubChatModel) GenerateAnswer(ctx context.Context, message string, flows []types.Flow) (string, error) {
-	if len(flows) == 0 {
-		return "I couldn't find any matching activity for your query.", nil
-	}
+	// Zero flows never reaches this through handleChat (the handler
+	// builds the scope-aware answer itself, DF-RABBIT-HOLE-012); if a
+	// future caller passes none, the structured fallback answers
+	// honestly instead of a generic no-match line.
 	return formatFallbackAnswer(flows), nil
 }
 
