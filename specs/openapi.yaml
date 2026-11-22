@@ -101,8 +101,11 @@ paths:
           response. A host where eBPF probes cannot be loaded at all and
           neither `--no-ebpf` nor `--demo-stream` was passed never serves
           `/health`: `serve` exits with the preflight error
-          (`eBPF unavailable — telemetry DISABLED (requires CAP_SYS_RESOURCE and
-          kernel 5.11+; use --no-ebpf to run in degraded mode): …`), so that
+          (`eBPF unavailable — telemetry DISABLED (use --no-ebpf to run in
+          degraded mode): …`), whose cause is classified from the errno the
+          kernel actually reported — an unprivileged refusal names the kernel
+          release and the missing capabilities (CAP_BPF, CAP_PERFMON,
+          CAP_SYS_ADMIN) rather than a fixed privilege claim — so that
           condition is a startup failure rather than a component status.
         - `storage`: `ok` when the store health check passes, otherwise `error`
           with the store's error text as `detail`.
@@ -372,7 +375,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
-                error: 'eBPF unavailable — telemetry DISABLED (use --no-ebpf to run in degraded mode): operation not permitted'
+                error: 'eBPF unavailable — telemetry DISABLED (use --no-ebpf to run in degraded mode): kernel 7.0.0-43-generic refused the eBPF collection as unprivileged (operation not permitted); grant the missing capabilities (CAP_BPF, CAP_PERFMON, CAP_SYS_ADMIN) or run as root [remove memlock rlimit: failed to set memlock rlimit: operation not permitted]'
         '404':
           description: No process with the requested PID exists.
           headers:

@@ -207,7 +207,7 @@ want the recent window populated.
 ## Requirements
 
 - **Go 1.26+** (uses `go tool` and `testing/synctest`)
-- **Linux** with eBPF support (kernel 5.11+) and **CAP_SYS_RESOURCE** for full telemetry collection
+- **Linux** with eBPF support and the eBPF capabilities (**CAP_BPF**, **CAP_PERFMON**, **CAP_SYS_ADMIN** — or root) for full telemetry collection
 - **SQLite** (embedded via `modernc.org/sqlite` — no CGO required)
 
 ### Go toolchain
@@ -256,10 +256,11 @@ go build -ldflags="-s -w -X main.Version=dev" -o bin/rabbit-hole ./cmd/rabbit-ho
 
 ### eBPF privileges
 
-Full kernel telemetry (the Collect layer) requires:
-
-- Linux kernel **5.11+**
-- Appropriate eBPF and resource-limit privileges for the host
+Full kernel telemetry (the Collect layer) requires Linux eBPF support and the
+eBPF capabilities **CAP_BPF**, **CAP_PERFMON**, and **CAP_SYS_ADMIN** (or
+root). When a load is refused, the binary classifies the errno the kernel
+reported and names the missing capabilities in the error, so the failure text
+matches what the kernel actually rejected.
 
 For example, on a host without the required privileges, both
 `./bin/rabbit-hole attach --pid <PID>` and `./bin/rabbit-hole serve` exited 1
