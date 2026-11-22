@@ -1,0 +1,37 @@
+{
+  "wave_id": "rabbit-hole-foreman-2026-11-22-14-46-47",
+  "ticks": 312,
+  "created_at": "2026-11-22T14:46:47Z",
+  "wave_budget": 4,
+  "wave_size": 2,
+  "base_sha": "4451ac8",
+  "base_branch": "origin/main",
+  "workers": [
+    {
+      "task_id": "DF-RABBIT-HOLE-012",
+      "row_status": "in_progress (re-dispatch of zero-write residue per foreman note 2026-11-21)",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DF-RABBIT-HOLE-012",
+      "branch": "wt/DF-RABBIT-HOLE-012",
+      "type": "code",
+      "files_expected": ["internal/express/chat.go", "internal/express handler tests"],
+      "gitreins_task": "DF-RABBIT-HOLE-012 (created+started)",
+      "model": "glm-5.3-flash",
+      "provider": "zai-glm",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-DF-RABBIT-HOLE-012-brief-144647.md"
+    },
+    {
+      "task_id": "DOC-018",
+      "row_status": "pending (P4, docs-only)",
+      "worktree": "/home/kara/worktrees/rabbit-hole-DOC-018",
+      "branch": "wt/DOC-018",
+      "type": "docs",
+      "files_expected": ["README.md", "specs/openapi.yaml"],
+      "file_overlap_check": "no overlap with DF-RABBIT-HOLE-012 files",
+      "gitreins_task": "DOC-018 (created+started)",
+      "model": "glm-5.3-flash",
+      "provider": "zai-glm",
+      "brief": "/home/kara/.hermes/cache/scratch/rh-DOC-018-brief-144647.md"
+    }
+  ],
+  "merge_order": "serial after both workers exit: judge/complete gitreins sequentially, gate each merge (build + go test ./internal/express/ -count=1 for code; grep + diff-scope for docs)"
+}
