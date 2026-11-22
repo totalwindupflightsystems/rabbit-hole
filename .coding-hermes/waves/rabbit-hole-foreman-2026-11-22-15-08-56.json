@@ -1,0 +1,25 @@
+{
+  "wave_id": "rabbit-hole-foreman-2026-11-22-15-08-56",
+  "tick": 313,
+  "created_at": "2026-11-22T15:08:56Z",
+  "wave_budget": 1,
+  "wave_size": 0,
+  "base_sha": "130095a",
+  "base_branch": "main",
+  "dispatch_mode": "none:verification-only",
+  "reason": "PM-RH-06 (P2) picked; premise already satisfied at HEAD: CI implementation (0e03a12 github -race + slow-tests matrix; 274fda9 gitlab slow gates) landed 2026-11-21 and the sole prior judge FAIL criterion (stress arm red-by-construction) was resolved by DF-RABBIT-HOLE-013 (verdict c8386aa7 PASS, CI slow-tests stress leg green). Stale-task verification: zero implementation diff required; foreman runs probes + gitreins lifecycle per TR-251 close order (board close -> gitreins judge -> verdicts commit re-points hash), matching tick 312 convention.",
+  "workers": [],
+  "verification_plan": {
+    "task_id": "PM-RH-06",
+    "probes": [
+      "grep -n 'make test-all\\|-race' .github/workflows/ci.yml",
+      "grep -n 'stress\\|integration\\|e2e' .github/workflows/ci.yml .gitlab-ci.yml",
+      "python3 yaml.safe_load both CI files",
+      "grep -n Makefile targets stress/integration/e2e/test-slo/test-all",
+      "deliberate data-race test under go test -race -> expect exit 1 + WARNING: DATA RACE (gate not green-by-construction)",
+      "gh run list + gh run view on latest main push -> all 4 jobs success incl slow-tests matrix"
+    ],
+    "evidence_artifact": ".coding-hermes/board/evidence/PM-RH-06-verify-2026-11-22.md",
+    "gitreins_task": "PM-RH-06 (create+start before board close, complete after close per TR-251)"
+  }
+}
